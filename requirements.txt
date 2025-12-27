@@ -28,6 +28,7 @@ beautifulsoup4>=4.12.0
 
 # MCP (Model Context Protocol)
 langchain-mcp-adapters>=0.0.1
+nest-asyncio>=1.5.0
 
 # Observability
 langsmith>=0.1.0

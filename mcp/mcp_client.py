@@ -247,25 +247,55 @@ async def get_mcp_toolkit() -> MCPToolkit:
 # 동기 래퍼 함수 (Streamlit 등 비동기 미지원 환경용)
 # =============================================================================
 
+def _run_async(coro):
+    """
+    비동기 코루틴을 동기적으로 실행합니다.
+    Streamlit 등 이미 이벤트 루프가 있는 환경에서도 동작합니다.
+    """
+    import asyncio
+    
+    try:
+        # 이미 실행 중인 이벤트 루프가 있는지 확인
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # 이벤트 루프가 없으면 새로 생성
+        loop = None
+    
+    if loop and loop.is_running():
+        # Streamlit 등에서 이미 루프가 실행 중인 경우
+        # nest_asyncio로 중첩 실행 허용
+        try:
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.get_event_loop().run_until_complete(coro)
+        except ImportError:
+            # nest_asyncio 없으면 새 스레드에서 실행
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result(timeout=30)
+    else:
+        # 이벤트 루프가 없으면 일반적인 asyncio.run 사용
+        return asyncio.run(coro)
+
+
 def fetch_url_sync(url: str, max_length: int = 5000) -> str:
     """
     동기적으로 URL fetch
     
-    MCP 모드: asyncio.run()으로 MCP 호출
+    MCP 모드: 비동기 MCP 호출을 동기로 변환
     Fallback 모드: requests 직접 사용
     """
-    import asyncio
     from utils.config import Config
     
     if Config.MCP_ENABLED:
         try:
-            # 비동기 MCP 호출을 동기로 변환
             async def _async_fetch():
                 toolkit = MCPToolkit()
                 await toolkit.initialize()
                 return await toolkit.fetch_url(url, max_length)
             
-            return asyncio.run(_async_fetch())
+            return _run_async(_async_fetch())
         except Exception as e:
             print(f"[WARN] MCP fetch 실패, Fallback 사용: {e}")
     
@@ -278,21 +308,19 @@ def search_sync(query: str, max_results: int = 5) -> Dict[str, Any]:
     """
     동기적으로 웹 검색
     
-    MCP 모드: asyncio.run()으로 Tavily MCP 호출
+    MCP 모드: 비동기 Tavily MCP 호출을 동기로 변환
     Fallback 모드: 빈 결과 반환 (DuckDuckGo 제거됨)
     """
-    import asyncio
     from utils.config import Config
     
     if Config.MCP_ENABLED:
         try:
-            # 비동기 MCP 호출을 동기로 변환
             async def _async_search():
                 toolkit = MCPToolkit()
                 await toolkit.initialize()
                 return await toolkit.search(query, max_results)
             
-            return asyncio.run(_async_search())
+            return _run_async(_async_search())
         except Exception as e:
             print(f"[WARN] MCP 검색 실패: {e}")
             return {
