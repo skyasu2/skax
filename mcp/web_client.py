@@ -38,11 +38,24 @@ class WebClient:
         >>> content = await client.fetch_url("https://example.com")
     """
 
-    def __init__(self):
-        """WebClient를 초기화합니다."""
+    def __init__(self, use_mcp: bool = None):
+        """
+        WebClient를 초기화합니다.
+        
+        Args:
+            use_mcp: MCP 프로토콜 사용 여부 (None이면 Config에서 결정)
+        """
+        from utils.config import Config
+        
         self._client = None
         self._tools = None
         self._initialized = False
+        self._use_mcp = use_mcp if use_mcp is not None else Config.MCP_ENABLED
+        
+        if self._use_mcp:
+            print("[INFO] MCP 모드 활성화 (MCP_ENABLED=true)")
+        else:
+            print("[INFO] Fallback 모드 (MCP_ENABLED=false)")
 
     async def initialize(self) -> bool:
         """
@@ -52,17 +65,24 @@ class WebClient:
             bool: 초기화 성공 여부
 
         Note:
-            - uvx 또는 npx로 mcp-server-fetch가 설치되어 있어야 합니다.
-            - 초기화 실패 시에도 fallback으로 동작합니다.
+            - MCP_ENABLED=true일 때만 MCP 서버 연결을 시도합니다.
+            - MCP_ENABLED=false면 Fallback 모드로 바로 동작합니다.
         """
+        # MCP 비활성화 시 바로 Fallback 모드
+        if not self._use_mcp:
+            print("[INFO] MCP 비활성화 - Fallback 모드로 동작")
+            return False
+        
+        # MCP 활성화 시 서버 연결 시도
         try:
             from langchain_mcp_adapters.client import MultiServerMCPClient
+            from utils.config import Config
 
-            # MCP Fetch 서버 설정
+            # MCP Fetch 서버 설정 (환경변수에서 읽음)
             self._client = MultiServerMCPClient({
                 "fetch": {
-                    "command": "uvx",
-                    "args": ["mcp-server-fetch"],
+                    "command": Config.MCP_FETCH_COMMAND,
+                    "args": [Config.MCP_FETCH_SERVER],
                     "transport": "stdio",
                 }
             })
@@ -73,6 +93,12 @@ class WebClient:
             print("✅ MCP Fetch 서버 연결 완료")
             return True
 
+        except ImportError:
+            print("⚠️ langchain-mcp-adapters 패키지가 설치되지 않았습니다")
+            print("  → pip install langchain-mcp-adapters")
+            self._initialized = False
+            return False
+            
         except Exception as e:
             print(f"⚠️ MCP Fetch 서버 연결 실패: {e}")
             print("  → Fallback 모드로 전환합니다 (requests 사용)")

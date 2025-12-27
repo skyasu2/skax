@@ -2,6 +2,21 @@
 
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [1.4.0] - 2024-12-28
+
+### Added
+- **MCP (Model Context Protocol) 옵션화**
+  - `MCP_ENABLED=true`: 실제 MCP 프로토콜 사용
+  - `MCP_ENABLED=false`: Fallback 모드 (기본값, requests + DuckDuckGo)
+  - 환경에 따라 자동 선택 가능
+- **MCP 설정 환경변수**
+  - `MCP_FETCH_COMMAND`: MCP 서버 실행 명령어 (기본: uvx)
+  - `MCP_FETCH_SERVER`: MCP 서버 이름 (기본: mcp-server-fetch)
+
+### Changed
+- `WebClient` 생성자에 `use_mcp` 파라미터 추가
+- MCP 연결 실패 시 명확한 에러 메시지 출력
+
 ## [1.3.0] - 2024-12-27
 
 ### Added

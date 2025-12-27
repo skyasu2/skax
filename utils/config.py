@@ -69,6 +69,15 @@ class Config:
     LANGSMITH_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
     LANGSMITH_PROJECT = os.getenv("LANGCHAIN_PROJECT", "PlanCraft-Agent")
     
+    # =========================================================================
+    # MCP (Model Context Protocol) 설정
+    # =========================================================================
+    # MCP_ENABLED=true: 실제 MCP 프로토콜 사용 (mcp-server-fetch 필요)
+    # MCP_ENABLED=false: Fallback 모드 (requests + DuckDuckGo)
+    MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() == "true"
+    MCP_FETCH_COMMAND = os.getenv("MCP_FETCH_COMMAND", "uvx")
+    MCP_FETCH_SERVER = os.getenv("MCP_FETCH_SERVER", "mcp-server-fetch")
+    
     @classmethod
     def setup_langsmith(cls) -> bool:
         """
