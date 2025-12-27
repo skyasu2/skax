@@ -248,12 +248,61 @@ async def get_mcp_toolkit() -> MCPToolkit:
 # =============================================================================
 
 def fetch_url_sync(url: str, max_length: int = 5000) -> str:
-    """동기적으로 URL fetch (Fallback 사용)"""
-    toolkit = MCPToolkit(use_mcp=False)  # 동기 환경에서는 Fallback 사용
+    """
+    동기적으로 URL fetch
+    
+    MCP 모드: asyncio.run()으로 MCP 호출
+    Fallback 모드: requests 직접 사용
+    """
+    import asyncio
+    from utils.config import Config
+    
+    if Config.MCP_ENABLED:
+        try:
+            # 비동기 MCP 호출을 동기로 변환
+            async def _async_fetch():
+                toolkit = MCPToolkit()
+                await toolkit.initialize()
+                return await toolkit.fetch_url(url, max_length)
+            
+            return asyncio.run(_async_fetch())
+        except Exception as e:
+            print(f"[WARN] MCP fetch 실패, Fallback 사용: {e}")
+    
+    # Fallback: requests 직접 사용
+    toolkit = MCPToolkit(use_mcp=False)
     return toolkit._fallback_fetch(url, max_length)
 
 
 def search_sync(query: str, max_results: int = 5) -> Dict[str, Any]:
-    """동기적으로 웹 검색 (Fallback 사용)"""
+    """
+    동기적으로 웹 검색
+    
+    MCP 모드: asyncio.run()으로 Tavily MCP 호출
+    Fallback 모드: 빈 결과 반환 (DuckDuckGo 제거됨)
+    """
+    import asyncio
+    from utils.config import Config
+    
+    if Config.MCP_ENABLED:
+        try:
+            # 비동기 MCP 호출을 동기로 변환
+            async def _async_search():
+                toolkit = MCPToolkit()
+                await toolkit.initialize()
+                return await toolkit.search(query, max_results)
+            
+            return asyncio.run(_async_search())
+        except Exception as e:
+            print(f"[WARN] MCP 검색 실패: {e}")
+            return {
+                "success": False,
+                "query": query,
+                "results": [],
+                "error": str(e),
+                "source": "mcp-error"
+            }
+    
+    # Fallback: 빈 결과 반환
     toolkit = MCPToolkit(use_mcp=False)
     return toolkit._fallback_search(query, max_results)
