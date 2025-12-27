@@ -49,12 +49,28 @@ class MCPToolkit:
         """
         MCP 서버들에 연결합니다.
         
+        Node.js/uvx 환경이 없는 경우(서버 등) 자동으로
+        Tavily Python SDK 모드로 동작하도록 처리합니다.
+        
         Returns:
             bool: 초기화 성공 여부
         """
         if not self._use_mcp:
             print("[INFO] MCP 비활성화 - Fallback 모드로 동작")
             return False
+            
+        # uvx 및 npx 확인
+        import shutil
+        has_uvx = shutil.which("uvx") is not None
+        has_npx = shutil.which("npx") is not None
+        
+        # 둘 다 없으면 MCP 연결 시도하지 않고 바로 SDK 모드 사용
+        if not has_uvx and not has_npx:
+            print("[INFO] uvx/npx 미감지 - Tavily Python SDK 모드로 동작")
+            # _initialized를 True로 설정하여 search() 메서드가 호출되도록 함
+            # search() 내부에서 SDK로 분기됨
+            self._initialized = True 
+            return True
         
         try:
             from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -65,16 +81,20 @@ class MCPToolkit:
                 print("⚠️ TAVILY_API_KEY가 설정되지 않았습니다")
                 return False
             
-            # 2개의 MCP 서버 설정
-            server_config = {
-                # 1. URL Fetch 서버 (Python - uvx)
-                "fetch": {
+            # MCP 서버 설정 구성
+            server_config = {}
+            
+            # 1. URL Fetch 서버 (uvx 필요)
+            if has_uvx:
+                server_config["fetch"] = {
                     "command": Config.MCP_FETCH_COMMAND,
                     "args": [Config.MCP_FETCH_SERVER],
                     "transport": "stdio",
-                },
-                # 2. Tavily 검색 서버 (Node.js - npx)
-                "tavily": {
+                }
+            
+            # 2. Tavily 검색 서버 (npx 필요)
+            if has_npx:
+                server_config["tavily"] = {
                     "command": Config.MCP_TAVILY_COMMAND,
                     "args": ["-y", Config.MCP_TAVILY_SERVER],
                     "transport": "stdio",
@@ -82,11 +102,14 @@ class MCPToolkit:
                         "TAVILY_API_KEY": Config.TAVILY_API_KEY
                     }
                 }
-            }
             
-            print("[INFO] MCP 서버 연결 중...")
-            print(f"  - Fetch: {Config.MCP_FETCH_COMMAND} {Config.MCP_FETCH_SERVER}")
-            print(f"  - Tavily: {Config.MCP_TAVILY_COMMAND} {Config.MCP_TAVILY_SERVER}")
+            # 연결할 서버가 없으면 SDK 모드
+            if not server_config:
+                 print("[INFO] 실행 가능한 MCP 서버 없음 - SDK 모드로 동작")
+                 self._initialized = True
+                 return True
+
+            print(f"[INFO] MCP 서버 연결 중... ({list(server_config.keys())})")
             
             self._client = MultiServerMCPClient(server_config)
             
@@ -99,20 +122,21 @@ class MCPToolkit:
             
             self._initialized = True
             print(f"✅ MCP 연결 완료 - {len(all_tools)}개 도구 로드됨")
-            print(f"  도구 목록: {list(self._tools.keys())}")
             
             return True
             
         except ImportError:
             print("⚠️ langchain-mcp-adapters 패키지가 설치되지 않았습니다")
-            print("  → pip install langchain-mcp-adapters")
-            return False
+            # 패키지 없어도 SDK는 동작 가능
+            self._initialized = True
+            return True
             
         except Exception as e:
             print(f"⚠️ MCP 서버 연결 실패: {e}")
-            print("  → Fallback 모드로 전환")
-            self._initialized = False
-            return False
+            print("  → SDK/Fallback 모드로 전환")
+            # 실패해도 SDK 시도를 위해 True로 설정
+            self._initialized = True
+            return True
     
     async def fetch_url(self, url: str, max_length: int = 5000) -> str:
         """
