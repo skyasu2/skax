@@ -565,9 +565,108 @@ def render_main():
         st.rerun()
 
 
+def render_dev_tools():
+    """사이드바 개발자 도구: Agent 단위 테스트"""
+    with st.sidebar:
+        st.header("🛠️ Dev Tools")
+        st.markdown("---")
+        
+        # Agent 선택
+        agent_type = st.selectbox(
+            "Agent 테스트",
+            ["None", "Analyzer", "Structurer", "Writer", "Reviewer"]
+        )
+        
+        if agent_type != "None":
+            st.info(f"{agent_type} Agent 독립 테스트")
+            
+            # 테스트용 더미 데이터 설정
+            test_input = "점심 메뉴 추천 앱"
+            if agent_type == "Writer":
+                test_input = st.text_area("입력 (가상 시나리오)", value="점심 메뉴 추천 서비스 기획해줘", height=70)
+            
+            if st.button("🚀 테스트 실행", key="test_run_btn"):
+                with st.spinner(f"{agent_type} Agent 실행 중..."):
+                    try:
+                        from graph.state import PlanCraftState
+                        
+                        # Mock State 생성
+                        mock_state = PlanCraftState(
+                            user_input=test_input,
+                            current_step="start"
+                        )
+                        
+                        result_state = None
+                        
+                        if agent_type == "Analyzer":
+                            from agents.analyzer import run
+                            result_state = run(mock_state)
+                            st.subheader("결과 (AnalysisResult)")
+                            # Pydantic 객체를 dict로 변환하여 출력
+                            st.json(result_state.analysis.model_dump())
+                            
+                        elif agent_type == "Structurer":
+                            from agents.structurer import run
+                            # Analyzer 결과가 필요하므로 더미 데이터 주입
+                            from utils.schemas import AnalysisResult
+                            mock_state.analysis = AnalysisResult(
+                                topic="점심 추천 앱",
+                                purpose="직장인 점심 고민 해결",
+                                target_users="직장인",
+                                key_features=["랜덤 추천", "주변 식당 지도"],
+                                need_more_info=False
+                            )
+                            result_state = run(mock_state)
+                            st.subheader("결과 (StructureResult)")
+                            st.json(result_state.structure.model_dump())
+                            
+                        elif agent_type == "Writer":
+                            from agents.writer import run
+                            # Structurer 결과 주입
+                            from utils.schemas import StructureResult, SectionStructure
+                            mock_state.structure = StructureResult(
+                                title="점심 추천 앱 기획서",
+                                sections=[
+                                    SectionStructure(id=1, name="개요", description="앱 소개", key_points=["목적 설명"]),
+                                    SectionStructure(id=2, name="기능", description="주요 기능", key_points=["기능 나열"])
+                                ]
+                            )
+                            result_state = run(mock_state)
+                            st.subheader("결과 (DraftResult)")
+                            st.json(result_state.draft.model_dump())
+                            
+                        elif agent_type == "Reviewer":
+                            from agents.reviewer import run
+                            # Writer 결과 주입
+                            from utils.schemas import DraftResult, SectionContent
+                            mock_state.draft = DraftResult(
+                                sections=[
+                                    SectionContent(id=1, name="개요", content="이 앱은 점심을 추천해줍니다."),
+                                    SectionContent(id=2, name="기능", content="랜덤 추천 기능이 있습니다.")
+                                ]
+                            )
+                            result_state = run(mock_state)
+                            st.subheader("결과 (JudgeResult)")
+                            st.json(result_state.review.model_dump())
+
+                        if result_state:
+                            st.success("✅ 테스트 성공")
+                        
+                    except Exception as e:
+                        st.error(f"❌ 테스트 실패: {str(e)}")
+                        st.exception(e)
+        
+        st.markdown("---")
+        st.caption("Pydantic State Architecture v2.0")
+
+
 def main():
     """메인 함수"""
     init_session_state()
+    
+    # 개발자 도구 렌더링 (사이드바)
+    render_dev_tools()
+    
     render_main()
 
 
