@@ -47,7 +47,7 @@ PlanCraft Agent는 사용자의 아이디어를 입력받아 자동으로 **웹/
 │   ├── documents/            # 지식 베이스 (가이드 문서)
 │   ├── vectorstore.py        # FAISS 관리
 │   └── retriever.py          # 맥락 기반 검색
-├── mcp/                      # [MCP Layer - Model Context Protocol]
+├── tools/                      # [MCP Layer - Model Context Protocol]
 │   ├── mcp_client.py         # MCP 통합 클라이언트 (Fetch + Tavily)
 │   ├── web_search.py         # 조건부 검색 로직
 │   └── web_client.py         # URL 콘텐츠 Fetcher (Fallback)

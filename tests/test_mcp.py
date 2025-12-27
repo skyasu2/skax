@@ -26,7 +26,7 @@ print()
 print("=" * 50)
 print("MCP Toolkit 테스트")
 print("=" * 50)
-from mcp.mcp_client import MCPToolkit
+from tools.mcp_client import MCPToolkit
 toolkit = MCPToolkit()
 print(f"use_mcp: {toolkit._use_mcp}")
 print()

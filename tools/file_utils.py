@@ -5,7 +5,7 @@ PlanCraft Agent - 파일 유틸리티 모듈
 기존 filesystem MCP를 대체하는 경량 구현입니다.
 
 사용 예시:
-    from mcp.file_utils import save_plan, list_saved_plans
+    from tools.file_utils import save_plan, list_saved_plans
 
     # 기획서 저장
     path = save_plan("# 기획서 내용")

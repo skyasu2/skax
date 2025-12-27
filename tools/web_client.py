@@ -10,7 +10,7 @@ langchain-mcp-adapters를 사용하여 LangChain/LangGraph와 통합합니다.
     - LangChain 도구로 변환
 
 사용 예시:
-    from mcp.web_client import WebClient
+    from tools.web_client import WebClient
 
     client = WebClient()
     content = await client.fetch_url("https://example.com")

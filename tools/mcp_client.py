@@ -6,7 +6,7 @@ PlanCraft Agent - MCP 통합 클라이언트
 2. tavily-mcp: AI 웹 검색 (npx)
 
 사용 예시:
-    from mcp.mcp_client import MCPToolkit
+    from tools.mcp_client import MCPToolkit
     
     toolkit = MCPToolkit()
     await toolkit.initialize()

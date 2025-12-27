@@ -10,7 +10,7 @@ DuckDuckGo를 사용한 무료 웹 검색 기능을 제공합니다.
     - 조건부 검색 판단 로직
 
 사용 예시:
-    from mcp.web_search import search_web, should_search_web
+    from tools.web_search import search_web, should_search_web
 
     # 웹 검색 필요 여부 판단
     if should_search_web(user_input):

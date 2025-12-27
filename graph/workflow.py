@@ -127,7 +127,7 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
 
         if urls:
             # MCP 또는 Fallback으로 URL Fetch
-            from mcp.mcp_client import fetch_url_sync
+            from tools.mcp_client import fetch_url_sync
 
             for url in urls[:3]:  # 최대 3개 URL
                 try:
@@ -143,8 +143,8 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
         # 2. URL이 없으면 조건부 웹 검색 판단
         else:
             # MCP 모드: Tavily 사용, Fallback: DuckDuckGo
-            from mcp.mcp_client import search_sync
-            from mcp.web_search import should_search_web
+            from tools.mcp_client import search_sync
+            from tools.web_search import should_search_web
 
             # 검색 필요 여부 판단
             decision = should_search_web(user_input, rag_context if rag_context else "")
