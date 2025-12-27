@@ -5,26 +5,26 @@
 ## [1.4.0] - 2024-12-28
 
 ### Added
-- **MCP (Model Context Protocol) 완전 통합** (`mcp/mcp_client.py`)
-  - 2개 MCP 서버 동시 지원:
-    - `mcp-server-fetch`: URL 콘텐츠 가져오기 (uvx)
-    - `tavily-mcp`: AI 웹 검색 (npx)
+- **MCP (Model Context Protocol) 완전 통합** (`tools/mcp_client.py`)
+  - 2개 MCP 서버 동시 지원 (`mcp-server-fetch`, `tavily-mcp`)
   - `MCPToolkit` 클래스로 통합 관리
-  - Fallback 모드 지원 (MCP 없이도 동작)
-- **MCP 옵션화**
-  - `MCP_ENABLED=true`: 실제 MCP 프로토콜 사용
-  - `MCP_ENABLED=false`: Fallback 모드 (기본값, requests + DuckDuckGo)
+  - **Auto Fallback**: Node.js/uvx 미설치 시 자동으로 **Tavily Python SDK** 사용
+- **웹 검색 출처 표시** (`agents/formatter.py`)
+  - 최종 기획서 하단에 "📚 참고 자료" 섹션 자동 추가
 - **MCP 설정 환경변수**
   - `TAVILY_API_KEY`: Tavily API 키
-  - `MCP_FETCH_COMMAND`: Fetch 서버 실행 명령어 (기본: uvx)
-  - `MCP_TAVILY_COMMAND`: Tavily 서버 실행 명령어 (기본: npx)
+  - `MCP_ENABLED`: MCP 사용 여부 (기본: false)
 
 ### Changed
+- **폴더 구조 변경 (Refactor)**
+  - `mcp/` → `tools/`: Python `mcp` 패키지와의 이름 충돌 해결
+- **안전성 개선**
+  - Streamlit 환경 호환성: `nest_asyncio` 도입으로 이벤트 루프 충돌 방지
+  - `search_sync` / `fetch_url_sync`: 동기 환경용 래퍼 함수 고도화
 - `WebClient` 생성자에 `use_mcp` 파라미터 추가
-- MCP 연결 실패 시 명확한 에러 메시지 출력
 
 ### Removed
-- **DuckDuckGo 검색 제거**: Tavily MCP로 완전 대체
+- **DuckDuckGo 검색 제거**: Tavily MCP 및 Python SDK로 완전 대체
 - `duckduckgo-search` 패키지 의존성 제거
 
 ## [1.3.0] - 2024-12-27

@@ -26,6 +26,7 @@ PlanCraft Agent는 사용자의 아이디어를 입력받아 자동으로 **웹/
 - **Vector DB**: FAISS (Local)
 - **Embedding**: text-embedding-3-large
 - **MCP Servers**: mcp-server-fetch (URL), tavily-mcp (AI 검색)
+- **Fallback**: Tavily Python SDK (Node.js 미설치 환경 대응)
 - **UI**: Streamlit
 
 ## 📁 프로젝트 구조
@@ -42,21 +43,24 @@ PlanCraft Agent는 사용자의 아이디어를 입력받아 자동으로 **웹/
 │   └── formatter.py          # 사용자 친화적 요약 생성
 ├── graph/                    # [Workflow Layer]
 │   ├── state.py              # Pydantic 기반 상태 모델 (PlanCraftState)
-│   └── workflow.py           # LangGraph StateGraph 정의
+│   ├── workflow.py           # LangGraph StateGraph 정의
+│   └── subgraphs.py          # 서브그래프 정의 (Context, Generation, QA)
 ├── rag/                      # [RAG Layer]
 │   ├── documents/            # 지식 베이스 (가이드 문서)
 │   ├── vectorstore.py        # FAISS 관리
 │   └── retriever.py          # 맥락 기반 검색
-├── tools/                      # [MCP Layer - Model Context Protocol]
+├── tools/                    # [MCP & Tools Layer]
 │   ├── mcp_client.py         # MCP 통합 클라이언트 (Fetch + Tavily)
 │   ├── web_search.py         # 조건부 검색 로직
-│   └── web_client.py         # URL 콘텐츠 Fetcher (Fallback)
+│   ├── web_client.py         # URL 콘텐츠 Fetcher (Fallback)
+│   └── file_utils.py         # 파일 저장 유틸리티
 ├── utils/                    # [Common Utilities]
 │   ├── config.py             # 환경 변수 및 설정 검증
 │   ├── llm.py                # LLM 인스턴스 팩토리
 │   └── schemas.py            # 입출력 Pydantic 스키마 정의
 ├── tests/                    # [Test Layer]
-│   └── test_agents.py        # pytest 단위 테스트
+│   ├── test_agents.py        # pytest 단위 테스트
+│   └── test_mcp.py           # MCP 동작 테스트
 └── docs/                     # [Documentation]
     ├── architecture.md       # 시스템 아키텍처 문서
     └── agent-design.md       # Agent 설계 명세
