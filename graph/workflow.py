@@ -106,8 +106,14 @@ def retrieve_context(state: PlanCraftState) -> PlanCraftState:
 
 
 def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
-    """조건부 웹 정보 수집 노드"""
+    """
+    조건부 웹 정보 수집 노드
+    
+    MCP_ENABLED=true: MCPToolkit (Fetch + Tavily) 사용
+    MCP_ENABLED=false: Fallback 모드 (requests + DuckDuckGo)
+    """
     import re
+    from utils.config import Config
 
     user_input = state.user_input
     rag_context = state.rag_context
@@ -120,7 +126,8 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
         urls = re.findall(url_pattern, user_input)
 
         if urls:
-            from mcp.web_client import fetch_url_sync
+            # MCP 또는 Fallback으로 URL Fetch
+            from mcp.mcp_client import fetch_url_sync
 
             for url in urls[:3]:  # 최대 3개 URL
                 try:
@@ -135,15 +142,35 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
 
         # 2. URL이 없으면 조건부 웹 검색 판단
         else:
-            from mcp.web_search import conditional_web_search
+            # MCP 모드: Tavily 사용, Fallback: DuckDuckGo
+            from mcp.mcp_client import search_sync
+            from mcp.web_search import should_search_web
 
-            search_result = conditional_web_search(user_input, rag_context if rag_context else "")
+            # 검색 필요 여부 판단
+            decision = should_search_web(user_input, rag_context if rag_context else "")
 
-            if search_result["searched"]:
-                web_contents.append(search_result["context"])
-                print(f"[INFO] 웹 검색 수행: {search_result['reason']}")
+            if decision["should_search"]:
+                search_result = search_sync(decision["search_query"])
+                
+                if search_result["success"]:
+                    # 결과 포맷팅
+                    source = search_result.get("source", "unknown")
+                    if "formatted" in search_result:
+                        context = search_result["formatted"]
+                    else:
+                        context = str(search_result.get("results", ""))
+                    
+                    web_contents.append(
+                        f"[웹 검색 결과 - {decision['reason']}]\n"
+                        f"검색어: {decision['search_query']}\n"
+                        f"출처: {source}\n\n"
+                        f"{context}"
+                    )
+                    print(f"[INFO] 웹 검색 수행 ({source}): {decision['reason']}")
+                else:
+                    print(f"[WARN] 웹 검색 실패: {search_result.get('error', 'unknown')}")
             else:
-                print(f"[INFO] 웹 검색 스킵: {search_result['reason']}")
+                print(f"[INFO] 웹 검색 스킵: {decision['reason']}")
 
         # 3. 상태 업데이트
         web_context_str = "\n\n---\n\n".join(web_contents) if web_contents else None
