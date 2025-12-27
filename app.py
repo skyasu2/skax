@@ -424,6 +424,241 @@ def render_main():
     # =========================================================================
     # 시작 화면 (채팅 히스토리가 없을 때)
     # =========================================================================
+    if not st.session_state.chat_history:
+        st.markdown("#### 💡 아이디어를 기획서로 만들어 드립니다")
+        st.caption("아래 예시를 클릭하거나 직접 입력하세요")
+
+        # 예시 템플릿
+        examples = [
+            ("🍽️ 점심 메뉴 추천 앱", "직장인을 위한 점심 메뉴 추천 서비스를 만들고 싶어요"),
+            ("📚 독서 모임 플랫폼", "독서 모임을 쉽게 만들고 관리할 수 있는 서비스"),
+            ("🏃 운동 챌린지 앱", "친구들과 함께 운동 목표를 달성하는 챌린지 앱"),
+        ]
+
+        cols = st.columns(len(examples))
+        for i, (title, prompt) in enumerate(examples):
+            with cols[i]:
+                if st.button(title, key=f"example_{i}", use_container_width=True, help=prompt):
+                    # 프롬프트만 채워주고 사용자가 엔터 치도록
+                    st.session_state.prefill_prompt = prompt
+                    st.rerun()
+
+        st.divider()
+
+    # =========================================================================
+    # 채팅 히스토리 표시
+    # =========================================================================
+    for msg in st.session_state.chat_history:
+        render_chat_message(msg["role"], msg["content"], msg.get("type", "text"))
+
+    # =========================================================================
+    # 옵션 선택 UI (need_more_info 상태일 때) - 컴팩트 버전
+    # =========================================================================
+    if st.session_state.current_state and st.session_state.current_state.get("need_more_info"):
+        options = st.session_state.current_state.get("options", [])
+
+        if options:
+            # 옵션 버튼들을 한 줄에 표시
+            cols = st.columns(len(options))
+            for i, opt in enumerate(options):
+                title = opt.get("title", "")
+                description = opt.get("description", "")
+                with cols[i]:
+                    if st.button(f"{title}", key=f"opt_{i}", use_container_width=True, help=description):
+                        # 사용자 선택을 채팅에 추가
+                        st.session_state.chat_history.append({
+                            "role": "user",
+                            "content": f"'{title}' 선택",
+                            "type": "text"
+                        })
+
+                        # 선택한 옵션으로 다시 실행
+                        original_input = st.session_state.current_state.get("user_input", "")
+                        new_input = f"{original_input}\n\n[선택: {title} - {description}]"
+                        st.session_state.current_state = None
+                        st.session_state.pending_input = new_input
+                        st.rerun()
+
+            # 직접 입력 안내 - OR 구분선
+            st.markdown("""
+            <div style="display: flex; align-items: center; margin: 1.5rem 0 1rem 0;">
+                <div style="flex: 1; height: 1px; background: #ddd;"></div>
+                <span style="padding: 0 1rem; color: #888; font-size: 0.85rem;">또는 직접 입력</span>
+                <div style="flex: 1; height: 1px; background: #ddd;"></div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.caption("⌨️ 위 옵션 외에 다른 의견이 있다면 아래 입력창에 자유롭게 작성하세요")
+
+    # =========================================================================
+    # 기획서 결과 표시 (generated_plan 있을 때) - 간소화된 버전
+    # =========================================================================
+    if st.session_state.generated_plan:
+        # 간단한 요약 카드
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+
+        with col1:
+            # 완성 상태만 표시 (내부 점수는 숨김)
+            st.markdown("📄 **기획서 완성** ✅")
+
+        with col2:
+            if st.button("📖 기획서", key="view_plan", use_container_width=True, help="생성된 기획서 전체 보기"):
+                show_plan_dialog()
+
+        with col3:
+            if st.button("🔍 분석", key="view_analysis", use_container_width=True, help="AI 분석 결과 상세 보기"):
+                show_analysis_dialog()
+
+        with col4:
+            st.download_button(
+                "📥 저장",
+                data=st.session_state.generated_plan,
+                file_name="기획서.md",
+                mime="text/markdown",
+                use_container_width=True,
+                help="마크다운 파일로 다운로드"
+            )
+
+    # =========================================================================
+    # pending_input 처리 (옵션 선택 후 자동 실행)
+    # =========================================================================
+    if st.session_state.pending_input:
+        pending = st.session_state.pending_input
+        st.session_state.pending_input = None
+
+        with st.spinner("🔄 기획서를 생성하고 있습니다..."):
+            try:
+                file_content = st.session_state.get("uploaded_content", None)
+                result = run_plancraft(pending, file_content)
+                st.session_state.current_state = result
+
+                if result.get("need_more_info"):
+                    # 옵션 질문을 채팅에 추가
+                    option_question = result.get("option_question", "어떤 방향으로 진행할까요?")
+                    options = result.get("options", [])
+                    option_text = f"🤔 **{option_question}**\n\n"
+                    for opt in options:
+                        option_text += f"- **{opt.get('title', '')}**: {opt.get('description', '')}\n"
+
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": option_text,
+                        "type": "options"
+                    })
+                else:
+                    # 완료 메시지를 채팅에 추가 (chat_summary 우선 사용)
+                    st.session_state.generated_plan = result.get("final_output", "")
+                    chat_summary = result.get("chat_summary", "")
+                    if chat_summary:
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": chat_summary,
+                            "type": "summary"
+                        })
+                    else:
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": "✅ 기획서가 완성되었습니다! 아래에서 확인하세요.",
+                            "type": "plan"
+                        })
+            except Exception as e:
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": f"❌ 오류가 발생했습니다: {str(e)}",
+                    "type": "error"
+                })
+
+        st.rerun()
+
+    # =========================================================================
+    # 채팅 입력 (하단 고정)
+    # =========================================================================
+    # prefill_prompt가 있으면 미리보기 표시
+    if st.session_state.prefill_prompt:
+        st.info(f"📝 **선택된 예시:** {st.session_state.prefill_prompt}")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("✅ 이대로 시작", use_container_width=True):
+                user_input = st.session_state.prefill_prompt
+                st.session_state.prefill_prompt = None
+                # 바로 실행
+                st.session_state.chat_history.append({
+                    "role": "user",
+                    "content": user_input,
+                    "type": "text"
+                })
+                st.session_state.pending_input = user_input
+                st.rerun()
+        with col2:
+            if st.button("❌ 취소", use_container_width=True):
+                st.session_state.prefill_prompt = None
+                st.rerun()
+
+    # 채팅 입력창
+    st.markdown("")  # 여백
+    placeholder = "💬 만들고 싶은 서비스나 아이디어를 자유롭게 입력하세요..."
+    if st.session_state.current_state and st.session_state.current_state.get("need_more_info"):
+        placeholder = "💬 위 옵션을 선택하거나, 다른 의견을 직접 입력하세요..."
+
+    user_input = st.chat_input(
+        placeholder,
+        key=f"chat_input_{st.session_state.input_key}"
+    )
+
+    if user_input:
+        # 사용자 메시지를 채팅 히스토리에 추가
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": user_input,
+            "type": "text"
+        })
+
+        # 입력창 초기화를 위해 키 변경
+        st.session_state.input_key += 1
+
+        # AI 응답 생성
+        with st.spinner("🔄 AI Agent가 분석 중입니다..."):
+            try:
+                file_content = st.session_state.get("uploaded_content", None)
+                result = run_plancraft(user_input, file_content)
+                st.session_state.current_state = result
+
+                if result.get("need_more_info"):
+                    # 옵션 질문을 채팅에 추가
+                    option_question = result.get("option_question", "어떤 방향으로 진행할까요?")
+                    options = result.get("options", [])
+                    option_text = f"🤔 **{option_question}**\n\n"
+                    for opt in options:
+                        option_text += f"- **{opt.get('title', '')}**: {opt.get('description', '')}\n"
+
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": option_text,
+                        "type": "options"
+                    })
+                else:
+                    # 완료 메시지 (chat_summary 우선 사용)
+                    st.session_state.generated_plan = result.get("final_output", "")
+                    chat_summary = result.get("chat_summary", "")
+                    if chat_summary:
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": chat_summary,
+                            "type": "summary"
+                        })
+                    else:
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": "✅ 기획서가 완성되었습니다! 아래에서 확인하세요.",
+                            "type": "plan"
+                        })
+            except Exception as e:
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": f"❌ 오류가 발생했습니다: {str(e)}",
+                    "type": "error"
+                })
+
+        st.rerun()
 
 def main():
     """메인 함수"""
