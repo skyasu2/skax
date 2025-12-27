@@ -71,23 +71,31 @@ class FormatterAgent:
             PlanCraftState: chat_summary가 추가된 상태
         """
         # =====================================================================
-        # 1. 입력 데이터 추출
+        # 1. 입력 데이터 추출 (객체 접근)
         # =====================================================================
-        analysis = state.get("analysis", {})
-        review = state.get("review", {})
-        structure = state.get("structure", {})
-
+        analysis = state.analysis
+        review = state.review
+        structure = state.structure
+        
+        # Pydantic 객체 Optional 처리
+        # analysis, review, structure가 None일 수 있으므로 safe access
+        
         # 제목 추출
-        title = structure.get("title", analysis.get("topic", "기획서"))
+        # structure, analysis가 Pydantic 객체이므로 .title, .topic 접근
+        title = "기획서"
+        if structure and structure.title:
+            title = structure.title
+        elif analysis and analysis.topic:
+            title = analysis.topic
 
         # 분석 정보
-        topic = analysis.get("topic", "")
-        purpose = analysis.get("purpose", "")
-        target_users = analysis.get("target_users", "")
-        key_features = analysis.get("key_features", [])
+        topic = analysis.topic if analysis else ""
+        purpose = analysis.purpose if analysis else ""
+        target_users = analysis.target_users if analysis else ""
+        key_features = analysis.key_features if analysis else []
 
         # 검토 정보 (내부용 - 점수는 사용자에게 노출하지 않음)
-        strengths = review.get("strengths", [])
+        strengths = review.strengths if review else []
 
         # =====================================================================
         # 2. 프롬프트 구성 및 LLM 호출
@@ -112,17 +120,17 @@ class FormatterAgent:
             chat_summary = self._generate_fallback_summary(
                 title, topic, purpose, key_features
             )
-            state["error"] = f"포맷팅 오류: {str(e)}"
+            state.error = f"포맷팅 오류: {str(e)}"
 
         # =====================================================================
-        # 3. 상태 업데이트
+        # 3. 상태 업데이트 (Pydantic 모델 복사)
         # =====================================================================
-        state.update({
+        new_state = state.model_copy(update={
             "chat_summary": chat_summary,
             "current_step": "format"
         })
 
-        return state
+        return new_state
 
     def _generate_fallback_summary(
         self,

@@ -83,12 +83,12 @@ class AnalyzerAgent:
                 - current_step: "analyze"
         """
         # =====================================================================
-        # 1. 입력 데이터 추출
+        # 1. 입력 데이터 추출 (객체 속성 접근)
         # =====================================================================
-        user_input = state.get("user_input", "")
-        file_content = state.get("file_content", "")
-        rag_context = state.get("rag_context", "")
-        web_context = state.get("web_context", "")
+        user_input = state.user_input
+        file_content = state.file_content
+        rag_context = state.rag_context
+        web_context = state.web_context
 
         # =====================================================================
         # 2. 컨텍스트 구성
@@ -114,13 +114,12 @@ class AnalyzerAgent:
         ]
 
         try:
-            # with_structured_output 사용: 자동으로 Pydantic 객체 반환
+            # Pydantic 객체 그대로 사용
             analysis: AnalysisResult = self.llm.invoke(messages)
-            analysis_dict = analysis.model_dump()
-
+            
         except Exception as e:
-            # 실패 시 안전한 기본값(Fallback) 생성
-            fallback_result = AnalysisResult(
+            # 실패 시 안전한 Pydantic 객체 기본값 생성
+            analysis = AnalysisResult(
                 topic=user_input[:50] if user_input else "주제 미정",
                 purpose="분석 필요",
                 target_users="미정",
@@ -131,23 +130,22 @@ class AnalyzerAgent:
                 option_question="",
                 need_more_info=False
             )
-            analysis_dict = fallback_result.model_dump()
-            state["error"] = f"분석 오류: {str(e)}"
+            # 에러 메시지는 별도 업데이트
+            state.error = f"분석 오류: {str(e)}"
 
         # =====================================================================
-        # 4. 상태 업데이트
+        # 4. 상태 업데이트 (Pydantic 모델 복사 및 업데이트)
         # =====================================================================
-        # Pydantic 모델의 필드들을 분해하여 상태에 저장
-        # (추후 Pydantic 객체 자체를 전달하는 방식으로 고도화 가능)
-        state.update({
-            "analysis": analysis_dict,
-            "need_more_info": analysis_dict.get("need_more_info", False),
-            "options": analysis_dict.get("options", []),
-            "option_question": analysis_dict.get("option_question", ""),
+        # model_copy(update={...})를 사용하여 불변성 유지 (권장)
+        new_state = state.model_copy(update={
+            "analysis": analysis,
+            "need_more_info": analysis.need_more_info,
+            "options": analysis.options,
+            "option_question": analysis.option_question,
             "current_step": "analyze"
         })
 
-        return state
+        return new_state
 
 
 def run(state: PlanCraftState) -> PlanCraftState:

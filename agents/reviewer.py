@@ -68,10 +68,15 @@ class ReviewerAgent:
         # =====================================================================
         # 1. 입력 데이터 추출
         # =====================================================================
-        draft = state.get("draft", {})
-        context = state.get("rag_context", "")
+        # =====================================================================
+        # 1. 입력 데이터 추출
+        # =====================================================================
+        draft = state.draft
+        context = state.rag_context
 
         # draft를 문자열로 변환
+        # draft가 None인 경우를 대비해 빈 DraftResult 처리 가능하도록 구현되어야 함
+        # 현재는 draft가 Pydantic Optional[DraftResult] 타입
         draft_str = self._format_draft(draft)
 
         # =====================================================================
@@ -86,55 +91,55 @@ class ReviewerAgent:
         ]
 
         try:
-            # with_structured_output 사용: 자동으로 Pydantic 객체 반환
+            # Pydantic 객체 그대로 사용
             review: JudgeResult = self.llm.invoke(messages)
-            review_dict = review.model_dump()
 
-            # verdict 유효성 검사 (Pydantic이 처리하지 못한 경우 대비)
-            if review_dict.get("verdict") not in ["PASS", "REVISE", "FAIL"]:
-                review_dict["verdict"] = self._infer_verdict(review_dict.get("overall_score", 7))
+            # verdict 유효성 검사 (Pydantic Field Validator 권장하지만, 간단히 처리)
+            if review.verdict not in ["PASS", "REVISE", "FAIL"]:
+                review.verdict = self._infer_verdict(review.overall_score)
 
         except Exception as e:
-            # 파싱 실패 시 기본 REVISE 판정 반환
-            fallback_review = {
-                "overall_score": 7,
-                "verdict": "REVISE",
-                "critical_issues": [],
-                "strengths": ["기본 구조가 갖춰져 있습니다"],
-                "weaknesses": ["구체성 보완 필요"],
-                "action_items": ["구체적인 수치와 데이터 추가 필요"],
-                "reasoning": "심사 중 오류 발생으로 기본 REVISE 판정"
-            }
-            review_dict = fallback_review
-            state["error"] = f"심사 오류: {str(e)}"
+            # 실패 시 안전한 기본값 객체 생성
+            fallback_review = JudgeResult(
+                overall_score=7,
+                verdict="REVISE",
+                critical_issues=[],
+                strengths=["기본 구조가 갖춰져 있습니다"],
+                weaknesses=["구체성 보완 필요"],
+                action_items=["구체적인 수치와 데이터 추가 필요"],
+                reasoning="심사 중 오류 발생으로 기본 REVISE 판정"
+            )
+            review = fallback_review
+            state.error = f"심사 오류: {str(e)}"
 
         # =====================================================================
-        # 3. 상태 업데이트
+        # 3. 상태 업데이트 (Pydantic 모델 복사)
         # =====================================================================
-        state.update({
-            "review": review_dict,
+        new_state = state.model_copy(update={
+            "review": review,
             "current_step": "review"
         })
 
-        # NOTE: final_output은 Refiner Agent에서 생성합니다.
-        # Reviewer는 판정 결과만 저장하고, Refiner가 판정에 따라 개선합니다.
+        return new_state
 
-        return state
-
-    def _format_draft(self, draft: dict) -> str:
+    def _format_draft(self, draft: object) -> str: # Type hint: DraftResult (circular import 방지 위해 object 또는 Any)
         """
-        draft를 읽기 쉬운 문자열로 변환합니다.
+        draft 객체를 읽기 쉬운 문자열로 변환합니다.
 
         Args:
-            draft: 초안 딕셔너리
+            draft: 초안 객체 (DraftResult)
 
         Returns:
             str: 포맷된 문자열
         """
+        if not draft:
+            return ""
+            
         lines = []
-        for section in draft.get("sections", []):
-            lines.append(f"## {section.get('name', '')}")
-            lines.append(section.get("content", ""))
+        # Pydantic 객체 접근
+        for section in draft.sections:
+            lines.append(f"## {section.name}")
+            lines.append(section.content)
             lines.append("")
         return "\n".join(lines)
 

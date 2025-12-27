@@ -72,9 +72,11 @@ class WriterAgent:
         # =====================================================================
         # 1. 입력 데이터 추출
         # =====================================================================
-        user_input = state.get("user_input", "")
-        structure = state.get("structure", {})
-        context = state.get("rag_context", "")
+        user_input = state.user_input
+        # structure는 Pydantic 객체임
+        structure = state.structure
+        structure_dict = structure.model_dump() if structure else {}
+        context = state.rag_context
 
         # =====================================================================
         # 2. Structured Output으로 LLM 호출
@@ -83,49 +85,55 @@ class WriterAgent:
             {"role": "system", "content": WRITER_SYSTEM_PROMPT},
             {"role": "user", "content": WRITER_USER_PROMPT.format(
                 user_input=user_input,
-                structure=json.dumps(structure, ensure_ascii=False, indent=2),
+                structure=json.dumps(structure_dict, ensure_ascii=False, indent=2),
                 context=context if context else "없음"
             )}
         ]
 
         try:
-            # with_structured_output 사용: 자동으로 Pydantic 객체 반환
+            # Pydantic 객체 그대로 사용
             draft: DraftResult = self.llm.invoke(messages)
-            draft_dict = draft.model_dump()
-
+            
         except Exception as e:
-            # 실패 시 기본 초안 반환
-            draft_dict = {
-                "sections": [
-                    {"id": 1, "name": "초안", "content": "내용 작성 중 오류 발생"}
+            # 실패 시 기본 초안 객체 생성
+            from utils.schemas import SectionContent
+            
+            draft = DraftResult(
+                sections=[
+                    SectionContent(id=1, name="초안 작성 오류", content=f"작성 중 오류가 발생했습니다: {str(e)}")
                 ]
-            }
-            state["error"] = f"초안 작성 오류: {str(e)}"
+            )
+            state.error = f"초안 작성 오류: {str(e)}"
 
         # =====================================================================
-        # 3. 상태 업데이트
+        # 3. 상태 업데이트 (Pydantic 모델 복사)
         # =====================================================================
-        state["draft"] = draft_dict
-        state["current_step"] = "write"
+        new_state = state.model_copy(update={
+            "draft": draft,
+            "current_step": "write"
+        })
 
-        return state
+        return new_state
 
-    def format_as_markdown(self, draft: dict) -> str:
+    def format_as_markdown(self, draft: DraftResult) -> str:
         """
-        draft를 마크다운 형식으로 변환합니다.
+        draft 객체를 마크다운 형식으로 변환합니다.
 
         Args:
-            draft: 초안 딕셔너리
+            draft: 초안 객체 (DraftResult)
 
         Returns:
             str: 마크다운 형식 문자열
         """
         md_content = []
+        
+        # draft가 Pydantic 객체이므로 sections 리스트에 접근
+        sections = draft.sections if draft else []
 
-        for section in draft.get("sections", []):
-            md_content.append(f"## {section.get('name', '')}")
+        for section in sections:
+            md_content.append(f"## {section.name}")
             md_content.append("")
-            md_content.append(section.get("content", ""))
+            md_content.append(section.content)
             md_content.append("")
 
         return "\n".join(md_content)

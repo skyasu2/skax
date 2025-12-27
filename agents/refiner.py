@@ -74,25 +74,30 @@ class RefinerAgent:
                 - current_step: "refine"
         """
         # =====================================================================
-        # 1. 입력 데이터 추출
+        # 1. 입력 데이터 추출 (객체 접근)
         # =====================================================================
-        draft = state.get("draft", {})
-        review = state.get("review", {})
-        analysis = state.get("analysis", {})
+        draft = state.draft
+        review = state.review
+        analysis = state.analysis
 
-        score = review.get("overall_score", 7)
-        verdict = review.get("verdict", "REVISE")
-        critical_issues = review.get("critical_issues", [])
-        action_items = review.get("action_items", [])
+        # Pydantic 객체 필드 접근
+        score = review.overall_score if review else 7
+        verdict = review.verdict if review else "REVISE"
+        critical_issues = review.critical_issues if review else []
+        action_items = review.action_items if review else []
 
         # =====================================================================
         # 2. PASS 판정 처리 (수정 최소화)
         # =====================================================================
         if verdict == "PASS" and score >= 9 and not action_items:
-            state["final_output"] = self._format_draft_only(draft)
-            state["refined"] = False
-            state["current_step"] = "refine"
-            return state
+            final_md = self._format_draft_only(draft)
+            
+            new_state = state.model_copy(update={
+                "final_output": final_md,
+                "refined": False,
+                "current_step": "refine"
+            })
+            return new_state
 
         # =====================================================================
         # 3. draft 문자열 변환
@@ -107,6 +112,12 @@ class RefinerAgent:
         # =====================================================================
         # 5. 프롬프트 구성 및 LLM 호출
         # =====================================================================
+        # analysis는 Optional[AnalysisResult]이므로 None 체크 필요
+        topic = analysis.topic if analysis else ""
+        purpose = analysis.purpose if analysis else ""
+        target_users = analysis.target_users if analysis else ""
+        key_features = ", ".join(analysis.key_features) if analysis else ""
+
         messages = [
             {"role": "system", "content": REFINER_SYSTEM_PROMPT},
             {"role": "user", "content": REFINER_USER_PROMPT.format(
@@ -115,10 +126,10 @@ class RefinerAgent:
                 verdict=verdict,
                 critical_issues="\n".join(f"- {c}" for c in critical_issues) if critical_issues else "없음",
                 action_items="\n".join(f"- {a}" for a in action_items) if action_items else "없음",
-                topic=analysis.get("topic", ""),
-                purpose=analysis.get("purpose", ""),
-                target_users=analysis.get("target_users", ""),
-                key_features=", ".join(analysis.get("key_features", [])),
+                topic=topic,
+                purpose=purpose,
+                target_users=target_users,
+                key_features=key_features,
                 verdict_instruction=verdict_instruction
             )}
         ]
@@ -140,32 +151,38 @@ class RefinerAgent:
         except Exception as e:
             # 실패 시 원본 draft 사용
             refined_output = self._format_draft_only(draft)
-            state["error"] = f"개선 작업 오류: {str(e)}"
+            state.error = f"개선 작업 오류: {str(e)}"
 
         # =====================================================================
-        # 6. 상태 업데이트
+        # 6. 상태 업데이트 (Pydantic 모델 복사)
         # =====================================================================
-        state["final_output"] = refined_output
-        state["refined"] = True
-        state["current_step"] = "refine"
+        new_state = state.model_copy(update={
+            "final_output": refined_output,
+            "refined": True,
+            "current_step": "refine"
+        })
 
-        return state
+        return new_state
 
-    def _format_draft(self, draft: dict) -> str:
-        """draft를 읽기 쉬운 문자열로 변환"""
+    def _format_draft(self, draft: object) -> str: # Type hint: DraftResult
+        """draft 객체를 읽기 쉬운 문자열로 변환"""
+        if not draft:
+            return ""
         lines = []
-        for section in draft.get("sections", []):
-            lines.append(f"## {section.get('name', '')}")
-            lines.append(section.get("content", ""))
+        for section in draft.sections:
+            lines.append(f"## {section.name}")
+            lines.append(section.content)
             lines.append("")
         return "\n".join(lines)
 
-    def _format_draft_only(self, draft: dict) -> str:
-        """draft를 기획서 형식으로 변환 (심사 결과 제외)"""
+    def _format_draft_only(self, draft: object) -> str: # Type hint: DraftResult
+        """draft 객체를 기획서 형식으로 변환 (심사 결과 제외)"""
+        if not draft:
+            return ""
         lines = ["# 기획서\n"]
-        for section in draft.get("sections", []):
-            lines.append(f"## {section.get('name', '')}")
-            lines.append(section.get("content", ""))
+        for section in draft.sections:
+            lines.append(f"## {section.name}")
+            lines.append(section.content)
             lines.append("")
         return "\n".join(lines)
 
