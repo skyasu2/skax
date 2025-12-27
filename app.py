@@ -58,11 +58,30 @@ st.markdown("""
         border-radius: 24px !important;
         border: 2px solid #e0e0e0 !important;
         padding: 12px 20px !important;
+        outline: none !important;
     }
 
     .stChatInput textarea:focus {
         border-color: #667eea !important;
-        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2) !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+    
+    /* Streamlit 기본 포커스 링 제거 */
+    .stChatInput textarea:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* 입력창 컨테이너의 포커스 스타일 통일 */
+    .stChatInput div[data-baseweb="textarea"] {
+        border-radius: 24px !important;
+        overflow: hidden;
+    }
+    
+    .stChatInput div[data-baseweb="textarea"]:focus-within {
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3) !important;
+        border-radius: 24px !important;
     }
 
     /* 전송 버튼 스타일 */
