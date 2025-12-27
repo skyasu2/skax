@@ -91,7 +91,7 @@ class StructurerAgent:
 
         except Exception as e:
             # 파싱 실패 시 기본 구조 반환
-            structure_dict = {
+            fallback_structure = {
                 "title": analysis.get("topic", "기획서"),
                 "sections": [
                     {"id": 1, "name": "프로젝트 개요", "description": "프로젝트 요약", "key_points": []},
@@ -101,13 +101,16 @@ class StructurerAgent:
                     {"id": 5, "name": "기대 효과", "description": "가치 창출", "key_points": []}
                 ]
             }
+            structure_dict = fallback_structure
             state["error"] = f"구조 설계 오류: {str(e)}"
 
         # =====================================================================
         # 3. 상태 업데이트
         # =====================================================================
-        state["structure"] = structure_dict
-        state["current_step"] = "structure"
+        state.update({
+            "structure": structure_dict,
+            "current_step": "structure"
+        })
 
         return state
 

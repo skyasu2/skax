@@ -117,8 +117,10 @@ class FormatterAgent:
         # =====================================================================
         # 3. 상태 업데이트
         # =====================================================================
-        state["chat_summary"] = chat_summary
-        state["current_step"] = "format"
+        state.update({
+            "chat_summary": chat_summary,
+            "current_step": "format"
+        })
 
         return state
 

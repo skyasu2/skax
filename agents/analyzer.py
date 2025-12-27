@@ -119,8 +119,8 @@ class AnalyzerAgent:
             analysis_dict = analysis.model_dump()
 
         except Exception as e:
-            # 파싱 실패 시 기본값 반환
-            analysis_dict = AnalysisResult(
+            # 실패 시 안전한 기본값(Fallback) 생성
+            fallback_result = AnalysisResult(
                 topic=user_input[:50] if user_input else "주제 미정",
                 purpose="분석 필요",
                 target_users="미정",
@@ -130,17 +130,22 @@ class AnalyzerAgent:
                 options=[],
                 option_question="",
                 need_more_info=False
-            ).model_dump()
+            )
+            analysis_dict = fallback_result.model_dump()
             state["error"] = f"분석 오류: {str(e)}"
 
         # =====================================================================
         # 4. 상태 업데이트
         # =====================================================================
-        state["analysis"] = analysis_dict
-        state["need_more_info"] = analysis_dict.get("need_more_info", False)
-        state["options"] = analysis_dict.get("options", [])
-        state["option_question"] = analysis_dict.get("option_question", "")
-        state["current_step"] = "analyze"
+        # Pydantic 모델의 필드들을 분해하여 상태에 저장
+        # (추후 Pydantic 객체 자체를 전달하는 방식으로 고도화 가능)
+        state.update({
+            "analysis": analysis_dict,
+            "need_more_info": analysis_dict.get("need_more_info", False),
+            "options": analysis_dict.get("options", []),
+            "option_question": analysis_dict.get("option_question", ""),
+            "current_step": "analyze"
+        })
 
         return state
 

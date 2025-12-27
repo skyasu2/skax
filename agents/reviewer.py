@@ -96,7 +96,7 @@ class ReviewerAgent:
 
         except Exception as e:
             # 파싱 실패 시 기본 REVISE 판정 반환
-            review_dict = {
+            fallback_review = {
                 "overall_score": 7,
                 "verdict": "REVISE",
                 "critical_issues": [],
@@ -105,13 +105,16 @@ class ReviewerAgent:
                 "action_items": ["구체적인 수치와 데이터 추가 필요"],
                 "reasoning": "심사 중 오류 발생으로 기본 REVISE 판정"
             }
+            review_dict = fallback_review
             state["error"] = f"심사 오류: {str(e)}"
 
         # =====================================================================
         # 3. 상태 업데이트
         # =====================================================================
-        state["review"] = review_dict
-        state["current_step"] = "review"
+        state.update({
+            "review": review_dict,
+            "current_step": "review"
+        })
 
         # NOTE: final_output은 Refiner Agent에서 생성합니다.
         # Reviewer는 판정 결과만 저장하고, Refiner가 판정에 따라 개선합니다.
