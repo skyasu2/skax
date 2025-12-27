@@ -196,45 +196,20 @@ class MCPToolkit:
             return f"[웹 조회 실패: {str(e)}]"
     
     def _fallback_search(self, query: str, max_results: int = 5) -> Dict[str, Any]:
-        """Fallback: DuckDuckGo로 검색"""
-        try:
-            from duckduckgo_search import DDGS
-            
-            results = []
-            formatted_parts = []
-            
-            with DDGS() as ddgs:
-                search_results = list(ddgs.text(query, max_results=max_results))
-                
-                for i, r in enumerate(search_results, 1):
-                    result_item = {
-                        "title": r.get("title", ""),
-                        "url": r.get("href", ""),
-                        "snippet": r.get("body", "")
-                    }
-                    results.append(result_item)
-                    formatted_parts.append(
-                        f"[{i}] {result_item['title']}\n"
-                        f"    URL: {result_item['url']}\n"
-                        f"    {result_item['snippet'][:200]}..."
-                    )
-            
-            return {
-                "success": True,
-                "query": query,
-                "results": results,
-                "formatted": "\n\n".join(formatted_parts),
-                "source": "duckduckgo-fallback"
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "query": query,
-                "results": [],
-                "error": str(e),
-                "source": "error"
-            }
+        """
+        Fallback 검색 (MCP 실패 시)
+        
+        DuckDuckGo 제거됨 - MCP(Tavily) 전용
+        MCP 연결 실패 시 빈 결과 반환
+        """
+        return {
+            "success": False,
+            "query": query,
+            "results": [],
+            "formatted": "[웹 검색 사용 불가 - MCP 연결 필요]",
+            "error": "MCP not initialized. Set MCP_ENABLED=true and ensure Tavily API key is configured.",
+            "source": "no-search-available"
+        }
     
     def get_tools(self) -> List[Any]:
         """로드된 MCP 도구 목록 반환"""
