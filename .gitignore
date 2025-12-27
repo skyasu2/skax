@@ -1,0 +1,17 @@
+# Environment variables
+.env
+.env.local
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+.venv/
+
+# Streamlit
+streamlit_logs/
+.streamlit/
+
+# Ignore old dir
+insoft.0307_275_a5a80dbb-e86b-49ab-acb9-f3b24563c869/
