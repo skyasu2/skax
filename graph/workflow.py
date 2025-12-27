@@ -62,6 +62,12 @@ Best Practice 적용:
 from langgraph.graph import StateGraph, END
 from graph.state import PlanCraftState
 from agents import analyzer, structurer, writer, reviewer, refiner, formatter
+from utils.config import Config
+
+# =============================================================================
+# LangSmith 트레이싱 활성화 (Observability)
+# =============================================================================
+Config.setup_langsmith()
 
 
 # =============================================================================

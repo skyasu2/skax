@@ -23,8 +23,8 @@ Structured Output을 통해 LLM 응답의 일관성과 타입 안전성을 보�
     analysis_dict = analysis.model_dump()
 """
 
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import List, Optional, Self
 
 
 # =============================================================================
@@ -73,6 +73,16 @@ class AnalysisResult(BaseModel):
     option_question: str = Field(default="", description="옵션 선택을 위한 질문")
     need_more_info: bool = Field(default=False, description="추가 정보 필요 여부")
 
+    @model_validator(mode='after')
+    def validate_options_when_need_more_info(self) -> Self:
+        """need_more_info=True일 때 options가 반드시 존재해야 함"""
+        if self.need_more_info and not self.options:
+            # 자동으로 기본 옵션 생성 (Fallback)
+            self.options = [
+                OptionChoice(title="기본 진행", description="AI가 자동으로 가정하여 진행합니다")
+            ]
+        return self
+
 
 # =============================================================================
 # Structurer Agent 스키마
@@ -109,6 +119,15 @@ class StructureResult(BaseModel):
     """
     title: str = Field(description="기획서 제목")
     sections: List[SectionStructure] = Field(description="섹션 목록")
+
+    @field_validator('sections')
+    @classmethod
+    def validate_sections_not_empty(cls, v: List[SectionStructure]) -> List[SectionStructure]:
+        """sections는 최소 1개 이상 필요"""
+        if not v:
+            # 기본 섹션 생성 (Fallback)
+            return [SectionStructure(id=1, name="개요", description="프로젝트 개요", key_points=[])]
+        return v
 
 
 # =============================================================================
@@ -171,6 +190,21 @@ class JudgeResult(BaseModel):
     weaknesses: List[str] = Field(default_factory=list, description="약한 점들")
     action_items: List[str] = Field(default_factory=list, description="구체적 수정 지시")
     reasoning: str = Field(default="", description="판정 이유")
+
+    @field_validator('verdict')
+    @classmethod
+    def validate_verdict(cls, v: str) -> str:
+        """verdict는 반드시 PASS, REVISE, FAIL 중 하나"""
+        valid_verdicts = {'PASS', 'REVISE', 'FAIL'}
+        v_upper = v.upper().strip()
+        if v_upper in valid_verdicts:
+            return v_upper
+        # 유사 값 자동 보정
+        if 'PASS' in v_upper:
+            return 'PASS'
+        elif 'FAIL' in v_upper:
+            return 'FAIL'
+        return 'REVISE'  # 기본값
 
 
 # 하위 호환성을 위한 별칭

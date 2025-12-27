@@ -61,6 +61,31 @@ class Config:
     AOAI_DEPLOY_EMBED_LARGE = os.getenv("AOAI_DEPLOY_EMBED_3_LARGE", "text-embedding-3-large")
     AOAI_DEPLOY_EMBED_SMALL = os.getenv("AOAI_DEPLOY_EMBED_3_SMALL", "text-embedding-3-small")
     AOAI_DEPLOY_EMBED_ADA = os.getenv("AOAI_DEPLOY_EMBED_ADA", "text-embedding-ada-002")
+    
+    # =========================================================================
+    # LangSmith 트레이싱 설정 (Observability)
+    # =========================================================================
+    LANGSMITH_TRACING_ENABLED = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+    LANGSMITH_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGSMITH_PROJECT = os.getenv("LANGCHAIN_PROJECT", "PlanCraft-Agent")
+    
+    @classmethod
+    def setup_langsmith(cls) -> bool:
+        """
+        LangSmith 트레이싱을 활성화합니다.
+        
+        환경변수 LANGCHAIN_TRACING_V2=true와 LANGCHAIN_API_KEY가 설정되어 있으면
+        자동으로 LangSmith 트레이싱이 활성화됩니다.
+        
+        Returns:
+            bool: 트레이싱 활성화 여부
+        """
+        if cls.LANGSMITH_TRACING_ENABLED and cls.LANGSMITH_API_KEY:
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_API_KEY"] = cls.LANGSMITH_API_KEY
+            os.environ["LANGCHAIN_PROJECT"] = cls.LANGSMITH_PROJECT
+            return True
+        return False
 
     @classmethod
     def validate(cls) -> None:
