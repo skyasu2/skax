@@ -2,6 +2,23 @@
 
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [1.3.0] - 2024-12-27
+
+### Added
+- **Sub-graph 패턴 도입** (`graph/subgraphs.py`)
+  - Context Sub-graph: RAG + 웹 검색 그룹화
+  - Generation Sub-graph: 분석 → 구조 → 작성 그룹화
+  - QA Sub-graph: 검토 → 개선 → 포맷 그룹화
+- **Sub-graph 워크플로우** (`create_subgraph_workflow()`)
+  - LangGraph 베스트 프랙티스 적용
+  - 각 Sub-graph 독립 테스트 가능
+- **Sub-graph 테스트** (`tests/test_agents.py`)
+  - 각 Sub-graph 생성 검증
+  - 워크플로우 통합 검증
+
+### Changed
+- `compile_workflow(use_subgraphs=True)` 옵션 추가
+
 ## [1.2.0] - 2024-12-27
 
 ### Added

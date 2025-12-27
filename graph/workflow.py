@@ -178,7 +178,7 @@ def should_ask_user(state: PlanCraftState) -> str:
 # =============================================================================
 
 def create_workflow() -> StateGraph:
-    """PlanCraft 워크플로우 생성"""
+    """PlanCraft 워크플로우 생성 (기본 버전)"""
     # Pydantic 모델을 State로 사용
     workflow = StateGraph(PlanCraftState)
 
@@ -215,7 +215,74 @@ def create_workflow() -> StateGraph:
     return workflow
 
 
-def compile_workflow():
+# =============================================================================
+# Sub-graph 패턴 워크플로우 (Best Practice)
+# =============================================================================
+
+def create_subgraph_workflow() -> StateGraph:
+    """
+    PlanCraft 워크플로우 생성 (Sub-graph 패턴)
+    
+    LangGraph 베스트 프랙티스에 따라 관련 노드들을 Sub-graph로 그룹화합니다.
+    
+    구조:
+        ┌─────────────────────────────────────────────────────────┐
+        │                    Main Graph                           │
+        │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+        │  │   Context    │  │  Generation  │  │      QA      │  │
+        │  │  Sub-graph   │→│  Sub-graph   │→│  Sub-graph   │  │
+        │  │ (RAG + Web)  │  │(분석→구조→작성)│  │(검토→개선→포맷)│  │
+        │  └──────────────┘  └──────────────┘  └──────────────┘  │
+        └─────────────────────────────────────────────────────────┘
+    
+    장점:
+        - 명확한 책임 분리 (SRP)
+        - 각 Sub-graph 독립 테스트 가능
+        - 코드 재사용성 향상
+        - 복잡한 워크플로우 관리 용이
+    """
+    from graph.subgraphs import (
+        run_context_subgraph,
+        run_generation_subgraph,
+        run_qa_subgraph
+    )
+    
+    workflow = StateGraph(PlanCraftState)
+    
+    # Sub-graph를 단일 노드로 등록
+    workflow.add_node("context_gathering", run_context_subgraph)
+    workflow.add_node("content_generation", run_generation_subgraph)
+    workflow.add_node("quality_assurance", run_qa_subgraph)
+    
+    # 흐름 정의
+    workflow.set_entry_point("context_gathering")
+    
+    # Context → Generation (조건부 분기)
+    def should_continue_to_generation(state: PlanCraftState) -> str:
+        """Generation으로 진행할지 판단"""
+        if state.need_more_info:
+            return "ask_user"
+        return "continue"
+    
+    workflow.add_conditional_edges(
+        "context_gathering",
+        should_continue_to_generation,
+        {
+            "ask_user": END,
+            "continue": "content_generation"
+        }
+    )
+    
+    workflow.add_edge("content_generation", "quality_assurance")
+    workflow.add_edge("quality_assurance", END)
+    
+    return workflow
+
+
+def compile_workflow(use_subgraphs: bool = False):
+    """워크플로우 컴파일"""
+    if use_subgraphs:
+        return create_subgraph_workflow().compile()
     return create_workflow().compile()
 
 

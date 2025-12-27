@@ -221,6 +221,57 @@ class TestAgentIntegration:
 
 
 # =============================================================================
+# Sub-graph 테스트
+# =============================================================================
+
+class TestSubgraphs:
+    """Sub-graph 구조 테스트"""
+    
+    def test_context_subgraph_creation(self):
+        """Context Sub-graph 생성 테스트"""
+        from graph.subgraphs import create_context_subgraph
+        
+        subgraph = create_context_subgraph()
+        
+        # 노드가 등록되었는지 확인
+        assert "rag_retrieve" in subgraph.nodes
+        assert "web_fetch" in subgraph.nodes
+    
+    def test_generation_subgraph_creation(self):
+        """Generation Sub-graph 생성 테스트"""
+        from graph.subgraphs import create_generation_subgraph
+        
+        subgraph = create_generation_subgraph()
+        
+        # 노드가 등록되었는지 확인
+        assert "analyze" in subgraph.nodes
+        assert "structure" in subgraph.nodes
+        assert "write" in subgraph.nodes
+    
+    def test_qa_subgraph_creation(self):
+        """QA Sub-graph 생성 테스트"""
+        from graph.subgraphs import create_qa_subgraph
+        
+        subgraph = create_qa_subgraph()
+        
+        # 노드가 등록되었는지 확인
+        assert "review" in subgraph.nodes
+        assert "refine" in subgraph.nodes
+        assert "format" in subgraph.nodes
+    
+    def test_subgraph_workflow_creation(self):
+        """Sub-graph 패턴 워크플로우 생성 테스트"""
+        from graph.workflow import create_subgraph_workflow
+        
+        workflow = create_subgraph_workflow()
+        
+        # Sub-graph 노드가 등록되었는지 확인
+        assert "context_gathering" in workflow.nodes
+        assert "content_generation" in workflow.nodes
+        assert "quality_assurance" in workflow.nodes
+
+
+# =============================================================================
 # 실행
 # =============================================================================
 
