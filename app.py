@@ -347,7 +347,7 @@ def render_main():
     
     # 3-1. 채팅 히스토리
     for msg in st.session_state.chat_history:
-        render_chat_message(msg)
+        render_chat_message(msg["role"], msg["content"], msg.get("type", "text"))
 
     # 3-2. 현재 상태 기반 UI (인터럽트, 에러, 결과)
     if st.session_state.current_state:
