@@ -378,9 +378,34 @@ def render_main():
              st.divider()
              with st.expander("📄 최종 기획서 보기 (접기/펼치기)", expanded=True):
                  st.markdown(state["final_output"])
-                 
-             col1, col2 = st.columns(2)
-             if col1.button("✨ 다시 개선하기"):
+             
+             st.markdown("---")
+             
+             # 액션 버튼 그룹
+             ca1, ca2, ca3 = st.columns(3)
+             with ca1:
+                 st.download_button(
+                    "📥 다운로드",
+                    data=state["final_output"],
+                    file_name=f"plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+             with ca2:
+                 if st.button("💾 저장", use_container_width=True):
+                     try:
+                         from tools.file_utils import save_plan
+                         saved_path = save_plan(state["final_output"])
+                         st.success(f"저장됨: {os.path.basename(saved_path)}")
+                     except Exception as e:
+                         st.error(f"저장 실패: {str(e)}")
+             with ca3:
+                 if st.button("✖️ 닫기", use_container_width=True):
+                     st.session_state.generated_plan = None
+                     st.session_state.current_state = None
+                     st.rerun()
+
+             if st.button("✨ 이 내용을 바탕으로 더 개선하기", type="primary", use_container_width=True):
                  st.session_state.next_refine_count = st.session_state.current_state.get("refine_count", 0) + 1
                  st.session_state.pending_input = "이 내용을 바탕으로 더 구체적으로 보완해줘"
                  st.rerun()
