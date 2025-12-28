@@ -21,18 +21,20 @@ def run(state: PlanCraftState) -> PlanCraftState:
     if not analysis:
         return update_state(state, error="분석 데이터가 없습니다.")
         
-    topic = analysis.get("topic", "") if isinstance(analysis, dict) else getattr(analysis, "topic", "")
-    target_audience = analysis.get("target_audience", "") if isinstance(analysis, dict) else getattr(analysis, "target_audience", "")
-    requirements = analysis.get("key_requirements", []) if isinstance(analysis, dict) else getattr(analysis, "key_requirements", [])
+    rag_context = state.get("rag_context", "")
+    web_context = state.get("web_context", "")
+    context = f"{rag_context}\n{web_context}".strip()
+    
+    # Analysis 내용을 문자열로 변환하여 프롬프트에 주입
+    analysis_str = str(analysis)
     
     # 2. 프롬프트 구성
+    # 프롬프트 플레이스홀더: {analysis}, {context}
     messages = [
         {"role": "system", "content": STRUCTURER_SYSTEM_PROMPT},
         {"role": "user", "content": STRUCTURER_USER_PROMPT.format(
-            topic=topic,
-            target_audience=target_audience,
-            requirements=requirements,
-            user_input=user_input
+            analysis=analysis_str,
+            context=context if context else "없음"
         )}
     ]
     
