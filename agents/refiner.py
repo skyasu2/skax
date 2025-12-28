@@ -209,6 +209,54 @@ class RefinerAgent:
 
 
 def run(state: PlanCraftState) -> PlanCraftState:
-    """LangGraph 노드용 함수"""
-    agent = RefinerAgent()
-    return agent.run(state)
+    """
+    기획서 개선 에이전트 실행
+    
+    심사 결과(ReviewResult)를 바탕으로 개선 여부를 판단하고,
+    필요 시 다시 구조화/작성 단계로 라우팅하기 위한 메타데이터를 업데이트합니다.
+    """
+    from graph.state import update_state
+
+    # 1. 입력 데이터 준비
+    review = state.get("review")
+    if not review:
+        return update_state(state, error="심사 결과가 없습니다.")
+        
+    # Review 내용 추출
+    if isinstance(review, dict):
+        verdict = review.get("verdict", "FAIL")
+    else:
+        verdict = getattr(review, "verdict", "FAIL")
+    
+    current_count = state.get("refine_count", 0)
+    
+    # 2. 개선 로직 수행 (간소화)
+    # 실제로는 여기서 뭔가 더 복잡한 판단을 할 수 있음
+    
+    # PASS가 아니면 개선 카운트 증가 및 이전 계획 저장
+    if verdict != "PASS" and current_count < 3:
+        # 현재 Draft를 Previous Plan으로 저장
+        draft = state.get("draft")
+        previous_text = ""
+        if draft:
+            sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
+            previous_text = "\n\n".join([f"## {s.get('name', '')}\n{s.get('content', '')}" if isinstance(s, dict) else f"## {s.name}\n{s.content}" for s in sections])
+            
+        print(f"[Refiner] 개선 필요 (Verdict: {verdict}, Round: {current_count + 1})")
+        
+        # 순환 참조 방지: draft, structure 등을 초기화하지 않고 그대로 둠 (Writer가 참고함)
+        # 단, refine_count는 증가
+        return update_state(
+            state,
+            refine_count=current_count + 1,
+            previous_plan=previous_text,
+            current_step="refine",
+            refined=True
+        )
+    else:
+        print("[Refiner] 통과 또는 최대 재시도 도달")
+        return update_state(
+            state,
+            current_step="refine",
+            refined=False # 더 이상 개선 안함
+        )
