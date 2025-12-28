@@ -379,10 +379,8 @@ def render_main():
              with st.expander("📄 최종 기획서 보기 (접기/펼치기)", expanded=True):
                  st.markdown(state["final_output"])
              
-             st.markdown("---")
-             
              # 액션 버튼 그룹
-             ca1, ca2, ca3 = st.columns(3)
+             ca1, ca2, ca3, ca4 = st.columns(4)
              with ca1:
                  st.download_button(
                     "📥 다운로드",
@@ -400,39 +398,25 @@ def render_main():
                      except Exception as e:
                          st.error(f"저장 실패: {str(e)}")
              with ca3:
+                 if st.button("🔍 분석 내용", use_container_width=True):
+                     show_analysis_dialog()
+             with ca4:
                  if st.button("✖️ 닫기", use_container_width=True):
                      st.session_state.generated_plan = None
                      st.session_state.current_state = None
                      st.rerun()
+
+             # 실행 과정 시각화 (메인 통합)
+             with st.expander("📊 실행 과정 상세 보기", expanded=False):
+                 hist = state.get("step_history", [])
+                 render_visual_timeline(hist)
 
              render_refinement_ui()
 
     # =========================================================================
     # 4. 사이드바 (워크플로우 시각화)
     # =========================================================================
-    with st.sidebar:
-        if st.session_state.current_state:
-            hist = st.session_state.current_state.get("step_history", [])
-            render_visual_timeline(hist)
-            
-            st.markdown("---")
-            
-            # 사이드바 액션 버튼들
-            c1, c2 = st.columns(2)
-            if c1.button("📖 기획서", use_container_width=True):
-                 show_plan_dialog()
-            if c2.button("🔍 분석", use_container_width=True):
-                 show_analysis_dialog()
-                 
-            # 다운로드
-            if st.session_state.generated_plan:
-                 st.download_button(
-                    "📥 저장 (.md)",
-                    data=st.session_state.generated_plan,
-                    file_name=f"plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                    mime="text/markdown",
-                    use_container_width=True
-                )
+
                  
     
 
