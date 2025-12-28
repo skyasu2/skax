@@ -102,6 +102,7 @@ class AnalyzerAgent:
         file_content = state.file_content
         rag_context = state.rag_context
         web_context = state.web_context
+        previous_plan = getattr(state, "previous_plan", None)
 
         # =====================================================================
         # 2. 컨텍스트 구성
@@ -122,6 +123,7 @@ class AnalyzerAgent:
             {"role": "system", "content": ANALYZER_SYSTEM_PROMPT},
             {"role": "user", "content": ANALYZER_USER_PROMPT.format(
                 user_input=user_input,
+                previous_plan=previous_plan if previous_plan else "없음",
                 context=context
             )}
         ]

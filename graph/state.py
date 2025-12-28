@@ -59,6 +59,8 @@ class PlanCraftState(BaseModel):
     # 9. 메타데이터 (Metadata)
     current_step: str = Field(default="start", description="현재 실행 중인 단계")
     refine_count: int = Field(default=0, description="추가 개선 수행 횟수 (최대 3회)")
+    # [추가] 이전 기획서 스냅샷 (Refinement 시 참고)
+    previous_plan: Optional[str] = Field(default=None, description="이전 회차의 기획서 (Markdown)")
     error: Optional[str] = Field(default=None, description="에러 메시지")
 
     @model_validator(mode='after')
@@ -92,12 +94,14 @@ class PlanCraftState(BaseModel):
         return self
 
 
-def create_initial_state(user_input: str, file_content: str = None) -> PlanCraftState:
+def create_initial_state(user_input: str, file_content: str = None, previous_plan: str = None) -> PlanCraftState:
     """
     초기 상태를 생성합니다.
+    Refinement 상황일 경우 previous_plan을 주입받습니다.
     """
     return PlanCraftState(
         user_input=user_input,
         file_content=file_content,
+        previous_plan=previous_plan,
         messages=[{"role": "user", "content": user_input}]
     )

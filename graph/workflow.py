@@ -363,16 +363,17 @@ app = compile_workflow()
 # 실행 함수
 # =============================================================================
 
-def run_plancraft(user_input: str, file_content: str = None, refine_count: int = 0) -> dict:
+def run_plancraft(user_input: str, file_content: str = None, refine_count: int = 0, previous_plan: str = None) -> dict:
     """
     PlanCraft Agent 워크플로우 실행
     
     UI 계층과의 호환성을 위해 최종 결과는 dict 형태로 반환합니다.
+    Refinement 상황일 경우 previous_plan을 전달합니다.
     """
     from graph.state import create_initial_state
 
     # 초기 상태 생성 (Pydantic 객체 리턴)
-    initial_state = create_initial_state(user_input, file_content)
+    initial_state = create_initial_state(user_input, file_content, previous_plan)
     
     # [중요] 개선 횟수 주입 (Agent들이 이를 참조하여 로직 수행)
     initial_state.refine_count = refine_count
