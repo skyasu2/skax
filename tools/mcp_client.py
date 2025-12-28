@@ -362,8 +362,12 @@ def fetch_url_sync(url: str, max_length: int = 5000) -> str:
     Fallback 모드: requests 직접 사용
     """
     from utils.config import Config
+    import shutil
     
-    if Config.MCP_ENABLED:
+    # [수정] uvx 감지 - 없으면 즉시 Fallback (Async 루프 진입 방지)
+    has_uvx = shutil.which("uvx") is not None
+    
+    if Config.MCP_ENABLED and has_uvx:
         try:
             async def _async_fetch():
                 toolkit = MCPToolkit()
@@ -387,8 +391,12 @@ def search_sync(query: str, max_results: int = 5) -> Dict[str, Any]:
     Fallback 모드: 빈 결과 반환 (DuckDuckGo 제거됨)
     """
     from utils.config import Config
+    import shutil
     
-    if Config.MCP_ENABLED:
+    # [수정] npx 감지 - 없으면 즉시 Fallback (Async 루프 진입 방지)
+    has_npx = shutil.which("npx") is not None
+    
+    if Config.MCP_ENABLED and has_npx:
         try:
             async def _async_search():
                 toolkit = MCPToolkit()
@@ -406,6 +414,6 @@ def search_sync(query: str, max_results: int = 5) -> Dict[str, Any]:
                 "source": "mcp-error"
             }
     
-    # Fallback: 빈 결과 반환
+    # Fallback: Tavily Python SDK 사용
     toolkit = MCPToolkit(use_mcp=False)
     return toolkit._fallback_search(query, max_results)

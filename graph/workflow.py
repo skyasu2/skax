@@ -196,11 +196,27 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
                 print(f"[INFO] 웹 검색 스킵: {decision['reason']}")
 
         # 3. 상태 업데이트
-        web_context_str = "\n\n---\n\n".join(web_contents) if web_contents else None
+        
+        # [수정] 기존 컨텍스트 보존 (정보 누적)
+        # 추가 요청 시 이전 검색 결과가 사라지지 않도록 합니다.
+        existing_context = state.web_context
+        existing_urls = state.web_urls or []
+        
+        new_context_str = "\n\n---\n\n".join(web_contents) if web_contents else None
+        
+        final_context = existing_context
+        if new_context_str:
+            if final_context:
+                final_context = f"{final_context}\n\n{new_context_str}"
+            else:
+                final_context = new_context_str
+                
+        # URL 합치기 (순서 유지하며 중복 제거)
+        final_urls = list(dict.fromkeys(existing_urls + web_urls))
         
         new_state = state.model_copy(update={
-            "web_context": web_context_str,
-            "web_urls": web_urls,
+            "web_context": final_context,
+            "web_urls": final_urls,
             "current_step": "fetch_web"
         })
 
@@ -344,7 +360,7 @@ app = compile_workflow()
 # 실행 함수
 # =============================================================================
 
-def run_plancraft(user_input: str, file_content: str = None) -> dict:
+def run_plancraft(user_input: str, file_content: str = None, refine_count: int = 0) -> dict:
     """
     PlanCraft Agent 워크플로우 실행
     
@@ -354,6 +370,9 @@ def run_plancraft(user_input: str, file_content: str = None) -> dict:
 
     # 초기 상태 생성 (Pydantic 객체 리턴)
     initial_state = create_initial_state(user_input, file_content)
+    
+    # [중요] 개선 횟수 주입 (Agent들이 이를 참조하여 로직 수행)
+    initial_state.refine_count = refine_count
 
     # 워크플로우 실행 (invoke는 dict 또는 BaseModel을 받음)
     final_state = app.invoke(initial_state)

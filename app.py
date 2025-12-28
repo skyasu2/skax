@@ -537,7 +537,8 @@ def render_main():
                 help="마크다운 파일로 다운로드"
             )
 
-        st.rerun()
+        # [수정] 불필요한 재실행 제거 (무한 루프 방지)
+        # st.rerun()  <-- 제거됨
 
     # =========================================================================
     # [추가] 기획서 고도화 (Human Feedback Loop) - 최대 3회
@@ -547,25 +548,38 @@ def render_main():
         current_refine_count = st.session_state.current_state.get("refine_count", 0)
         
         st.divider()
-        st.markdown("### 🔧 기획서 추가 개선")
+        st.divider()
+        
+        # [수정] UI 개선: 현재 단계 명확히 표시
+        next_step = current_refine_count + 1
+        st.markdown(f"### 🔧 기획서 추가 개선 ({next_step}/3)")
         
         if current_refine_count < 3:
-            st.caption(f"AI에게 추가 요청사항을 전달하여 기획서를 개선할 수 있습니다. (남은 횟수: **{3 - current_refine_count}회**)")
+            st.info(f"💡 AI에게 피드백을 전달하여 기획서를 고도화할 수 있습니다. (남은 기회: **{3 - current_refine_count}회**)")
             
             with st.form("refine_form"):
+                st.markdown("**1. 추가 요청사항 입력**")
                 feedback = st.text_area(
-                    "추가 요청사항",
-                    placeholder="예: '수익 모델을 더 구체적으로 작성해줘', '시장 분석 데이터를 추가해줘'",
-                    height=100
+                    "요청사항",
+                    placeholder="예: '수익 모델을 구독형으로 바꿔줘', '경쟁사 분석 데이터를 더 추가해줘', '초기 마케팅 전략을 구체화해줘'",
+                    height=100,
+                    label_visibility="collapsed"
                 )
                 
-                refine_file = st.file_uploader("참고 자료 추가 (선택)", type=["txt", "md", "pdf", "docx"], label_visibility="collapsed")
+                st.markdown("**2. 참고 자료 첨부 (선택)**")
+                refine_file = st.file_uploader(
+                    "파일 업로드",
+                    type=["txt", "md", "pdf", "docx"],
+                    label_visibility="collapsed",
+                    help="기획서에 반영할 추가 자료가 있다면 업로드하세요."
+                )
                 
+                st.markdown("")
                 col_submit, col_info = st.columns([1, 4])
                 with col_submit:
-                    is_submitted = st.form_submit_button("🚀 개선하기", use_container_width=True)
+                    is_submitted = st.form_submit_button("🚀 개선 수행", use_container_width=True)
                 with col_info:
-                    st.caption("기존 기획서 내용을 바탕으로 요청사항을 반영하여 재작성합니다.")
+                    st.caption(f"현재 **{next_step}단계** 개선을 진행합니다. (최대 3단계)")
                 
                 if is_submitted and feedback:
                     # 입력 데이터 구성
@@ -636,7 +650,8 @@ def render_main():
         with st.spinner("🔄 기획서를 생성하고 있습니다..."):
             try:
                 file_content = st.session_state.get("uploaded_content", None)
-                result = run_plancraft(pending, file_content)
+                # [수정] refine_count를 명시적으로 전달하여 Structurer 확장이 동작하도록 함
+                result = run_plancraft(pending, file_content, refine_count=next_count)
                 
                 # [중요] 개선 횟수 업데이트
                 if next_count > 0:
@@ -685,8 +700,8 @@ def render_main():
     # =========================================================================
     # 채팅 입력 (하단 고정)
     # =========================================================================
-    # prefill_prompt가 있으면 미리보기 표시
-    if st.session_state.prefill_prompt:
+    # prefill_prompt가 있고 아직 대화가 시작되지 않았을 때만 표시
+    if st.session_state.prefill_prompt and not st.session_state.chat_history:
         st.info(f"📝 **선택된 예시:** {st.session_state.prefill_prompt}")
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -718,6 +733,9 @@ def render_main():
     )
 
     if user_input:
+        # 사용자 직접 입력 시 프롬프트 초기화
+        st.session_state.prefill_prompt = None
+
         # 사용자 메시지를 채팅 히스토리에 추가
         st.session_state.chat_history.append({
             "role": "user",
