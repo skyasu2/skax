@@ -5,17 +5,14 @@ Multi-Agent 파이프라인을 LangGraph StateGraph로 정의합니다.
 각 Agent는 노드로 등록되며, 조건부 엣지를 통해 흐름을 제어합니다.
 
 워크플로우 구조:
-    
+
             ┌──────────────┐
             │    START     │
             └──────┬───────┘
                    │
             ┌──────▼───────┐
-            │   retrieve   │  <- RAG (내부 가이드 검색)
-            └──────┬───────┘
-                   │
-            ┌──────▼───────┐
-            │  fetch_web   │  <- MCP (조건부 웹 검색)
+            │   context    │  <- RAG + MCP (병렬 컨텍스트 수집)
+            │  gathering   │
             └──────┬───────┘
                    │
             ┌──────▼───────┐      need_more_info=True     ┌─────────┐
@@ -24,29 +21,32 @@ Multi-Agent 파이프라인을 LangGraph StateGraph로 정의합니다.
                    │
                    │ need_more_info=False (자동 진행)
                    ▼
-            ┌──────▼───────┐
-            │  structure   │  <- 기획서 목차/구조 설계
-            └──────┬───────┘
-                   │
-            ┌──────▼───────┐
-            │    write     │  <- 섹션별 내용 작성 (초안)
-            └──────┬───────┘
-                   │
-            ┌──────▼───────┐
-            │    review    │  <- Judge (PASS/REVISE/FAIL 판정)
-            └──────┬───────┘
-                   │
-            ┌──────▼───────┐
-            │    refine    │  <- 판정에 따른 개선/재작성
-            └──────┬───────┘
-                   │
-            ┌──────▼───────┐
-            │    format    │  <- 채팅 요약 생성
-            └──────┬───────┘
-                   │
-            ┌──────▼───────┐
-            │     END      │
-            └──────────────┘
+       ┌──────────────────────────────────────────┐
+       │         Refinement Loop (최대 3회)        │
+       │  ┌──────▼───────┐                        │
+       │  │  structure   │  <- 기획서 목차/구조 설계│
+       │  └──────┬───────┘                        │
+       │         │                                │
+       │  ┌──────▼───────┐                        │
+       │  │    write     │  <- 섹션별 내용 작성    │
+       │  └──────┬───────┘                        │
+       │         │                                │
+       │  ┌──────▼───────┐                        │
+       │  │    review    │  <- PASS/REVISE/FAIL   │
+       │  └──────┬───────┘                        │
+       │         │                                │
+       │  ┌──────▼───────┐    refined=True        │
+       │  │    refine    │ ───────────────────────┘
+       │  └──────┬───────┘    (재작성 필요)
+       └─────────│────────────────────────────────┘
+                 │ refined=False (완료)
+          ┌──────▼───────┐
+          │    format    │  <- 채팅 요약 생성
+          └──────┬───────┘
+                 │
+          ┌──────▼───────┐
+          │     END      │
+          └──────────────┘
 
 Best Practice 적용:
     - InputState/OutputState 분리: API 경계 명확화
@@ -491,10 +491,10 @@ def option_pause_node(state: PlanCraftState) -> Command:
 
 def create_workflow() -> StateGraph:
     """PlanCraft 워크플로우 생성 (기본 버전)"""
-    from graph.state import PlanCraftInput, PlanCraftOutput  # [NEW]
-    
-    # Pydantic 모델을 State로 사용하며, Input/Output 스키마를 명시합니다.
-    workflow = StateGraph(PlanCraftState, input=PlanCraftInput, output=PlanCraftOutput)
+    from graph.state import PlanCraftInput, PlanCraftOutput
+
+    # LangGraph V0.5+ 호환: input_schema/output_schema 사용
+    workflow = StateGraph(PlanCraftState, input_schema=PlanCraftInput, output_schema=PlanCraftOutput)
 
     # 노드 등록 (래퍼 함수 사용)
     # [UPDATE] 컨텍스트 수집 단계 병렬화 (Sub-graph Node)
@@ -541,7 +541,28 @@ def create_workflow() -> StateGraph:
     workflow.add_edge("structure", "write")
     workflow.add_edge("write", "review")
     workflow.add_edge("review", "refine")
-    workflow.add_edge("refine", "format")
+
+    # [UPDATE] Refiner 조건부 엣지 - REVISE 판정 시 재작성 루프
+    def should_refine_again(state: PlanCraftState) -> str:
+        """
+        Refiner 후 다음 단계 결정
+
+        - refined=True & refine_count < 3: 재작성 (structure로 회귀)
+        - 그 외: 완료 (format으로 진행)
+        """
+        if state.get("refined") and state.get("refine_count", 0) < 3:
+            return "retry"
+        return "complete"
+
+    workflow.add_conditional_edges(
+        "refine",
+        should_refine_again,
+        {
+            "retry": "structure",   # 재작성 루프
+            "complete": "format"    # 완료
+        }
+    )
+
     workflow.add_edge("format", END)
 
     return workflow
@@ -592,7 +613,7 @@ def create_subgraph_workflow() -> StateGraph:
     # Context → Generation (조건부 분기)
     def should_continue_to_generation(state: PlanCraftState) -> str:
         """Generation으로 진행할지 판단"""
-        if state.need_more_info:
+        if state.get("need_more_info"):
             return "ask_user"
         return "continue"
     

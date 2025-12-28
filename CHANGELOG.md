@@ -2,6 +2,65 @@
 
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [2.0.1] - 2024-12-29
+
+### Added
+- **Refiner 재작성 루프 구현** (`graph/workflow.py`)
+  - Reviewer가 REVISE 판정 시 `structure → write → review` 루프 재실행
+  - 최대 3회까지 자동 개선 후 완료
+  - `should_refine_again()` 조건부 엣지 추가
+- **Refiner 루프 테스트** (`tests/test_scenarios.py`)
+  - 시나리오 D: REVISE/PASS 판정에 따른 라우팅 검증
+
+### Changed
+- **LangGraph V0.5+ 호환성 개선**
+  - `input` → `input_schema`, `output` → `output_schema` 파라미터명 변경
+- **워크플로우 다이어그램 갱신**
+  - Refinement Loop 시각화 추가
+
+---
+
+## [2.0.0] - 2024-12-29
+
+### Breaking Changes
+- **State Management 전면 리팩토링**: Pydantic BaseModel → TypedDict 전환
+  - LangGraph 공식 Best Practice 100% 준수
+  - dot-access (`state.field`) → dict-access (`state.get("field")`) 패턴 일괄 적용
+
+### Added
+- **TypedDict 헬퍼 함수** (`graph/state.py`)
+  - `create_initial_state()`: 초기 상태 생성
+  - `update_state()`: 불변성 보장 상태 업데이트 (Partial dict 반환)
+  - `safe_get()`: dict/Pydantic 객체 모두에서 안전한 값 추출
+  - `validate_state()`: 런타임 상태 검증
+- **Input/Output 스키마 분리**
+  - `PlanCraftInput`: 외부 API/UI 입력용
+  - `PlanCraftOutput`: 외부 API/UI 출력용
+  - `PlanCraftState`: 내부 전체 상태 (Input + Output + Internal)
+- **Interrupt 필드 추가** (`PlanCraftState`)
+  - `confirmed`: 사용자 확인 여부
+  - `uploaded_content`: 업로드 콘텐츠
+  - `routing_decision`: 라우팅 결정값
+- **Time-Travel 테스트** (`tests/test_time_travel.py`)
+- **고급 시나리오 테스트** (`tests/test_scenarios.py`)
+  - Human Interrupt 플로우
+  - Error & Retry 플로우
+  - General Query 라우팅
+
+### Changed
+- **모든 Agent 반환 패턴 통일**
+  - `return update_state(state, **updates)` 패턴 전면 적용
+  - 직접 dict 반환 제거
+- **노드 함수 리팩토링**
+  - `_update_step_history()` 헬퍼로 이력 관리 통일
+  - `handle_node_error` 데코레이터로 에러 핸들링 일원화
+- **문서 갱신**
+  - `README.md`: TypedDict 기반 State Management 섹션 추가
+  - `docs/architecture.md`: LangGraph Best Practice 적용 현황 테이블 추가
+
+### Fixed
+- `ui/dialogs.py`: `analysis.key_features` dot-access → `safe_get()` 패턴으로 수정
+
 ## [1.4.0] - 2024-12-28
 
 ### Added

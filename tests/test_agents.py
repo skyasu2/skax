@@ -114,61 +114,55 @@ class TestStructureResultSchema:
 
 
 # =============================================================================
-# State 테스트
+# State 테스트 (TypedDict 기반)
 # =============================================================================
 
 class TestPlanCraftState:
-    """PlanCraftState 상태 관리 테스트"""
-    
+    """PlanCraftState 상태 관리 테스트 (TypedDict 기반)"""
+
     def test_state_creation(self):
         """상태 객체 생성 테스트"""
-        from graph.state import PlanCraftState
-        
-        state = PlanCraftState(
-            user_input="테스트 입력",
-            current_step="start"
-        )
-        
-        assert state.user_input == "테스트 입력"
-        assert state.current_step == "start"
-        assert state.need_more_info is False
-    
+        from graph.state import create_initial_state
+
+        state = create_initial_state("테스트 입력")
+
+        assert state.get("user_input") == "테스트 입력"
+        assert state.get("current_step") == "start"
+        assert state.get("need_more_info") is False
+
     def test_state_immutability(self):
-        """상태 불변성 테스트 (model_copy 패턴)"""
-        from graph.state import PlanCraftState
-        
-        original = PlanCraftState(
-            user_input="원본",
-            current_step="start"
-        )
-        
-        # model_copy로 새 상태 생성
-        updated = original.model_copy(update={"current_step": "analyze"})
-        
+        """상태 불변성 테스트 (update_state 패턴)"""
+        from graph.state import create_initial_state, update_state
+
+        original = create_initial_state("원본")
+
+        # update_state로 새 상태 생성
+        updated = update_state(original, current_step="analyze")
+
         # 원본 상태는 변경되지 않음
-        assert original.current_step == "start"
-        assert updated.current_step == "analyze"
-    
+        assert original.get("current_step") == "start"
+        assert updated.get("current_step") == "analyze"
+
     def test_state_with_analysis(self):
         """분석 결과 포함 상태 테스트"""
-        from graph.state import PlanCraftState
+        from graph.state import create_initial_state, update_state
         from utils.schemas import AnalysisResult
-        
+
         analysis = AnalysisResult(
             topic="테스트 앱",
             purpose="테스트",
             target_users="테스터",
             need_more_info=False
         )
-        
-        state = PlanCraftState(
-            user_input="테스트",
-            analysis=analysis,
+
+        state = create_initial_state("테스트")
+        state = update_state(state,
+            analysis=analysis.model_dump(),
             current_step="analyze"
         )
-        
-        assert state.analysis is not None
-        assert state.analysis.topic == "테스트 앱"
+
+        assert state.get("analysis") is not None
+        assert state.get("analysis", {}).get("topic") == "테스트 앱"
 
 
 # =============================================================================
@@ -177,18 +171,15 @@ class TestPlanCraftState:
 
 class TestAgentIntegration:
     """Agent 통합 테스트 (실제 LLM 호출 없이)"""
-    
+
     def test_state_flow_simulation(self):
         """상태 흐름 시뮬레이션"""
-        from graph.state import PlanCraftState
+        from graph.state import create_initial_state, update_state
         from utils.schemas import AnalysisResult, StructureResult, SectionStructure
-        
+
         # 1. 초기 상태
-        state = PlanCraftState(
-            user_input="점심 추천 앱",
-            current_step="start"
-        )
-        
+        state = create_initial_state("점심 추천 앱")
+
         # 2. 분석 완료 상태
         analysis = AnalysisResult(
             topic="점심 메뉴 추천 앱",
@@ -197,11 +188,11 @@ class TestAgentIntegration:
             key_features=["랜덤 추천"],
             need_more_info=False
         )
-        state = state.model_copy(update={
-            "analysis": analysis,
-            "current_step": "analyze"
-        })
-        
+        state = update_state(state,
+            analysis=analysis.model_dump(),
+            current_step="analyze"
+        )
+
         # 3. 구조 설계 완료 상태
         structure = StructureResult(
             title="점심 추천 앱 기획서",
@@ -209,15 +200,15 @@ class TestAgentIntegration:
                 SectionStructure(id=1, name="개요", description="앱 소개", key_points=[])
             ]
         )
-        state = state.model_copy(update={
-            "structure": structure,
-            "current_step": "structure"
-        })
-        
-        # 검증
-        assert state.analysis.topic == "점심 메뉴 추천 앱"
-        assert state.structure.title == "점심 추천 앱 기획서"
-        assert len(state.structure.sections) == 1
+        state = update_state(state,
+            structure=structure.model_dump(),
+            current_step="structure"
+        )
+
+        # 검증 (dict-access 방식)
+        assert state.get("analysis", {}).get("topic") == "점심 메뉴 추천 앱"
+        assert state.get("structure", {}).get("title") == "점심 추천 앱 기획서"
+        assert len(state.get("structure", {}).get("sections", [])) == 1
 
 
 # =============================================================================

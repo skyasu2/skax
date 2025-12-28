@@ -60,12 +60,10 @@ def show_plan_dialog():
 
             analysis = state.get("analysis")
             key_features = []
-            
+
             if analysis:
-                if hasattr(analysis, "key_features"):
-                     key_features = analysis.key_features
-                elif isinstance(analysis, dict):
-                     key_features = analysis.get("key_features", [])
+                from graph.state import safe_get
+                key_features = safe_get(analysis, "key_features", [])
             
             feature_count = len(key_features)
             
@@ -193,55 +191,69 @@ def render_dev_tools():
             if st.button("🚀 테스트 실행", key="test_run_btn", use_container_width=True):
                 with st.spinner(f"{agent_type} Agent 실행 중..."):
                     try:
-                        from graph.state import PlanCraftState
-                        
-                        mock_state = PlanCraftState(user_input=test_input, current_step="start")
+                        from graph.state import create_initial_state, update_state, safe_get
+
+                        # TypedDict 기반 상태 생성
+                        mock_state = create_initial_state(test_input)
                         result_state = None
-                        
+
+                        def safe_dump(data):
+                            """Pydantic 또는 dict 데이터를 안전하게 변환"""
+                            if data is None:
+                                return {}
+                            if hasattr(data, "model_dump"):
+                                return data.model_dump()
+                            if hasattr(data, "dict"):
+                                return data.dict()
+                            return data
+
                         if agent_type == "Analyzer":
                             from agents.analyzer import run
                             result_state = run(mock_state)
                             st.subheader("결과 (AnalysisResult)")
-                            st.json(result_state.analysis.model_dump())
-                            
+                            st.json(safe_dump(result_state.get("analysis")))
+
                         elif agent_type == "Structurer":
                             from agents.structurer import run
                             from utils.schemas import AnalysisResult
-                            mock_state.analysis = AnalysisResult(
+                            analysis_data = AnalysisResult(
                                 topic="점심 추천 앱", purpose="직장인 점심 고민 해결",
                                 target_users="직장인", key_features=["랜덤 추천", "주변 식당 지도"],
                                 need_more_info=False
                             )
+                            mock_state = update_state(mock_state, analysis=analysis_data.model_dump())
                             result_state = run(mock_state)
                             st.subheader("결과 (StructureResult)")
-                            st.json(result_state.structure.model_dump())
-                            
+                            st.json(safe_dump(result_state.get("structure")))
+
                         elif agent_type == "Writer":
                             from agents.writer import run
                             from utils.schemas import StructureResult, SectionStructure
-                            mock_state.structure = StructureResult(
+                            structure_data = StructureResult(
                                 title="점심 추천 앱 기획서",
                                 sections=[
                                     SectionStructure(id=1, name="개요", description="앱 소개", key_points=["목적 설명"]),
                                     SectionStructure(id=2, name="기능", description="주요 기능", key_points=["기능 나열"])
                                 ]
                             )
+                            mock_state = update_state(mock_state, structure=structure_data.model_dump())
                             result_state = run(mock_state)
                             st.subheader("결과 (DraftResult)")
-                            st.json(result_state.draft.model_dump())
-                            
+                            st.json(safe_dump(result_state.get("draft")))
+
                         elif agent_type == "Reviewer":
                             from agents.reviewer import run
                             from utils.schemas import DraftResult, SectionContent
-                            mock_state.draft = DraftResult(
+                            draft_data = DraftResult(
                                 sections=[
                                     SectionContent(id=1, name="개요", content="이 앱은 점심을 추천해줍니다."),
                                     SectionContent(id=2, name="기능", content="랜덤 추천 기능이 있습니다.")
                                 ]
                             )
+                            mock_state = update_state(mock_state, draft=draft_data.model_dump())
                             result_state = run(mock_state)
                             st.subheader("결과 (JudgeResult)")
-                            st.json(result_state.review.model_dump())
+                            st.json(safe_dump(result_state.get("review")))
 
                         if result_state:
                             st.success("✅ 테스트 성공")
@@ -422,8 +434,22 @@ def render_dev_tools():
         
         try:
             if schema_type == "PlanCraftState":
+                # TypedDict는 model_json_schema()가 없으므로 __annotations__ 사용
                 from graph.state import PlanCraftState
-                schema = PlanCraftState.model_json_schema()
+                from typing import get_type_hints
+                try:
+                    annotations = get_type_hints(PlanCraftState)
+                    schema = {
+                        "title": "PlanCraftState",
+                        "type": "object",
+                        "description": "PlanCraft Agent 전체 내부 상태 (TypedDict 기반)",
+                        "properties": {
+                            key: {"type": str(value)}
+                            for key, value in annotations.items()
+                        }
+                    }
+                except Exception:
+                    schema = {"title": "PlanCraftState", "note": "TypedDict - use get_type_hints() for schema"}
             elif schema_type == "AnalysisResult":
                 from utils.schemas import AnalysisResult
                 schema = AnalysisResult.model_json_schema()

@@ -220,28 +220,30 @@ def render_option_selector(current_state):
     if not current_state:
         return
 
-    # Pydantic 모델 or Dict 처리
-    options = getattr(current_state, "options", []) or current_state.get("options", [])
+    from graph.state import safe_get
+
+    # TypedDict dict-access 방식으로 통일
+    options = current_state.get("options", [])
     if not options:
         return
 
     cols = st.columns(len(options))
     for i, opt in enumerate(options):
-        # Pydantic model or dict
-        title = getattr(opt, "title", opt.get("title", ""))
-        description = getattr(opt, "description", opt.get("description", ""))
-        
+        # dict 또는 Pydantic 객체 모두 지원
+        title = safe_get(opt, "title", "")
+        description = safe_get(opt, "description", "")
+
         with cols[i]:
             if st.button(f"{title}", key=f"opt_{i}", use_container_width=True, help=description):
                 # 선택 처리 로직
                 st.session_state.chat_history.append({
                     "role": "user", "content": f"'{title}' 선택", "type": "text"
                 })
-                
-                # 입력 구성
-                original_input = getattr(current_state, "user_input", current_state.get("user_input", ""))
+
+                # 입력 구성 (dict-access)
+                original_input = current_state.get("user_input", "")
                 new_input = f"{original_input}\n\n[선택: {title} - {description}]"
-                
+
                 # 상태 업데이트 및 재실행 준비
                 st.session_state.current_state = None
                 st.session_state.pending_input = new_input

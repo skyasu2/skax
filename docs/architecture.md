@@ -7,9 +7,12 @@ PlanCraft Agent는 LangGraph 기반 Multi-Agent 시스템으로, 사용자의 �
 ### 1.1 핵심 설계 원칙
 
 - **6 Agent 협업**: 각자의 전문 역할을 수행하는 Agent 파이프라인
+- **LangGraph Best Practice**: TypedDict + dict-access + Partial Update 패턴 100% 준수
 - **자율 판단**: 사용자에게 질문하지 않고 RAG/웹 검색으로 정보 수집
+- **Human-in-the-loop**: 불명확한 요청 시 `interrupt()` 패턴으로 사용자 인터랙션
 - **자동 개선**: Reviewer 피드백을 Refiner가 직접 반영
 - **Graceful Degradation**: 일부 실패해도 전체 시스템 동작 유지
+- **Time-Travel Ready**: `MemorySaver` 체크포인터로 상태 롤백 지원
 
 ### 1.2 설계 철학
 
@@ -94,25 +97,59 @@ User Input
 
 ## 4. 데이터 흐름 (State)
 
+### 4.1 TypedDict 기반 상태 관리 (LangGraph Best Practice)
+
 ```python
-PlanCraftState (Pydantic Model)
-├── user_input: str              # 사용자 입력
-├── file_content: Optional[str]  # 업로드 파일
-├── rag_context: Optional[str]   # RAG 검색 결과
-├── web_context: Optional[str]   # 웹 검색 결과
-├── web_urls: Optional[List]     # 조회한 URL 목록
-├── analysis: Optional[AnalysisResult] # Analyzer 출력 (Pydantic)
-├── need_more_info: bool         # 추가 정보 필요 여부
-├── structure: Optional[StructureResult] # Structurer 출력 (Pydantic)
-├── draft: Optional[DraftResult]     # Writer 출력 (Pydantic)
-├── review: Optional[JudgeResult]    # Reviewer 출력 (Pydantic)
-├── refined: bool                # 개선 작업 수행 여부
-├── final_output: Optional[str]  # Refiner 출력 (개선된 기획서)
-├── chat_summary: Optional[str]  # Formatter 출력 (채팅용 요약)
-├── current_step: str            # 현재 처리 단계
-├── refine_count: int            # [New] 추가 개선 루프 카운트 (0~3)
-├── previous_plan: Optional[str] # [New] 이전 버전 기획서 (Refinement용)
-└── error: Optional[str]         # 오류 메시지
+# graph/state.py
+class PlanCraftState(TypedDict, total=False):
+    """LangGraph 공식 권장 패턴: TypedDict + dict-access"""
+
+    # ========== Input Fields ==========
+    user_input: str              # 사용자 입력
+    file_content: Optional[str]  # 업로드 파일
+    thread_id: str               # 세션 식별자
+
+    # ========== Output Fields ==========
+    final_output: Optional[str]  # 최종 기획서
+    chat_summary: Optional[str]  # 채팅용 요약
+    step_history: List[dict]     # 단계별 실행 이력
+
+    # ========== Internal Fields ==========
+    rag_context: Optional[str]   # RAG 검색 결과
+    web_context: Optional[str]   # 웹 검색 결과
+    web_urls: Optional[List]     # 조회한 URL 목록
+    analysis: Optional[dict]     # Analyzer 출력 (dict로 저장)
+    structure: Optional[dict]    # Structurer 출력
+    draft: Optional[dict]        # Writer 출력
+    review: Optional[dict]       # Reviewer 출력
+    need_more_info: bool         # 추가 정보 필요 여부
+    refined: bool                # 개선 작업 수행 여부
+
+    # ========== Metadata ==========
+    current_step: str            # 현재 처리 단계
+    step_status: Literal["RUNNING", "SUCCESS", "FAILED"]
+    refine_count: int            # 개선 루프 카운트 (0~3)
+    error: Optional[str]         # 오류 메시지
+
+    # ========== Interrupt & Routing ==========
+    confirmed: Optional[bool]
+    routing_decision: Optional[str]
+```
+
+### 4.2 헬퍼 함수
+
+```python
+# 상태 생성
+state = create_initial_state("점심 메뉴 추천 앱")
+
+# 상태 업데이트 (불변성 보장 - 새 dict 반환)
+new_state = update_state(state, current_step="analyze", analysis=result)
+
+# 안전한 값 추출 (dict/Pydantic 양쪽 호환)
+topic = safe_get(analysis, "topic", "")
+
+# 상태 검증
+assert validate_state(state), "Expected dict"
 ```
 
 ## 5. 핵심 로직
@@ -181,11 +218,27 @@ def should_search_web(user_input, rag_context):
 | Vector DB | FAISS |
 | Embedding | text-embedding-3-large |
 | Web Search | DuckDuckGo (무료) |
-| Validation | Pydantic |
+| Validation | Pydantic (Agent 스키마) |
+| State Management | TypedDict + update_state() |
+| Checkpointing | LangGraph MemorySaver |
 
 ## 7. 확장 포인트
 
 - **Agent 추가**: `agents/` 폴더에 새 Agent 정의 후 `workflow.py`에 등록
 - **프롬프트 수정**: `prompts/` 폴더의 해당 파일 수정
 - **RAG 문서 추가**: `rag/documents/`에 마크다운 파일 추가 후 재인덱싱
-- **웹 검색 조건 추가**: `mcp/web_search.py`의 키워드 목록 수정
+- **웹 검색 조건 추가**: `tools/web_search.py`의 키워드 목록 수정
+- **State 필드 추가**: `graph/state.py`의 `PlanCraftState` TypedDict에 필드 추가
+
+## 8. LangGraph Best Practice 적용 현황
+
+| 항목 | 적용 상태 | 구현 위치 |
+|------|----------|-----------|
+| TypedDict State | ✅ | `graph/state.py` |
+| dict-access 패턴 | ✅ | 모든 Agent, 노드 |
+| Partial Update | ✅ | `update_state()` 헬퍼 |
+| Input/Output 분리 | ✅ | `PlanCraftInput`, `PlanCraftOutput` |
+| Sub-graph | ✅ | `graph/subgraphs.py` |
+| Human-in-the-loop | ✅ | `interrupt()` + `Command` |
+| Time-Travel | ✅ | `MemorySaver` 체크포인터 |
+| Conditional Edges | ✅ | `should_ask_user()` |

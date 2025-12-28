@@ -125,12 +125,12 @@ class TestWorkflowRouting:
         }
         
         new_state = handle_user_response(initial_state, response)
-        
-        # 검증: 입력 업데이트, 플래그 초기화
-        assert "초기 요청" in new_state.user_input
-        assert "[선택: 옵션1 - 설명1]" in new_state.user_input
-        assert new_state.need_more_info is False
-        assert new_state.option_question is None
+
+        # 검증: 입력 업데이트, 플래그 초기화 (dict-access 방식)
+        assert "초기 요청" in new_state.get("user_input", "")
+        assert "[선택: 옵션1 - 설명1]" in new_state.get("user_input", "")
+        assert new_state.get("need_more_info") is False
+        assert new_state.get("option_question") is None
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

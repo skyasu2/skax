@@ -10,8 +10,11 @@ PlanCraft Agent는 사용자의 아이디어를 입력받아 자동으로 **웹/
 ## 🚀 주요 기능
 
 - **Robust Multi-Agent System**: 6개 전문 Agent가 협업하는 모듈형 아키텍처
-- **Type-Safe State Management**: **Pydantic BaseModel**을 사용한 강력한 타입 검증 및 상태 관리 (New!)
-- **Human-in-the-loop**: 불명확한 요구사항에 대해 사용자에게 역으로 질문하여 방향성을 조율
+- **LangGraph Best Practice**: TypedDict + dict-access 패턴으로 LangGraph 공식 가이드 100% 준수
+- **Type-Safe State Management**: TypedDict 기반 `PlanCraftState` + `update_state()` 헬퍼로 불변성 보장
+- **Human-in-the-loop**: LangGraph `interrupt()` 패턴으로 사용자 인터랙션 지원
+- **Time-Travel & Rollback**: `MemorySaver` 체크포인터로 상태 히스토리 관리
+- **Sub-graph Architecture**: Context/Generation/QA 서브그래프로 모듈화
 - **MCP (Model Context Protocol)**: 표준 프로토콜 기반 외부 도구 연동 (Tavily 검색, URL Fetch)
 - **Automated Quality Control**: Reviewer → Refiner 루프를 통한 품질 자동 개선
 - **Fault Tolerance**: 각 단계별 Fallback 로직으로 LLM 오류 시에도 중단 없는 서비스 제공
@@ -21,8 +24,10 @@ PlanCraft Agent는 사용자의 아이디어를 입력받아 자동으로 **웹/
 
 - **Core**: Python 3.10+, LangChain, **LangGraph**
 - **LLM**: Azure OpenAI (gpt-4o, gpt-4o-mini)
-- **State Management**: **Pydantic** (TypedDict를 대체하여 타입 안정성 확보)
-- **Test**: **Interactive Unit Testing** (Dev Tools in Sidebar)
+- **State Management**: **TypedDict** + `update_state()` 패턴 (LangGraph 공식 권장)
+- **Schema Validation**: **Pydantic** (Agent 입출력 스키마)
+- **Checkpointing**: LangGraph `MemorySaver` (Time-Travel 지원)
+- **Test**: pytest + Interactive Unit Testing (Dev Tools in Sidebar)
 - **Vector DB**: FAISS (Local)
 - **Embedding**: text-embedding-3-large
 - **MCP Servers**: mcp-server-fetch (URL), tavily-mcp (AI 검색)
@@ -42,9 +47,10 @@ PlanCraft Agent는 사용자의 아이디어를 입력받아 자동으로 **웹/
 │   ├── refiner.py            # 피드백 반영 및 최종본 완성
 │   └── formatter.py          # 사용자 친화적 요약 생성
 ├── graph/                    # [Workflow Layer]
-│   ├── state.py              # Pydantic 기반 상태 모델 (PlanCraftState)
+│   ├── state.py              # TypedDict 기반 상태 모델 (PlanCraftState, update_state, safe_get)
 │   ├── workflow.py           # LangGraph StateGraph 정의
-│   └── subgraphs.py          # 서브그래프 정의 (Context, Generation, QA)
+│   ├── subgraphs.py          # 서브그래프 정의 (Context, Generation, QA)
+│   └── interrupt_utils.py    # Human-in-the-loop 인터럽트 유틸리티
 ├── rag/                      # [RAG Layer]
 │   ├── documents/            # 지식 베이스 (가이드 문서)
 │   ├── vectorstore.py        # FAISS 관리
@@ -59,7 +65,10 @@ PlanCraft Agent는 사용자의 아이디어를 입력받아 자동으로 **웹/
 │   ├── llm.py                # LLM 인스턴스 팩토리
 │   └── schemas.py            # 입출력 Pydantic 스키마 정의
 ├── tests/                    # [Test Layer]
-│   ├── test_agents.py        # pytest 단위 테스트
+│   ├── test_agents.py        # Agent/State 단위 테스트
+│   ├── test_scenarios.py     # 고급 시나리오 테스트 (Interrupt, Error, Routing)
+│   ├── test_interrupt_unit.py # Interrupt 페이로드 테스트
+│   ├── test_time_travel.py   # Time-Travel/Rollback 테스트
 │   └── test_mcp.py           # MCP 동작 테스트
 └── docs/                     # [Documentation]
     ├── architecture.md       # 시스템 아키텍처 문서
@@ -142,13 +151,39 @@ streamlit run app.py
 | **일반 기획 요청** | "점심 메뉴 추천 앱" → 내부 지식으로 충분 |
 | **RAG 컨텍스트 충분** | 이미 관련 문서가 검색됨 |
 
+## 🏗️ State Management (LangGraph Best Practice)
+
+### TypedDict 기반 상태 관리
+
+```python
+from graph.state import PlanCraftState, create_initial_state, update_state, safe_get
+
+# 상태 생성
+state = create_initial_state("점심 메뉴 추천 앱 기획해줘")
+
+# 상태 업데이트 (불변성 보장)
+new_state = update_state(state, current_step="analyze", analysis=result)
+
+# 안전한 데이터 접근 (dict/Pydantic 양쪽 호환)
+topic = safe_get(state.get("analysis"), "topic", "")
+```
+
+### 핵심 패턴
+
+| 패턴 | 설명 |
+|------|------|
+| **dict-access** | `state.get("field")` - dot-access 대신 dict 접근 사용 |
+| **Partial Update** | `update_state(state, **updates)` - 변경된 필드만 반환 |
+| **safe_get** | dict/Pydantic 객체 모두에서 안전하게 값 추출 |
+| **Input/Output 분리** | `PlanCraftInput`, `PlanCraftOutput` 스키마로 API 경계 명확화 |
+
 ## 🔮 Future Roadmap
 
 실제 프로덕션 레벨 도약을 위한 향후 고도화 계획입니다:
 
-- **Automated CI/CD**: GitHub Actions를 활용한 파이프라인 자동화 (현재는 UI 기반 테스트 제공)
+- **Automated CI/CD**: GitHub Actions를 활용한 파이프라인 자동화
 - **Observability**: **LangSmith** 연동을 통한 Trace 추적 및 데이터셋 기반 성능 평가
-- **Advanced Routing**: `RunnableBranch` 패턴을 적용한 동적 라우팅 및 확장성 확보
+- **Distributed Checkpointing**: PostgreSQL/Redis 기반 체크포인터로 분산 환경 지원
 - **Feedback Loop**: 사용자 피드백 데이터를 저장하고 학습에 활용하는 파이프라인 구축
 
 ## 📝 License

@@ -35,7 +35,7 @@ class PlanCraftInput(TypedDict, total=False):
 class PlanCraftOutput(TypedDict, total=False):
     """
     최종적으로 반환되는 출력 데이터 스키마
-    
+
     API 응답, UI 렌더링, 테스트 검증에 사용됩니다.
     """
     final_output: Optional[str]
@@ -45,6 +45,12 @@ class PlanCraftOutput(TypedDict, total=False):
     error_message: Optional[str]
     retry_count: int
     chat_summary: Optional[str]
+
+    # AI 분석 데이터 (UI에서 설계도 표시용)
+    analysis: Optional[dict]
+    structure: Optional[dict]
+    review: Optional[dict]
+    draft: Optional[dict]
 
 
 # =============================================================================
@@ -131,6 +137,11 @@ class PlanCraftState(TypedDict, total=False):
     last_error: Optional[str]
     execution_time: Optional[str]
 
+    # Interrupt & Routing (Human-in-the-loop)
+    confirmed: Optional[bool]
+    uploaded_content: Optional[str]
+    routing_decision: Optional[str]
+
 
 # =============================================================================
 # Helper Functions (Replacing Pydantic methods)
@@ -184,15 +195,69 @@ def create_initial_state(
         "current_step": "start",
         "step_status": "RUNNING",
         "last_error": None,
-        "execution_time": datetime.now().isoformat()
+        "execution_time": datetime.now().isoformat(),
+
+        # Interrupt & Routing
+        "confirmed": None,
+        "uploaded_content": None,
+        "routing_decision": None
     }
 
 
 def update_state(base_state: PlanCraftState, **updates) -> PlanCraftState:
     """
     State 업데이트 헬퍼 (Pydantic의 model_copy 대체)
-    
+
+    새로운 dict를 반환하여 불변성을 보장합니다.
+
     Usage:
         new_state = update_state(state, current_step="analyze", error=None)
     """
     return {**base_state, **updates}
+
+
+def safe_get(obj: Any, key: str, default: Any = None) -> Any:
+    """
+    dict 또는 Pydantic 객체에서 안전하게 값을 추출합니다.
+
+    LangGraph 내부에서 state가 dict 또는 Pydantic 객체로
+    전달될 수 있으므로, 양쪽 모두 지원합니다.
+
+    Args:
+        obj: dict 또는 Pydantic 객체
+        key: 추출할 키/속성명
+        default: 기본값 (기본: None)
+
+    Returns:
+        추출된 값 또는 기본값
+
+    Usage:
+        topic = safe_get(analysis, "topic", "")
+        sections = safe_get(structure, "sections", [])
+    """
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def validate_state(state: Any) -> bool:
+    """
+    State가 dict 형태인지 검증합니다.
+
+    디버깅 및 런타임 방어용으로 사용합니다.
+
+    Args:
+        state: 검증할 상태 객체
+
+    Returns:
+        bool: dict 형태이면 True
+
+    Raises:
+        TypeError: dict가 아닌 경우 (선택적으로 사용)
+
+    Usage:
+        assert validate_state(state), f"Expected dict, got {type(state)}"
+    """
+    return isinstance(state, dict) and hasattr(state, "get")
