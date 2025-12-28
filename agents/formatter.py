@@ -122,18 +122,7 @@ class FormatterAgent:
             )
             state.error = f"포맷팅 오류: {str(e)}"
 
-        # =====================================================================
-        # 3. 웹 검색 출처 추가 (참고 자료 섹션)
-        # =====================================================================
         final_output = state.final_output or ""
-        web_urls = state.web_urls or []
-        web_context = state.web_context
-        
-        # 웹 검색 결과가 있으면 출처 섹션 추가
-        if web_urls or web_context:
-            references_section = self._generate_references_section(web_urls, web_context)
-            if references_section and references_section not in final_output:
-                final_output = final_output + "\n\n" + references_section
 
         # =====================================================================
         # 4. 상태 업데이트 (Pydantic 모델 복사)
@@ -146,41 +135,7 @@ class FormatterAgent:
 
         return new_state
     
-    def _generate_references_section(self, web_urls: list, web_context: str = None) -> str:
-        """
-        웹 검색 출처 섹션을 생성합니다.
-        
-        Args:
-            web_urls: 참조한 URL 목록
-            web_context: 웹 검색 결과 컨텍스트
-            
-        Returns:
-            str: 참고 자료 섹션 마크다운
-        """
-        if not web_urls and not web_context:
-            return ""
-        
-        lines = []
-        lines.append("---")
-        lines.append("")
-        lines.append("## 📚 참고 자료")
-        lines.append("")
-        lines.append("> 본 기획서는 다음 자료를 참고하여 작성되었습니다.")
-        lines.append("")
-        
-        # URL 목록이 있으면 출력
-        if web_urls:
-            for i, url in enumerate(web_urls[:5], 1):  # 최대 5개
-                lines.append(f"- [{url}]({url})")
-        
-        # URL은 없지만 웹 검색 결과가 있으면 표시
-        if not web_urls and web_context:
-            # 웹 검색 출처 표시 (Tavily MCP)
-            lines.append("- 웹 검색 결과 (Tavily AI Search)")
-        
-        lines.append("")
-        
-        return "\n".join(lines)
+
 
     def _generate_fallback_summary(
         self,

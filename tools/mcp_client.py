@@ -241,24 +241,51 @@ class MCPToolkit:
             # Tavily 클라이언트 생성
             client = TavilyClient(api_key=Config.TAVILY_API_KEY)
             
-            # 검색 수행
-            response = client.search(query, max_results=max_results)
+            # [개선] 고급 검색 옵션 활성화
+            search_params = {
+                "query": query,
+                "search_depth": "advanced", # 심층 검색
+                "include_answer": True,     # AI 요약 답변 포함
+                "include_raw_content": True,# 본문 원문 포함
+                "max_results": max_results
+            }
+            
+            response = client.search(**search_params)
             
             # 결과 포맷팅
             results = []
             formatted_parts = []
             
+            # [1] AI 요약 답변이 있다면 최상단에 배치 (가장 중요)
+            ai_answer = response.get("answer", "")
+            if ai_answer:
+                formatted_parts.append(f"### 💡 AI 핵심 요약 (Tavily)\n{ai_answer}\n")
+            
             for i, result in enumerate(response.get("results", [])[:max_results], 1):
+                # raw_content가 있으면 우선 사용하되, 너무 길지 않게
+                raw_text = result.get("raw_content", "")
+                snippet = result.get("content", "")
+                
+                # 본문 내용 결정 (Raw Content 우선, 없으면 Snippet)
+                # 토큰 제한을 고려하여 본문 길이를 제한 (예: 1500자)
+                if raw_text and len(raw_text) > 50:
+                    display_text = raw_text[:1500] + ("..." if len(raw_text) > 1500 else "")
+                else:
+                    display_text = snippet
+                
                 result_item = {
                     "title": result.get("title", ""),
                     "url": result.get("url", ""),
-                    "snippet": result.get("content", "")[:300]
+                    "snippet": snippet,
+                    # 원본 데이터도 보존
+                    "raw_content": raw_text[:5000] if raw_text else "" 
                 }
                 results.append(result_item)
+                
                 formatted_parts.append(
                     f"[{i}] {result_item['title']}\n"
                     f"    URL: {result_item['url']}\n"
-                    f"    {result_item['snippet']}..."
+                    f"    내용:\n{display_text}"
                 )
             
             return {

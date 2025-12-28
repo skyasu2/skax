@@ -7,7 +7,7 @@ PlanCraft Agent - 웹 검색 판단 모듈
 import re
 from typing import Dict, Optional
 from datetime import datetime
-
+from utils.llm import get_llm
 
 # =============================================================================
 # 웹 검색 필요 여부 판단 키워드
@@ -56,8 +56,8 @@ def should_search_web(user_input: str, rag_context: str = "") -> Dict[str, any]:
             "search_query": None
         }
 
-    # 3. 그 외 모든 경우 웹 검색 수행 (RAG 컨텍스트 무시)
-    query = _generate_search_query(user_input)
+    # 3. 그 외 모든 경우 웹 검색 수행 (LLM 활용)
+    query = _generate_search_query_with_llm(user_input)
     return {
         "should_search": True,
         "reason": "최신/외부 정보 보강",
@@ -65,19 +65,59 @@ def should_search_web(user_input: str, rag_context: str = "") -> Dict[str, any]:
     }
 
 
-def _generate_search_query(user_input: str) -> str:
-    """
-    검색 쿼리를 생성합니다.
-    """
-    # 불필요한 조사/어미 제거 등 간단한 정제
-    clean_input = re.sub(r'[을를이가은는에서의로]', ' ', user_input)
+def _generate_search_query_with_llm(user_input: str) -> str:
+    """LLM을 사용하여 최적의 검색 쿼리를 생성합니다."""
+    try:
+        llm = get_llm(model_type="gpt-4o-mini", temperature=0.3)
+        
+        system_prompt = (
+            "당신은 웹 검색 쿼리 생성기입니다. 사용자의 입력을 분석하여 "
+            "시장 조사, 트렌드 파악, 사례 연구에 적합한 '핵심 검색 키워드'만 추출하세요.\n"
+            "- 불필요한 조사, 서술어, 인사말, 구분선(--- [추가 요청] ---) 등은 모두 제거합니다.\n"
+            "- 기획 의도에 맞는 전문적인 키워드 조합으로 변환합니다.\n"
+            "- 출력은 오직 검색 쿼리 문자열 하나만 반환합니다. (따옴표 없이)"
+        )
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_input}
+        ]
+        
+        response = llm.invoke(messages)
+        query = response.content.strip()
+        
+        # 쿼리가 유효하지 않으면 Fallback
+        if not query or len(query) < 2:
+            return _generate_search_query_regex(user_input)
+            
+        # 최신 연도 보정
+        current_year = datetime.now().year
+        if str(current_year) not in query and str(current_year+1) not in query:
+             query += f" {current_year}"
+             
+        return query
+
+    except Exception as e:
+        print(f"[WARN] LLM 쿼리 생성 실패: {e}, Regex Fallback 사용")
+        return _generate_search_query_regex(user_input)
+
+
+def _generate_search_query_regex(user_input: str) -> str:
+    """(Fallback) 정규식을 사용한 쿼리 생성"""
+    # 1. 구분선 및 이전 히스토리 제거 시도 (마지막 요청만 추출)
+    split_pattern = r'---\s*\[.*?\]\s*---'
+    parts = re.split(split_pattern, user_input)
+    
+    # 분리된 것 중 가장 마지막 내용 사용 (가장 최근 요청)
+    target_input = parts[-1] if parts else user_input
+    
+    # 2. 불필요한 조사/어미 제거
+    clean_input = re.sub(r'[을를이가은는에서의로]', ' ', target_input)
     clean_input = re.sub(r'\s+', ' ', clean_input).strip()
     
-    # 현재 연도 추가하여 최신성 확보
+    # 3. 최신 연도 추가
     current_year = datetime.now().year
-    
-    # 이미 연도가 없으면 추가
-    if str(current_year) not in clean_input and str(current_year+1) not in clean_input:
-        return f"{clean_input} {current_year} 트렌드 시장동향"
+    if str(current_year) not in clean_input:
+        return f"{clean_input} {current_year} 트렌드"
         
     return clean_input

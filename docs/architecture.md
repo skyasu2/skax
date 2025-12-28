@@ -95,30 +95,23 @@ User Input
 ## 4. 데이터 흐름 (State)
 
 ```python
-PlanCraftState (TypedDict)
+PlanCraftState (Pydantic Model)
 ├── user_input: str              # 사용자 입력
 ├── file_content: Optional[str]  # 업로드 파일
 ├── rag_context: Optional[str]   # RAG 검색 결과
 ├── web_context: Optional[str]   # 웹 검색 결과
 ├── web_urls: Optional[List]     # 조회한 URL 목록
-├── analysis: Optional[dict]     # Analyzer 출력
-│   ├── topic: str
-│   ├── purpose: str
-│   ├── target_users: str
-│   ├── key_features: List[str]
-│   └── assumptions: List[str]   # 자율 판단 내역
-├── need_more_info: bool         # 추가 정보 필요 여부 (항상 False)
-├── structure: Optional[dict]    # Structurer 출력
-├── draft: Optional[dict]        # Writer 출력
-├── review: Optional[dict]       # Reviewer 출력
-│   ├── overall_score: int
-│   ├── strengths: List[str]
-│   ├── improvements: List[str]
-│   └── suggestions: List[str]
-├── refined: Optional[bool]      # 개선 작업 수행 여부
+├── analysis: Optional[AnalysisResult] # Analyzer 출력 (Pydantic)
+├── need_more_info: bool         # 추가 정보 필요 여부
+├── structure: Optional[StructureResult] # Structurer 출력 (Pydantic)
+├── draft: Optional[DraftResult]     # Writer 출력 (Pydantic)
+├── review: Optional[JudgeResult]    # Reviewer 출력 (Pydantic)
+├── refined: bool                # 개선 작업 수행 여부
 ├── final_output: Optional[str]  # Refiner 출력 (개선된 기획서)
 ├── chat_summary: Optional[str]  # Formatter 출력 (채팅용 요약)
-├── current_step: Optional[str]  # 현재 처리 단계
+├── current_step: str            # 현재 처리 단계
+├── refine_count: int            # [New] 추가 개선 루프 카운트 (0~3)
+├── previous_plan: Optional[str] # [New] 이전 버전 기획서 (Refinement용)
 └── error: Optional[str]         # 오류 메시지
 ```
 
@@ -168,6 +161,14 @@ def should_search_web(user_input, rag_context):
     2. RAG 컨텍스트 충분
     """
 ```
+
+### 5.4 Refinement Loop (기획서 고도화)
+
+- **Loop Structure**: 사용자 피드백을 받아 최대 3회까지 기획서 수정 가능
+- **Context Injection**:
+    - `user_input`: 누적된 피드백 (기존 요청 + 추가 요청)
+    - `previous_plan`: 직전 버전의 기획서 내용 (Agent가 참고하여 수정)
+- **Versioning**: 세션 내에서 생성된 모든 기획서 버전을 `plan_history`에 저장 및 조회 가능
 
 ## 6. 기술 스택
 

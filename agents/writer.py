@@ -109,46 +109,48 @@ class WriterAgent:
         # 3. [개선] 웹/참고 자료 출처 섹션 자동 추가
         # =====================================================================
         web_context = state.web_context
-        if web_context and draft and draft.sections:
-            # 출처 추출 (간단한 파싱)
-            references = []
-            
-            # 1. URL 참조 추출
-            # 출처 추출 및 중복 제거
+        web_urls = getattr(state, "web_urls", [])
+
+        if (web_context or web_urls) and draft and draft.sections:
             unique_refs = set()
             references = []
             
-            # 1. state.web_urls 활용 (가장 정확한 소스)
-            if hasattr(state, "web_urls") and state.web_urls:
-                for url in state.web_urls:
-                    if url not in unique_refs:
-                        references.append(f"- [웹 참조 URL]({url})")
+            # 1. 명시적인 URL 목록 (web_urls) 우선 활용
+            if web_urls:
+                for url in web_urls:
+                    if url and isinstance(url, str) and url not in unique_refs:
+                        references.append(f"- [웹 검색 결과]({url})")
                         unique_refs.add(url)
 
-            # 2. web_context 텍스트에서 마크다운 링크 추출 ([제목](링크))
-            import re
-            md_links = re.findall(r'\[(.*?)\]\((http.*?)\)', web_context)
-            for title, url in md_links:
-                if url not in unique_refs:
-                    # 제목이 너무 길면 자르기
-                    safe_title = title[:50] + "..." if len(title) > 50 else title
-                    references.append(f"- [{safe_title}]({url})")
-                    unique_refs.add(url)
-            
-            # 3. 단순 텍스트 URL 추출 (http로 시작하는 것)
-            raw_urls = re.findall(r'(https?://[^\s)\]]+)', web_context)
-            for url in raw_urls:
-                if url not in unique_refs:
-                    references.append(f"- [관련 자료]({url})")
-                    unique_refs.add(url)
-            
+            # 2. web_context에서 링크 추출 (보완)
+            if web_context:
+                import re
+                
+                # 마크다운 링크 패턴: [Title](URL)
+                md_links = re.findall(r'\[([^\]]+)\]\((https?://[^\)]+)\)', web_context)
+                for title, url in md_links:
+                    if url not in unique_refs:
+                        clean_title = title.strip()[:60] + "..." if len(title) > 60 else title
+                        references.append(f"- [{clean_title}]({url})")
+                        unique_refs.add(url)
+                
+                # 일반 URL 패턴 (마크다운 링크를 제외한)
+                raw_urls = re.findall(r'(https?://[a-zA-Z0-9\.\/\-\?=&%_]+)', web_context)
+                for url in raw_urls:
+                    # 괄호나 문장 부호로 끝나는 경우 정리
+                    url = url.rstrip(').,;]\'"')
+                    if url and url not in unique_refs:
+                        references.append(f"- [추가 자료]({url})")
+                        unique_refs.add(url)
+
             if references:
                 from utils.schemas import SectionContent
                 ref_content = "\n".join(references)
+                
                 ref_section = SectionContent(
                     id=len(draft.sections) + 1,
                     name="📚 참고 자료",
-                    content=f"본 기획서는 다음 자료를 참고하여 작성되었습니다.\n\n{ref_content}"
+                    content=f"본 기획서는 다음의 웹 검색 결과 및 참고 자료를 바탕으로 작성되었습니다.\n\n{ref_content}"
                 )
                 draft.sections.append(ref_section)
 
