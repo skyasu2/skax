@@ -117,17 +117,27 @@ def show_analysis_dialog():
 
     state = st.session_state.current_state
 
+    has_content = False
+
     if state.get("analysis"):
         st.subheader("🔍 입력 분석")
         st.json(state["analysis"])
+        has_content = True
 
     if state.get("structure"):
         st.subheader("📐 구조 설계")
         st.json(state["structure"])
+        has_content = True
 
     if state.get("review"):
         st.subheader("📝 검토 결과")
         st.json(state["review"])
+        has_content = True
+        
+    if not has_content:
+        st.info("⚠️ 상세 분석 데이터가 없습니다. (일반 응답이거나 데이터가 유실되었습니다.)")
+        with st.expander("디버깅용 전체 상태 확인", expanded=False):
+            st.json(state)
 
 
 @st.dialog("📜 대화 히스토리", width="large")
