@@ -679,8 +679,27 @@ def render_main():
 
         st.rerun()
 
+def check_environment():
+    """실행 환경 및 의존성 체크 (자동 초기화)"""
+    # 1. 벡터 스토어 자동 초기화
+    faiss_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rag", "faiss_index")
+    
+    if not os.path.exists(faiss_path) or not os.listdir(faiss_path):
+        with st.spinner("📦 초기 설정 중... (벡터 데이터 생성)"):
+            try:
+                from rag.vectorstore import init_vectorstore
+                init_vectorstore()
+                st.toast("✅ 초기 설정 완료!", icon="🎉")
+            except Exception as e:
+                st.error(f"❌ 초기 설정 실패: {str(e)}")
+                st.stop()
+
+
 def main():
     """메인 함수"""
+    # 환경 자동 체크
+    check_environment()
+    
     init_session_state()
     render_main()
 

@@ -106,7 +106,37 @@ class WriterAgent:
             state.error = f"초안 작성 오류: {str(e)}"
 
         # =====================================================================
-        # 3. 상태 업데이트 (Pydantic 모델 복사)
+        # 3. [개선] 웹/참고 자료 출처 섹션 자동 추가
+        # =====================================================================
+        web_context = state.web_context
+        if web_context and draft and draft.sections:
+            # 출처 추출 (간단한 파싱)
+            references = []
+            
+            # 1. URL 참조 추출
+            import re
+            urls = re.findall(r'\[(.*?)\]\((http.*?)\)', web_context)
+            for title, url in urls:
+                references.append(f"- [{title}]({url})")
+            
+            # 2. 만약 마크다운 링크가 없으면 단순 텍스트로 추가
+            if not references and "http" in web_context:
+                raw_urls = re.findall(r'(https?://[^\s)\]]+)', web_context)
+                for url in raw_urls:
+                    references.append(f"- [웹 검색 결과]({url})")
+            
+            if references:
+                from utils.schemas import SectionContent
+                ref_content = "\n".join(references)
+                ref_section = SectionContent(
+                    id=len(draft.sections) + 1,
+                    name="📚 참고 자료",
+                    content=f"본 기획서는 다음 자료를 참고하여 작성되었습니다.\n\n{ref_content}"
+                )
+                draft.sections.append(ref_section)
+
+        # =====================================================================
+        # 4. 상태 업데이트
         # =====================================================================
         new_state = state.model_copy(update={
             "draft": draft,

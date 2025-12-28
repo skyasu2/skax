@@ -172,15 +172,22 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
                     if search_result["success"]:
                         # 결과 포맷팅
                         source = search_result.get("source", "unknown")
-                        if "formatted" in search_result:
-                            context = search_result["formatted"]
-                            formatted_result = search_result["formatted"] # search_sync 리턴값 확인 필요, formatted 키 사용
-                        else:
-                            formatted_result = str(search_result.get("results", ""))
+                        formatted_result = ""
                         
+                        # 상세 결과에서 URL 추출 및 포맷팅
+                        if "results" in search_result and isinstance(search_result["results"], list):
+                            for idx, res in enumerate(search_result["results"][:3]): # 상위 3개만
+                                title = res.get("title", "제목 없음")
+                                url = res.get("url", "URL 없음")
+                                snippet = res.get("snippet", "")[:200]
+                                formatted_result += f"- [{title}]({url})\n  {snippet}\n"
+                        
+                        # fallback: 포맷된 결과가 없으면 기존 방식 사용
+                        if not formatted_result and "formatted" in search_result:
+                            formatted_result = search_result["formatted"]
+                            
                         web_contents.append(
                             f"[웹 검색 결과 {i+1} - {q}]\n"
-                            f"출처: {source}\n"
                             f"{formatted_result}"
                         )
                     else:
