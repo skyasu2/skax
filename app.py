@@ -28,7 +28,8 @@ from ui import (
     render_dev_tools,
     render_refinement_ui,
     render_error_state,
-    render_option_selector  # [NEW]
+    render_option_selector,
+    render_visual_timeline  # [NEW]
 )
 
 # =============================================================================
@@ -284,7 +285,7 @@ def render_main():
         if st.session_state.current_state:
             hist = st.session_state.current_state.get("step_history", [])
             if hist:
-                render_timeline(hist)
+                render_visual_timeline(hist)
                 st.markdown("---")
 
         col1, col2, col3, col4 = st.columns([2, 1, 1, 1])

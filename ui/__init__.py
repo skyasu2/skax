@@ -9,7 +9,8 @@ from ui.components import (
     render_timeline,
     render_chat_message,
     render_error_state,
-    render_option_selector  # [NEW]
+    render_option_selector,
+    render_visual_timeline  # [NEW]
 )
 
 from ui.dialogs import (
