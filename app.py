@@ -496,25 +496,39 @@ def render_main():
     # =========================================================================
     # 시작 화면 (채팅 히스토리가 없을 때)
     # =========================================================================
+    # =========================================================================
+    # 시작 화면 (채팅 히스토리가 없을 때)
+    # =========================================================================
     if not st.session_state.chat_history:
-        st.markdown("#### 💡 아이디어를 기획서로 만들어 드립니다")
+        col_ex_title, col_ex_refresh = st.columns([6, 1])
+        with col_ex_title:
+             st.markdown("#### 💡 아이디어를 기획서로 만들어 드립니다")
+        with col_ex_refresh:
+             if st.button("🔄 예시 변경", key="refresh_examples", help="새로운 랜덤 예제를 불러옵니다"):
+                 st.session_state.random_examples = None
+                 st.rerun()
+
         st.caption("아래 예시를 클릭하거나 직접 입력하세요")
 
-        # 예시 템플릿
-        examples = [
-            ("🍽️ 점심 메뉴 추천 앱", "직장인을 위한 점심 메뉴 추천 서비스를 만들고 싶어요"),
-            ("📚 독서 모임 플랫폼", "독서 모임을 쉽게 만들고 관리할 수 있는 서비스"),
-            ("🏃 운동 챌린지 앱", "친구들과 함께 운동 목표를 달성하는 챌린지 앱"),
-        ]
+        # 1. 예제 데이터 풀 (Web/App 10개 + Non-IT 20개)
+        if "random_examples" not in st.session_state or st.session_state.random_examples is None:
+             import random
+             # 외부 파일에서 예제 데이터 로드
+             from utils.prompt_examples import WEB_APP_POOL, NON_IT_POOL
+             
+             # 랜덤 추출 (Web 1개 + Non-IT 2개)
+             selected_web = random.sample(WEB_APP_POOL, 1)
+             selected_non_it = random.sample(NON_IT_POOL, 2)
+             st.session_state.random_examples = selected_web + selected_non_it
 
-        cols = st.columns(len(examples))
-        for i, (title, prompt) in enumerate(examples):
-            with cols[i]:
-                if st.button(title, key=f"example_{i}", use_container_width=True, help=prompt):
-                    # 프롬프트만 채워주고 사용자가 엔터 치도록
-                    st.session_state.prefill_prompt = prompt
-                    st.rerun()
-
+        # 2. 버튼 렌더링
+        cols = st.columns(3)
+        for i, (title, prompt) in enumerate(st.session_state.random_examples):
+             with cols[i]:
+                 if st.button(title, key=f"ex_btn_{i}", use_container_width=True, help=prompt):
+                     st.session_state.prefill_prompt = prompt
+                     st.rerun()
+        
         st.divider()
 
     # =========================================================================
@@ -796,11 +810,16 @@ def render_main():
 
     # 예제 버튼
     # 취업 포트폴리오용 다양한 도메인 예제 (관광/앱, 핀테크/사업, 마케팅/제안)
-    example_prompts = [
-        ("✈️ 로컬 맛집 투어 앱", "한국을 방문한 외국인에게 로컬 노포 맛집을 소개하고 실시간 통역 가이드를 매칭해주는 '로컬 맛집 도슨트' 앱 기획해줘"),
-        ("💰 잔돈 투자 핀테크", "카드 결제 자투리 금액을 모아 자동으로 해외 ETF에 소수점 투자해주는 '잔돈 재테크' 서비스 사업계획서 써줘"),
-        ("📊 AI 광고 최적화 솔루션", "이커머스 고객 데이터를 분석하여 맞춤형 광고 소재를 자동 생성하고 ROAS를 극대화하는 'AI 초개인화 마케팅 솔루션' 도입 제안서 기획해줘")
-    ]
+    # 사이드바 예제 버튼 (메인 화면의 랜덤 예제와 동기화)
+    if st.session_state.get("random_examples"):
+        example_prompts = st.session_state.random_examples
+    else:
+        # 혹시 세션에 없으면 새로 추출 (Fallback)
+        import random
+        from utils.prompt_examples import WEB_APP_POOL, NON_IT_POOL
+        selected_web = random.sample(WEB_APP_POOL, 1)
+        selected_non_it = random.sample(NON_IT_POOL, 2)
+        example_prompts = selected_web + selected_non_it
 
     for label, prompt in example_prompts:
         if st.sidebar.button(label, use_container_width=True):
