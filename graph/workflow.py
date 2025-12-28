@@ -546,8 +546,10 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
 
 def create_workflow() -> StateGraph:
     """PlanCraft 워크플로우 생성 (기본 버전)"""
-    # Pydantic 모델을 State로 사용
-    workflow = StateGraph(PlanCraftState)
+    from graph.state import PlanCraftInput, PlanCraftOutput  # [NEW]
+    
+    # Pydantic 모델을 State로 사용하며, Input/Output 스키마를 명시합니다.
+    workflow = StateGraph(PlanCraftState, input=PlanCraftInput, output=PlanCraftOutput)
 
     # 노드 등록 (래퍼 함수 사용)
     # [UPDATE] 컨텍스트 수집 단계 병렬화 (Sub-graph Node)
@@ -695,11 +697,15 @@ def run_plancraft(
     """
     from graph.state import create_initial_state
 
-    # 초기 상태 생성 (Pydantic 객체 리턴)
-    initial_state = create_initial_state(user_input, file_content, previous_plan)
-    
-    # [중요] 개선 횟수 주입 (Agent들이 이를 참조하여 로직 수행)
-    initial_state.refine_count = refine_count
+    # [UPDATE] Input Schema 분리에 따른 입력 구성
+    # PlanCraftInput 스키마에 정의된 필드만 전달하면 LangGraph가 내부 State로 자동 변환합니다.
+    inputs = {
+        "user_input": user_input,
+        "file_content": file_content,
+        "refine_count": refine_count,
+        "previous_plan": previous_plan,
+        "thread_id": thread_id
+    }
 
     # 워크플로우 실행 (invoke는 dict 또는 BaseModel을 받음)
     # [NEW] Config에 thread_id 추가 (Checkpointer가 이를 식별)
@@ -708,7 +714,7 @@ def run_plancraft(
     if callbacks:
         config["callbacks"] = callbacks
 
-    final_state = app.invoke(initial_state, config=config)
+    final_state = app.invoke(inputs, config=config)
 
     # UI 계층에서는 dict 처리가 되어 있으므로 변환하여 반환
     if hasattr(final_state, "model_dump"):

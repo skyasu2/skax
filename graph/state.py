@@ -6,32 +6,68 @@ LangGraph 워크플로우에서 사용하는 상태(State) 타입을 Pydantic Ba
 """
 
 from typing import Optional, List, Dict, Any, Union, Self, Literal
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from utils.schemas import (
-    AnalysisResult, 
-    StructureResult, 
-    DraftResult, 
-    JudgeResult, 
-    OptionChoice
+    AnalysisResult,
+    StructureResult,
+    DraftResult,
+    JudgeResult,
+    OptionChoice,
+    SectionStructure,
+    SectionContent,
+    ReviewResult
 )
+
+# =============================================================================
+# Input / Output Schema (LangGraph Interface)
+# =============================================================================
+
+class PlanCraftInput(BaseModel):
+    """외부에서 유입되는 입력 데이터 스키마"""
+    user_input: str = Field(description="사용자 요청 사항")
+    file_content: Optional[str] = Field(default=None, description="첨부 파일 내용")
+    refine_count: int = Field(default=0, description="기획서 개선 횟수")
+    previous_plan: Optional[str] = Field(default=None, description="이전 기획서 내용 (개선 시)")
+    thread_id: str = Field(default="default_thread", description="세션 스레드 ID")
+
+class PlanCraftOutput(BaseModel):
+    """최종적으로 반환되는 출력 데이터 스키마"""
+    final_output: Optional[str] = Field(default=None, description="최종 생성된 기획서")
+    step_history: List[dict] = Field(default_factory=list, description="실행 단계 이력")
+    chat_history: List[dict] = Field(default_factory=list, description="채팅 기록")
+    error: Optional[str] = Field(default=None, description="에러 메시지")
+
+
+# =============================================================================
+# Overall State (Internal State)
+# =============================================================================
 
 class PlanCraftState(BaseModel):
     """
-    PlanCraft Agent의 워크플로우 상태 정의 (Pydantic Model)
+    PlanCraft Agent 전체 상태 스키마
     
-    모든 상태를 Pydantic 객체로 관리하여 런타임 타입 검증과 
-    IDE 자동완성 지원을 강화합니다.
+    Input + Output + Internal State를 모두 포함합니다.
+    LangGraph의 StateGraph(PlanCraftState)로 사용됩니다.
     """
-    # 1. 입력 상태 (Inputs)
-    user_input: str = Field(description="사용자의 초기 요구사항 입력")
-    file_content: Optional[str] = Field(default=None, description="업로드된 파일 내용")
-    
-    # 2. 컨텍스트 (Context)
+    # 1. 입력 데이터 (PlanCraftInput Fields)
+    user_input: str = Field(description="사용자 요청 사항")
+    file_content: Optional[str] = Field(default=None, description="첨부 파일 내용")
+    refine_count: int = Field(default=0, description="기획서 개선 횟수")
+    previous_plan: Optional[str] = Field(default=None, description="이전 기획서 내용 (개선 시)")
+    thread_id: str = Field(default="default_thread", description="세션 스레드 ID")
+
+    # 2. 출력 데이터 (PlanCraftOutput Fields)
+    final_output: Optional[str] = Field(default=None, description="최종 생성된 기획서")
+    step_history: List[dict] = Field(default_factory=list, description="실행 단계 이력")
+    chat_history: List[dict] = Field(default_factory=list, description="채팅 기록")
+    error: Optional[str] = Field(default=None, description="에러 발생 시 메시지")
+
+    # 3. 컨텍스트 (Context)
     rag_context: Optional[str] = Field(default=None, description="RAG 검색 결과")
     web_context: Optional[str] = Field(default=None, description="웹 검색 결과")
     web_urls: Optional[List[str]] = Field(default=None, description="조회한 URL 목록")
 
-    # 3. 분석 단계 (Analysis)
+    # 4. 분석 단계 (Analysis)
     analysis: Optional[AnalysisResult] = Field(default=None, description="분석 결과 객체")
     # [NEW] 동적 폼 생성을 위한 스키마 이름 (utils.schemas 내의 클래스명)
     input_schema_name: Optional[str] = Field(default=None, description="입력 폼 스키마 클래스명")
@@ -41,8 +77,6 @@ class PlanCraftState(BaseModel):
     option_question: Optional[str] = Field(default=None, description="옵션 질문")
     selected_option: Optional[str] = Field(default=None, description="사용자가 선택한 옵션")
 
-    # 4. 메모리 (Memory)
-    # 딕셔너리 리스트로 유지 (LangChain 메시지 포맷 호환)
     messages: List[Dict[str, str]] = Field(default_factory=list, description="대화 히스토리")
 
     # 5. 구조화 단계 (Structure)
