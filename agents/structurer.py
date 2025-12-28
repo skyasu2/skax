@@ -141,8 +141,16 @@ class StructurerAgent:
         # 커스텀 처리 지시사항 추가
         user_content += custom_instruction
 
+        # [NEW] 시계열 기준 주입
+        execution_time = getattr(state, "execution_time", None) or "Unknown"
+        system_prompt_with_time = (
+            f"Current System Time: {execution_time}\n"
+            "NOTE: All schedules and milestones MUST be based on this current date.\n\n"
+            f"{STRUCTURER_SYSTEM_PROMPT}"
+        )
+
         messages = [
-            {"role": "system", "content": STRUCTURER_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt_with_time},
             {"role": "user", "content": user_content}
         ]
 

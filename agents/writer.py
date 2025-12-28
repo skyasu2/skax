@@ -87,15 +87,41 @@ class WriterAgent:
         web_context = getattr(state, "web_context", "")
         web_urls = getattr(state, "web_urls", [])
 
+        # [NEW] 시계열 기준 주입
+        execution_time = getattr(state, "execution_time", None) or "Unknown"
+        system_prompt_with_time = (
+            f"Current System Time: {execution_time}\n"
+            "NOTE: All dates, schedules, and milestones MUST be based on this current date. "
+            "For example, if user says '6 months project', calculate dates starting from the current time.\n\n"
+            f"{WRITER_SYSTEM_PROMPT}"
+        )
+
+        # [NEW] Few-shot 예시 동적 선택 및 포맷팅
+        try:
+            from utils.example_selector import get_relevant_examples, format_examples_for_prompt
+            
+            similar_examples = get_relevant_examples(user_input, k=2, max_length=1500)
+            few_shot_section = format_examples_for_prompt(similar_examples, format_type="markdown")
+        except Exception as e:
+            print(f"[WARN] Few-shot example selection failed: {e}")
+            few_shot_section = ""
+
+        # User Prompt에 Few-shot 예시 추가
+        user_prompt_content = WRITER_USER_PROMPT.format(
+            user_input=user_input,
+            structure=json.dumps(structure_dict, ensure_ascii=False, indent=2),
+            web_context=web_context if web_context else "없음",
+            web_urls=json.dumps(web_urls, ensure_ascii=False, indent=2) if web_urls else "없음",
+            context=context if context else "없음"
+        )
+        
+        # Few-shot 예시를 User Prompt 끝에 추가 (LLM이 참고하도록)
+        if few_shot_section:
+            user_prompt_content += few_shot_section
+
         messages = [
-            {"role": "system", "content": WRITER_SYSTEM_PROMPT},
-            {"role": "user", "content": WRITER_USER_PROMPT.format(
-                user_input=user_input,
-                structure=json.dumps(structure_dict, ensure_ascii=False, indent=2),
-                web_context=web_context if web_context else "없음",
-                web_urls=json.dumps(web_urls, ensure_ascii=False, indent=2) if web_urls else "없음",
-                context=context if context else "없음"
-            )}
+            {"role": "system", "content": system_prompt_with_time},
+            {"role": "user", "content": user_prompt_content}
         ]
 
         try:

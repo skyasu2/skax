@@ -67,6 +67,9 @@ class PlanCraftState(BaseModel):
     step_history: List[Dict[str, Any]] = Field(default_factory=list, description="실행 단계별 상태 이력 (Timeline)")
     step_status: Literal["RUNNING", "SUCCESS", "FAILED"] = Field(default="RUNNING", description="현재 단계 수행 상태")
     last_error: Optional[str] = Field(default=None, description="마지막 발생 에러")
+    
+    # [NEW] 시계열 기준점 (Time Context)
+    execution_time: Optional[str] = Field(default=None, description="워크플로우 실행 시각 (모든 에이전트의 시계열 기준)")
 
     @model_validator(mode='after')
     def sync_analysis_fields(self) -> Self:
@@ -104,9 +107,15 @@ def create_initial_state(user_input: str, file_content: str = None, previous_pla
     초기 상태를 생성합니다.
     Refinement 상황일 경우 previous_plan을 주입받습니다.
     """
+    from datetime import datetime
+    
+    # [NEW] 실행 시점의 시간을 문자열로 저장
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     return PlanCraftState(
         user_input=user_input,
         file_content=file_content,
         previous_plan=previous_plan,
-        messages=[{"role": "user", "content": user_input}]
+        messages=[{"role": "user", "content": user_input}],
+        execution_time=current_time  # [NEW]
     )
