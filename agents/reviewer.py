@@ -3,18 +3,13 @@ PlanCraft Reviewer Agent - 기획서 평가 및 심사
 """
 import logging
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_openai import ChatOpenAI
-from utils.config import Config
+from utils.llm import get_llm
 from utils.schemas import JudgeResult
 from graph.state import PlanCraftState, update_state
 from prompts.reviewer_prompt import REVIEWER_SYSTEM_PROMPT
 
 # LLM 초기화 (Structured Output)
-reviewer_llm = ChatOpenAI(
-    model=Config.MODEL_NAME,
-    temperature=0.1,  # 평가는 객관적이어야 하므로 낮은 temperature
-    api_key=Config.OPENAI_API_KEY
-).with_structured_output(JudgeResult)
+reviewer_llm = get_llm(temperature=0.1).with_structured_output(JudgeResult)
 
 
 def run(state: PlanCraftState) -> PlanCraftState:
