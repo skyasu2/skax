@@ -266,12 +266,87 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
 
 
 def should_ask_user(state: PlanCraftState) -> str:
-    """조건부 라우터"""
-    is_general = state.analysis.is_general_query if state.analysis else False
+    """
+    조건부 라우터 (RunnableBranch 스타일 분기)
     
-    if state.need_more_info or is_general:
+    분기 조건:
+      1. need_more_info = True → "ask_user" (휴먼 인터럽트)
+      2. is_general_query = True → "ask_user" (일반 응답)
+      3. 그 외 → "continue" (기획서 생성 계속)
+    
+    Returns:
+        str: "ask_user" 또는 "continue"
+    """
+    # 조건 1: 추가 정보 요청 (옵션 선택 필요)
+    if state.need_more_info:
         return "ask_user"
+    
+    # 조건 2: 일반 질의 (기획 요청이 아님)
+    is_general = state.analysis.is_general_query if state.analysis else False
+    if is_general:
+        return "ask_user"
+    
+    # 기본: 기획서 생성 계속
     return "continue"
+
+
+# -----------------------------------------------------------------------------
+# [NEW] RunnableBranch 스타일 분기 조건 함수들 (확장용)
+# -----------------------------------------------------------------------------
+
+def is_human_interrupt_required(state: PlanCraftState) -> bool:
+    """휴먼 인터럽트가 필요한지 확인"""
+    return state.need_more_info is True
+
+
+def is_general_query(state: PlanCraftState) -> bool:
+    """일반 질의인지 확인 (기획 요청이 아님)"""
+    if not state.analysis:
+        return False
+    return getattr(state.analysis, "is_general_query", False)
+
+
+def is_plan_generation_ready(state: PlanCraftState) -> bool:
+    """기획서 생성 준비가 되었는지 확인"""
+    return not is_human_interrupt_required(state) and not is_general_query(state)
+
+
+def get_routing_decision(state: PlanCraftState) -> dict:
+    """
+    상태 기반 라우팅 결정을 반환 (디버깅/로깅용)
+    
+    Returns:
+        dict: {
+            "decision": str,
+            "reason": str,
+            "conditions": dict
+        }
+    """
+    conditions = {
+        "need_more_info": state.need_more_info,
+        "is_general_query": is_general_query(state),
+        "has_analysis": state.analysis is not None
+    }
+    
+    if is_human_interrupt_required(state):
+        return {
+            "decision": "ask_user",
+            "reason": "추가 정보 필요 (옵션 선택 대기)",
+            "conditions": conditions
+        }
+    
+    if is_general_query(state):
+        return {
+            "decision": "ask_user", 
+            "reason": "일반 질의 (기획 요청 아님)",
+            "conditions": conditions
+        }
+    
+    return {
+        "decision": "continue",
+        "reason": "기획서 생성 진행",
+        "conditions": conditions
+    }
 
 
 # =============================================================================
