@@ -424,29 +424,27 @@ def option_pause_node(state: PlanCraftState) -> PlanCraftState:
     except Exception:
         # interrupt가 지원되지 않는 환경이거나 에러 발생 시
         user_response = None
-        
+    
+    # 2. 실행 중단 및 사용자 응답 대기
+    # 프론트엔드는 이 payload를 받아 폼을 렌더링하고,
+    # 사용자가 제출하면 Command(resume=...)로 재개됨
+    user_response = interrupt(payload)
+    
     # 3. 사용자 응답 처리 (Resume 후 실행됨)
-    if user_response:
-        # 사용자가 응답을 하고 재개한 경우
-        new_state = handle_user_response(state, user_response)
-        return _update_step_history(
-            new_state,
-            "option_pause",
-            "RESUMED",
-            summary="사용자 입력 수신 완료"
-        )
+    # user_response는 프론트에서 resume에 담아 보낸 데이터
+    new_state = handle_user_response(state, user_response)
+
+    # 4. 다음 단계로 이동 (Command를 통해 동적 라우팅 가능)
+    # 여기서는 상태 업데이트 후 다시 analyze(분석) 단계나 structure로 진행
+    # 보통 정보를 더 얻었으므로 다시 분석하거나 바로 진행
     
-    # 4. (Fallback) 아직 응답이 없거나 로컬 모드인 경우 - 기존 방식 유지
-    new_state = state.model_copy(update={
-        "current_step": "option_pause",
-        "step_status": "WAITING_USER_INPUT"
-    })
+    # 상태를 Command로 반환하여 업데이트 및 이동
+    # user_input이 업데이트 되었으므로 다시 analyze를 거치거나, 
+    # 바로 structure로 갈 수도 있음. 여기서는 다시 analyze로 보내 재판단 유도.
     
-    return _update_step_history(
-        new_state, 
-        "option_pause", 
-        "PAUSED",
-        summary=f"사용자 입력 대기: {state.option_question or '옵션 선택'}"
+    return Command(
+        update=new_state,
+        goto="analyze" 
     )
 
 
@@ -725,33 +723,69 @@ def run_plancraft(
     refine_count: int = 0, 
     previous_plan: str = None,
     callbacks: list = None,
-    thread_id: str = "default_thread"  # [NEW] 스레드 ID 지원
+    thread_id: str = "default_thread",
+    resume_command: dict = None  # [NEW] 재개를 위한 커맨드 데이터
 ) -> dict:
     """
-    PlanCraft Agent 워크플로우 실행
+    PlanCraft 워크플로우 실행 엔트리포인트
+    
+    Args:
+        resume_command: 인터럽트 후 재개를 위한 데이터 (Command resume)
     """
     from graph.state import create_initial_state
+    from langgraph.types import Command
 
     # [UPDATE] Input Schema 분리에 따른 입력 구성
-    # PlanCraftInput 스키마에 정의된 필드만 전달하면 LangGraph가 내부 State로 자동 변환합니다.
-    inputs = {
-        "user_input": user_input,
-        "file_content": file_content,
-        "refine_count": refine_count,
-        "previous_plan": previous_plan,
-        "thread_id": thread_id
-    }
+    inputs = None
+    if not resume_command:
+        # 처음 시작할 때만 입력 구성
+        inputs = {
+            "user_input": user_input,
+            "file_content": file_content,
+            "refine_count": refine_count,
+            "previous_plan": previous_plan,
+            "thread_id": thread_id
+        }
 
-    # 워크플로우 실행 (invoke는 dict 또는 BaseModel을 받음)
-    # [NEW] Config에 thread_id 추가 (Checkpointer가 이를 식별)
+    # 워크플로우 실행설정
     config = {"configurable": {"thread_id": thread_id}}
-    
     if callbacks:
         config["callbacks"] = callbacks
 
-    final_state = app.invoke(inputs, config=config)
+    # [UPDATE] 실행 로직 분기 (일반 실행 vs Resume 실행)
+    if resume_command:
+        # Resume 실행: Command 객체 전달
+        # resume_command는 {"resume": ...} 형태여야 함
+        input_data = Command(resume=resume_command.get("resume"))
+    else:
+        # 일반 실행
+        input_data = inputs
 
-    # UI 계층에서는 dict 처리가 되어 있으므로 변환하여 반환
+    # 실행 (인터럽트 발생 시 중단됨)
+    # invoke는 최종 state를 반환하지만, 중간에 멈추면 멈춘 시점의 state 반환
+    final_state = app.invoke(input_data, config=config)
+
+    # [NEW] 인터럽트 상태 확인
+    snapshot = app.get_state(config)
+    
+    interrupt_payload = None
+    if snapshot.next and snapshot.tasks:
+        # 다음 단계가 있는데 멈췄다면 인터럽트일 가능성 확인
+        # (LangGraph 최신 버전은 snapshot.tasks[0].interrupts에 정보가 있음)
+        if hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
+            interrupt_payload = snapshot.tasks[0].interrupts[0].value
+            
+    # 결과 반환 준비
+    result = {}
+    
+    # State 객체를 dict로 변환
     if hasattr(final_state, "model_dump"):
-        return final_state.model_dump()
-    return final_state
+        result = final_state.model_dump()
+    elif isinstance(final_state, dict):
+        result = final_state
+        
+    # 인터럽트 정보 추가
+    if interrupt_payload:
+        result["__interrupt__"] = interrupt_payload
+        
+    return result

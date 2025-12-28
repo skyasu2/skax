@@ -230,3 +230,16 @@ class UserInputSchema(BaseModel):
     user_feedback: str = Field(..., description="사용자 의견이나 피드백을 입력하세요")
     # 선택지, 파일 등 확장을 위한 필드를 Optional로 정의
     selected_options: List[str] = Field(default=[], description="선택한 옵션 목록")
+
+
+class InterruptPayload(BaseModel):
+    """
+    [NEW] 휴먼 인터럽트 페이로드
+    
+    LangGraph의 interrupt() 함수에 전달되어 UI가 렌더링할 내용을 정의합니다.
+    """
+    type: str = Field(..., description="인터럽트 유형 (option, form, confirm)")
+    question: str = Field(..., description="사용자에게 보여줄 질문")
+    options: List[OptionChoice] = Field(default_factory=list, description="선택 가능한 옵션 (type='option'일 때)")
+    input_schema_name: Optional[str] = Field(default=None, description="입력 폼 스키마 (type='form'일 때)")
+    data: Dict[str, Any] = Field(default_factory=dict, description="기타 메타데이터")

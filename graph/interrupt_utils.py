@@ -13,87 +13,63 @@ LangGraph 공식 휴먼 인터럽트 패턴을 위한 유틸리티 모듈입니�
 """
 
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
-
-
-@dataclass
-class InterruptPayload:
-    """휴먼 인터럽트 페이로드 구조"""
-    question: str
-    options: List[Dict[str, str]]
-    interrupt_type: str  # "option_select", "text_input", "file_upload", "confirmation"
-    metadata: Optional[Dict[str, Any]] = None
-
+from utils.schemas import InterruptPayload, OptionChoice, PlanCraftState
 
 def create_interrupt_payload(
     question: str,
-    options: List[Dict[str, str]] = None,
-    interrupt_type: str = "option_select",
+    options: List[OptionChoice] = None,
+    input_schema_name: str = None,
+    interrupt_type: str = "option",  # "option", "form", "confirm"
     metadata: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
-    휴먼 인터럽트를 위한 페이로드를 생성합니다.
-    
-    Args:
-        question: 사용자에게 보여줄 질문
-        options: 선택 옵션 리스트 [{"title": "...", "description": "..."}, ...]
-        interrupt_type: 인터럽트 유형
-        metadata: 추가 메타데이터
-        
-    Returns:
-        dict: interrupt()에 전달할 페이로드
-        
-    Example:
-        payload = create_interrupt_payload(
-            question="어떤 유형의 앱을 만들고 싶으신가요?",
-            options=[
-                {"title": "웹 서비스", "description": "브라우저 기반 SaaS"},
-                {"title": "모바일 앱", "description": "iOS/Android 앱"}
-            ],
-            interrupt_type="option_select"
-        )
-        resp = interrupt(payload)
+    휴먼 인터럽트 페이로드 생성 (Pydantic 모델 -> Dict 변환)
     """
-    return {
-        "question": question,
-        "options": options or [],
-        "interrupt_type": interrupt_type,
-        "metadata": metadata or {},
-        "__interrupt__": True  # 프론트엔드에서 인터럽트 감지용 마커
-    }
+    payload = InterruptPayload(
+        type=interrupt_type,
+        question=question,
+        options=options or [],
+        input_schema_name=input_schema_name,
+        data=metadata or {}
+    )
+    # LangGraph interrupt()는 JSON serializable 객체를 기대하므로 dict로 반환
+    return payload.model_dump()
 
 
-def create_option_interrupt(state) -> Dict[str, Any]:
+def create_option_interrupt(state: PlanCraftState) -> Dict[str, Any]:
     """
-    PlanCraftState에서 옵션 선택 인터럽트 페이로드를 생성합니다.
-    
-    Args:
-        state: PlanCraftState 인스턴스
-        
-    Returns:
-        dict: interrupt() 페이로드
+    PlanCraftState에서 인터럽트 페이로드를 생성합니다.
+    - input_schema_name이 있으면 'form' 타입
+    - options가 있으면 'option' 타입
     """
-    question = getattr(state, "option_question", "추가 정보가 필요합니다.")
+    question = getattr(state, "option_question", "추가 정보가 필요합니다.") or "추가 정보가 필요합니다."
     options = getattr(state, "options", [])
+    input_schema = getattr(state, "input_schema_name", None)
     
-    # 옵션을 표준 형식으로 변환
+    interrupt_type = "form" if input_schema else "option"
+    
+    # 옵션 데이터 정규화 (Dict or OptionChoice -> OptionChoice)
     formatted_options = []
     for opt in options:
         if isinstance(opt, dict):
-            formatted_options.append({
-                "title": opt.get("title", ""),
-                "description": opt.get("description", "")
-            })
+            formatted_options.append(OptionChoice(
+                title=opt.get("title", ""),
+                description=opt.get("description", "")
+            ))
+        elif isinstance(opt, OptionChoice):
+            formatted_options.append(opt)
         elif hasattr(opt, "title") and hasattr(opt, "description"):
-            formatted_options.append({
-                "title": opt.title,
-                "description": opt.description
-            })
+            # Mock 객체 등 호환성
+            formatted_options.append(OptionChoice(
+                title=opt.title,
+                description=opt.description
+            ))
     
     return create_interrupt_payload(
         question=question,
         options=formatted_options,
-        interrupt_type="option_select",
+        input_schema_name=input_schema,
+        interrupt_type=interrupt_type,
         metadata={
             "user_input": getattr(state, "user_input", ""),
             "need_more_info": getattr(state, "need_more_info", False)
@@ -101,28 +77,31 @@ def create_option_interrupt(state) -> Dict[str, Any]:
     )
 
 
-def handle_user_response(state, response: Dict[str, Any]):
+def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> PlanCraftState:
     """
     사용자 응답(Command resume)을 처리하여 상태를 업데이트합니다.
-    
-    Args:
-        state: 현재 PlanCraftState
-        response: 사용자 응답 데이터
-            {
-                "selected_option": {"title": "...", "description": "..."},
-                "text_input": "...",  # 직접 입력한 경우
-            }
-            
-    Returns:
-        PlanCraftState: 업데이트된 상태
     """
+    # 1. 폼 데이터 처리 (input_schema_name이 있었던 경우)
+    # response 자체가 폼 데이터 dict일 수 있음
+    if state.input_schema_name and isinstance(response, dict):
+        # 폼 데이터를 컨텍스트에 추가하는 방식으로 처리 (간단히 user_input에 추가)
+        form_summary = "\n".join([f"- {k}: {v}" for k, v in response.items()])
+        new_input = f"{state.user_input}\n\n[추가 정보 입력]\n{form_summary}"
+        
+        return state.model_copy(update={
+            "user_input": new_input,
+            "need_more_info": False,
+            "input_schema_name": None # 초기화
+        })
+
+    # 2. 옵션 선택 처리
     selected = response.get("selected_option")
     text_input = response.get("text_input")
     
-    # 새 입력 구성
-    original_input = getattr(state, "user_input", "")
+    original_input = state.user_input
     
     if selected:
+        # selected가 dict형태로 옴
         title = selected.get("title", "")
         description = selected.get("description", "")
         new_input = f"{original_input}\n\n[선택: {title} - {description}]"
@@ -131,7 +110,6 @@ def handle_user_response(state, response: Dict[str, Any]):
     else:
         new_input = original_input
     
-    # 상태 업데이트 (Immutable)
     return state.model_copy(update={
         "user_input": new_input,
         "need_more_info": False,

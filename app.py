@@ -249,69 +249,183 @@ def render_main():
              with cols[i]:
                  if st.button(title, key=f"hero_ex_{i}", use_container_width=True, help=prompt):
                      st.session_state.prefill_prompt = prompt
-                     st.rerun()
+    # =========================================================================
+    # 1. 사용자 채팅 입력 처리
+    # =========================================================================
+    if prompt := st.chat_input("기획 요청사항을 입력하세요..."):
+        # prefill이 있으면 초기화
+        st.session_state.prefill_prompt = None
         
-        st.divider()
+        # 사용자 메시지 히스토리에 추가
+        st.session_state.chat_history.append({"role": "user", "content": prompt, "type": "text"})
+        st.session_state.input_key += 1
+        
+        # 실행 대기열에 등록
+        st.session_state.pending_input = prompt
+        st.rerun()
 
     # =========================================================================
-    # 채팅 히스토리 표시
+    # 2. 실행 로직 (Start or Resume)
     # =========================================================================
-    for msg in st.session_state.chat_history:
-        render_chat_message(msg["role"], msg["content"], msg.get("type", "text"))
+    if st.session_state.pending_input:
+        pending_text = st.session_state.pending_input
+        st.session_state.pending_input = None
         
-    # [NEW] 에러 발생 시 Fallback UI 표시
-    if st.session_state.current_state:
-        # Pydantic 모델 안전 접근 (dict or model)
-        err = None
-        if isinstance(st.session_state.current_state, dict):
-            err = st.session_state.current_state.get("error")
+        # Resume Command 여부 확인
+        resume_cmd = None
+        import json
+        
+        # 폼 데이터 (JSON)
+        if pending_text.startswith("FORM_DATA:"):
+            try:
+                form_data = json.loads(pending_text.replace("FORM_DATA:", ""))
+                resume_cmd = {"resume": form_data}
+            except:
+                st.error("입력 데이터 처리 중 오류 발생")
+        # 옵션 선택 (JSON)
+        elif pending_text.startswith("OPTION:"):
+            try:
+                option_data = json.loads(pending_text.replace("OPTION:", ""))
+                resume_cmd = {"resume": {"selected_option": option_data}}
+            except:
+                resume_cmd = {"resume": {"text_input": pending_text}}
+        # 일반 텍스트이면서 인터럽트 상태일 때 -> Resume로 간주
+        elif st.session_state.current_state and st.session_state.current_state.get("__interrupt__"):
+            resume_cmd = {"resume": {"text_input": pending_text}}
         else:
-            err = getattr(st.session_state.current_state, "error", None)
+             # 일반 시작
+             pass
+
+        from utils.streamlit_callback import StreamlitStatusCallback
+        
+        with st.chat_message("assistant"):
+            with st.status("🚀 작업을 수행하고 있습니다...", expanded=True) as status:
+                try:
+                    streamlit_callback = StreamlitStatusCallback(status)
+                    file_content = st.session_state.get("uploaded_content", None)
+                    current_refine_count = st.session_state.get("next_refine_count", 0)
+                    previous_plan = st.session_state.generated_plan
+                    
+                    # user_input은 새로 시작할 때만 유효, resume시는 무시됨(하지만 함수 인자로는 전달)
+                    final_state_dict = run_plancraft(
+                        user_input=pending_text, 
+                        file_content=file_content,
+                        refine_count=current_refine_count,
+                        previous_plan=previous_plan,
+                        callbacks=[streamlit_callback],
+                        thread_id=st.session_state.thread_id,
+                        resume_command=resume_cmd
+                    )
+                    
+                    status.update(label="✅ 처리 완료!", state="complete", expanded=False)
+                    
+                    # 결과 저장
+                    st.session_state.current_state = final_state_dict
+                    if current_refine_count > 0:
+                         final_state_dict["refine_count"] = current_refine_count
+                         st.session_state.next_refine_count = 0
+
+                    st.rerun()
+                    
+                except Exception as e:
+                    import traceback
+                    st.error(f"실행 중 오류가 발생했습니다: {str(e)}")
+                    st.code(traceback.format_exc())
+                    
+                    # 에러 상태 저장
+                    if st.session_state.current_state:
+                         if isinstance(st.session_state.current_state, dict):
+                             st.session_state.current_state.update({"error": str(e), "step_status": "FAILED"})
+
+                    st.session_state.chat_history.append({
+                        "role": "assistant", "content": f"❌ 오류 발생: {str(e)}", "type": "error"
+                    })
+
+    # =========================================================================
+    # 3. 화면 렌더링 (히스토리 & 현재 상태 UI)
+    # =========================================================================
+    
+    # 3-1. 채팅 히스토리
+    for msg in st.session_state.chat_history:
+        render_chat_message(msg)
+
+    # 3-2. 현재 상태 기반 UI (인터럽트, 에러, 결과)
+    if st.session_state.current_state:
+        state = st.session_state.current_state
+        
+        # A. 에러
+        if state.get("error") or state.get("error_message"):
+            render_error_state(state)
             
-        if err:
-            render_error_state(err)
+        # B. 인터럽트 (Native Payload 우선)
+        elif state.get("__interrupt__"):
+            payload = state["__interrupt__"]
+            # UI 렌더러 호환성 위해 로컬 state 변수 업데이트
+            # (실제 state 객체를 수정하진 않음)
+            ui_state = state.copy() 
+            ui_state.update({
+                "input_schema_name": payload.get("input_schema_name"),
+                "options": payload.get("options"),
+                "option_question": payload.get("question"),
+                "need_more_info": True
+            })
+            render_human_interaction(ui_state)
+            
+        # C. 기존 방식 호환 (need_more_info 플래그)
+        elif state.get("need_more_info"):
+            render_human_interaction(state)
+            
+        # D. 최종 결과
+        elif state.get("final_output"):
+             st.success("기획서 작성이 완료되었습니다!")
+             st.session_state.generated_plan = state["final_output"]
+             
+             # 히스토리 중복 방지 (가장 마지막이 plan타입이면 생략 등)
+             if not st.session_state.plan_history or st.session_state.plan_history[-1]['content'] != state["final_output"]:
+                 now_str = datetime.now().strftime("%H:%M:%S")
+                 st.session_state.plan_history.append({
+                    "version": len(st.session_state.plan_history) + 1,
+                    "timestamp": now_str,
+                    "content": state["final_output"]
+                 })
+
+             with st.expander("📄 최종 기획서 보기", expanded=True):
+                 st.markdown(state["final_output"])
+                 
+             col1, col2 = st.columns(2)
+             if col1.button("✨ 다시 개선하기"):
+                 st.session_state.next_refine_count = st.session_state.current_state.get("refine_count", 0) + 1
+                 st.session_state.pending_input = "이 내용을 바탕으로 더 구체적으로 보완해줘"
+                 st.rerun()
 
     # =========================================================================
-    # 옵션 선택 UI (need_more_info 상태일 때)
+    # 4. 사이드바 (워크플로우 시각화)
     # =========================================================================
-    # =========================================================================
-    # 옵션 선택 UI (need_more_info 상태일 때)
-    # =========================================================================
-    if st.session_state.current_state and st.session_state.current_state.get("need_more_info"):
-        render_human_interaction(st.session_state.current_state)
-
-    # =========================================================================
-    # 기획서 결과 표시
-    # =========================================================================
-    if st.session_state.generated_plan:
+    with st.sidebar:
+        render_dev_tools()
         if st.session_state.current_state:
             hist = st.session_state.current_state.get("step_history", [])
-            if hist:
-                render_visual_timeline(hist)
-                st.markdown("---")
-
-        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-
-        with col1:
-            st.markdown("📄 **기획서 완성** ✅")
-
-        with col2:
-            if st.button("📖 기획서", key="view_plan", use_container_width=True):
-                show_plan_dialog()
-
-        with col3:
-            if st.button("🔍 분석", key="view_analysis", use_container_width=True):
-                show_analysis_dialog()
-
-        with col4:
-            st.download_button(
-                "📥 저장",
+            render_visual_timeline(hist)
+            
+        st.markdown("---")
+        
+        # 사이드바 액션 버튼들
+        c1, c2 = st.columns(2)
+        if c1.button("📖 기획서", use_container_width=True):
+             show_plan_dialog()
+        if c2.button("🔍 분석", use_container_width=True):
+             show_analysis_dialog()
+             
+        # 다운로드
+        if st.session_state.generated_plan:
+             st.download_button(
+                "📥 저장 (.md)",
                 data=st.session_state.generated_plan,
                 file_name=f"plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
                 mime="text/markdown",
                 use_container_width=True
             )
-            
+             
         render_refinement_ui()
 
     # =========================================================================
