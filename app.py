@@ -50,7 +50,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .block-container {
-        padding-top: 2rem;
+        padding-top: 1rem;
         padding-bottom: 8rem;
     }
 
@@ -215,7 +215,21 @@ def render_main():
     # 시작 화면 (채팅 히스토리가 없을 때)
     # =========================================================================
     if not st.session_state.chat_history:
-        st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="text-align: center; margin-top: 0vh; margin-bottom: 1.5rem;">
+                <h1>💡 무엇을 도와드릴까요?</h1>
+                <p style="color: #666; font-size: 1rem; line-height: 1.5;">
+                    <b>PlanCraft AI</b>가 아이디어를 구체적인 기획서로 만들어 드립니다.<br>
+                    웹 서비스, 앱, 창업, 사업계획서 등 무엇이든 물어보세요.
+                </p>
+                <div style="margin-top: 0.8rem; color: #888; font-size: 0.85rem;">
+                    👇 아래 <b>채팅창</b>에 입력하거나, 추천 <b>예시</b>를 선택하세요.
+                </div>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
 
         # 예제 데이터 로드 (랜덤)
         if "random_examples" not in st.session_state or st.session_state.random_examples is None:
