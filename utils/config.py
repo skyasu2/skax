@@ -51,7 +51,7 @@ class Config:
     # =========================================================================
     AOAI_ENDPOINT = os.getenv("AOAI_ENDPOINT")
     AOAI_API_KEY = os.getenv("AOAI_API_KEY")
-    AOAI_API_VERSION = "2024-02-15-preview"
+    AOAI_API_VERSION = "2024-08-01-preview"
     
     # =========================================================================
     # 모델 배포 이름
