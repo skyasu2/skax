@@ -190,38 +190,42 @@ def render_chat_message(role: str, content: str, msg_type: str = "text"):
             st.markdown(content)
 
 
-def render_error_state(error_message: str):
-    """에러 상태 및 재시도 UI 렌더링"""
-    st.markdown("---")
-    st.error(f"❌ 오류가 발생했습니다:\n\n{error_message}")
+def render_error_state(current_state):
+    """
+    [개선] 에러 상태 UI 렌더링
     
-    col_retry, col_reset = st.columns([1, 1])
-    with col_retry:
-        if st.button("🔄 다시 시도", key="btn_retry_error", use_container_width=True):
-            # 재시도 로직: 에러 클리어 후 rerun
-            # (실제 재실행은 pending_input 처리를 다시 하거나, LangGraph 상태 복구가 필요함)
-            # 여기서는 간단히 에러 상태만 지우고 pending_input을 다시 트리거하는 방식 고려
-            
+    에러 메시지를 명확히 표시하고, 스마트한 복구 옵션을 제공합니다.
+    """
+    if not current_state:
+        return
+
+    error_msg = current_state.get("error_message") or current_state.get("error") or "알 수 없는 오류 발생"
+    retry_count = current_state.get("retry_count", 0)
+
+    st.error(f"### 🚫 오류 발생 (Retry: {retry_count})\n\n{error_msg}")
+    
+    with st.expander("상세 정보 보기", expanded=False):
+        st.json(current_state)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 다시 시도", type="primary", use_container_width=True):
+            # 상태 초기화 후 재시도 (재시도 카운트 증가)
+            # 여기서는 단순히 세션 상태를 업데이트하고 rerun 합니다.
+            # 실제 복구 로직은 App의 재실행 흐름에 맡깁니다.
             if st.session_state.current_state:
-                # 에러 플래그 해제
-                # Pydantic 모델이므로 불변성 고려해야 하나, session_state 내 객체는 직접 수정 가능하다고 가정
-                # 또는 dict 형태로 관리될 경우
-                if hasattr(st.session_state.current_state, "error"):
-                    st.session_state.current_state.error = None
-                if hasattr(st.session_state.current_state, "step_status"):
-                    st.session_state.current_state.step_status = "RUNNING"
-                if hasattr(st.session_state.current_state, "retry_count"):
-                     st.session_state.current_state.retry_count += 1
-            
+                st.session_state.current_state["retry_count"] = retry_count + 1
+                st.session_state.current_state["error"] = None
+                st.session_state.current_state["error_message"] = None
+                st.session_state.current_state["step_status"] = "RUNNING"
             st.rerun()
             
-    with col_reset:
-        if st.button("🗑️ 대화 초기화", key="btn_reset_error", use_container_width=True):
-             st.session_state.chat_history = []
-             st.session_state.current_state = None
-             st.session_state.generated_plan = None
-             st.session_state.input_key += 1
-             st.rerun()
+    with col2:
+        if st.button("✏️ 처음으로 돌아가기", use_container_width=True):
+            st.session_state.chat_history = []
+            st.session_state.current_state = None
+            st.session_state.generated_plan = None
+            st.rerun()
 
 
 def render_human_interaction(current_state):

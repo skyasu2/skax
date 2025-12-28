@@ -115,37 +115,31 @@ def _update_step_history(state: PlanCraftState, step: str, status: str, summary:
 # 노드 함수 정의 (모두 PlanCraftState Pydantic 모델 사용)
 # =============================================================================
 
+@handle_node_error
 def retrieve_context(state: PlanCraftState) -> PlanCraftState:
     """RAG 검색 노드"""
-    try:
-        from rag.retriever import Retriever
+    from rag.retriever import Retriever
 
-        # Retriever 초기화 (상위 3개 문서 검색)
-        retriever = Retriever(k=3)
+    # Retriever 초기화 (상위 3개 문서 검색)
+    retriever = Retriever(k=3)
 
-        # 사용자 입력으로 관련 문서 검색
-        user_input = state.user_input
-        context = retriever.get_formatted_context(user_input)
+    # 사용자 입력으로 관련 문서 검색
+    user_input = state.user_input
+    context = retriever.get_formatted_context(user_input)
 
-        new_state = state.model_copy(update={
-            "rag_context": context,
-            "current_step": "retrieve"
-        })
-
-    except Exception as e:
-        # RAG 실패 시에도 계속 진행
-        new_state = state.model_copy(update={
-            "rag_context": "",
-            "error": f"RAG 검색 실패: {str(e)}"
-        })
+    new_state = state.model_copy(update={
+        "rag_context": context,
+        "current_step": "retrieve"
+    })
 
     # [LOG] 실행 결과 로깅 및 히스토리 업데이트
-    status = "FAILED" if new_state.error else "SUCCESS"
+    status = "SUCCESS"
     summary = f"검색된 문서: {len(new_state.rag_context.split('---')) if new_state.rag_context else 0}건"
     
-    return _update_step_history(new_state, "retrieve", status, summary, new_state.error)
+    return _update_step_history(new_state, "retrieve", status, summary)
 
 
+@handle_node_error
 def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
     """
     조건부 웹 정보 수집 노드
@@ -487,57 +481,98 @@ def general_response_node(state: PlanCraftState) -> PlanCraftState:
 # Agent 래퍼 함수 (Logging Wrapper)
 # =============================================================================
 
+@handle_node_error
 def run_analyzer_node(state: PlanCraftState) -> PlanCraftState:
-    new_state = analyzer.run(state)
+    """분석 Agent 실행 노드"""
+    from agents.analyzer import run
     
-    status = "FAILED" if new_state.error else "SUCCESS"
-    topic = new_state.analysis.topic if new_state.analysis else "분석 실패"
-    summary = f"주제 분석: {topic}"
+    # Analyzer 실행
+    new_state = run(state)
     
-    return _update_step_history(new_state, "analyze", status, summary, new_state.error)
+    # 상태 및 이력 업데이트
+    return _update_step_history(
+        new_state, 
+        "analyze", 
+        "SUCCESS", 
+        summary=f"주제 분석: {new_state.analysis.topic if new_state.analysis else 'N/A'}"
+    )
 
+@handle_node_error
 def run_structurer_node(state: PlanCraftState) -> PlanCraftState:
-    new_state = structurer.run(state)
-    
-    status = "FAILED" if new_state.error else "SUCCESS"
-    sec_count = len(new_state.structure.sections) if new_state.structure else 0
-    summary = f"구조 설계: {sec_count}개 섹션"
-    
-    return _update_step_history(new_state, "structure", status, summary, new_state.error)
+    """구조화 Agent 실행 노드"""
+    from agents.structurer import run
 
+    new_state = run(state)
+    
+    return _update_step_history(
+        new_state, 
+        "structure", 
+        "SUCCESS", 
+        summary=f"섹션 {len(new_state.structure.sections) if new_state.structure else 0}개 구조화"
+    )
+
+@handle_node_error
 def run_writer_node(state: PlanCraftState) -> PlanCraftState:
-    new_state = writer.run(state)
-    
-    status = "FAILED" if new_state.error else "SUCCESS"
-    draft_status = "작성 완료" if new_state.draft else "작성 실패"
-    summary = f"초안 작성: {draft_status}"
-    
-    return _update_step_history(new_state, "write", status, summary, new_state.error)
+    """작성 Agent 실행 노드"""
+    from agents.writer import run
 
+    new_state = run(state)
+    
+    # Draft 내용 요약
+    draft_len = sum(len(s.content) for s in new_state.draft.sections) if new_state.draft else 0
+    
+    return _update_step_history(
+        new_state, "write", "SUCCESS", summary=f"초안 작성 완료 ({draft_len}자)"
+    )
+
+@handle_node_error
 def run_reviewer_node(state: PlanCraftState) -> PlanCraftState:
-    new_state = reviewer.run(state)
-    
-    status = "FAILED" if new_state.error else "SUCCESS"
-    verdict = new_state.review.verdict if new_state.review else "UNKNOWN"
-    summary = f"품질 검토: {verdict}"
-    
-    return _update_step_history(new_state, "review", status, summary, new_state.error)
+    """검토 Agent 실행 노드"""
+    from agents.reviewer import run
 
+    new_state = run(state)
+    
+    # Review 결과 요약
+    verdict = new_state.review.verdict if new_state.review else "N/A"
+    score = new_state.review.overall_score if new_state.review else 0
+    return _update_step_history(
+        new_state, "review", "SUCCESS", summary=f"심사 결과: {verdict} ({score}점)"
+    )
+
+@handle_node_error
 def run_refiner_node(state: PlanCraftState) -> PlanCraftState:
-    new_state = refiner.run(state)
-    
-    status = "FAILED" if new_state.error else "SUCCESS"
-    summary = f"기획서 개선: {state.refine_count}회차 수행"
-    
-    return _update_step_history(new_state, "refine", status, summary, new_state.error)
+    """개선 Agent 실행 노드"""
+    from agents.refiner import run
 
+    new_state = run(state)
+
+    # 이력 업데이트 (성공 시 Refine Count는 Agent 내부에서 증가됨)
+    return _update_step_history(
+        new_state,
+        "refine",
+        "SUCCESS",
+        summary=f"기획서 개선 완료 (Round {new_state.refine_count})"
+    )
+
+@handle_node_error
 def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
-    new_state = formatter.run(state)
-    
-    status = "FAILED" if new_state.error else "SUCCESS"
-    summary = "최종 포맷팅 및 요약 완료"
-    
-    return _update_step_history(new_state, "format", status, summary, new_state.error)
+    """포맷팅 Agent 실행 노드"""
+    # 현재 별도 Agent 없이 단순히 MarkDown 정리만 수행한다고 가정
+    # 실제 구현이 있다면 import해서 사용
+
+    new_state = state.model_copy(update={"current_step": "format"})
+
+    # 예시: 파이널 아웃풋 확정
+    if new_state.draft:
+        final_md = "# " + (new_state.structure.title if new_state.structure else "기획서") + "\n\n"
+        for sec in new_state.draft.sections:
+            final_md += f"## {sec.name}\n\n{sec.content}\n\n"
+
+        new_state = new_state.model_copy(update={"final_output": final_md})
+
+    return _update_step_history(
+        new_state, "format", "SUCCESS", summary="최종 포맷팅 완료"
+    )
 
 
 # =============================================================================

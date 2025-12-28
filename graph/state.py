@@ -36,6 +36,8 @@ class PlanCraftOutput(BaseModel):
     step_history: List[dict] = Field(default_factory=list, description="실행 단계 이력")
     chat_history: List[dict] = Field(default_factory=list, description="채팅 기록")
     error: Optional[str] = Field(default=None, description="에러 메시지")
+    error_message: Optional[str] = Field(default=None, description="에러 메시지 (Alias for error)")
+    retry_count: int = Field(default=0, description="재시도 횟수")
 
 
 # =============================================================================
