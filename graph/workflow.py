@@ -430,6 +430,23 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
                 content = sec.content
             final_md += f"## {name}\n\n{content}\n\n"
 
+        # =====================================================================
+        # [FIX] 웹 검색 출처 추가
+        # =====================================================================
+        web_urls = new_state.get("web_urls") or []
+        web_context = new_state.get("web_context") or ""
+        
+        if web_urls:
+            final_md += "---\n\n## 📚 참고 자료\n\n"
+            final_md += "> 본 기획서 작성 시 다음 자료를 참고하였습니다.\n\n"
+            for i, url in enumerate(web_urls, 1):
+                final_md += f"{i}. [{url}]({url})\n"
+            final_md += "\n"
+        elif web_context and "웹 검색 결과" in web_context:
+            # URL 목록이 없지만 웹 검색은 수행된 경우
+            final_md += "---\n\n## 📚 참고 자료\n\n"
+            final_md += "> 본 기획서는 웹 검색을 통해 수집한 최신 정보를 반영하였습니다.\n\n"
+
         new_state = update_state(new_state, final_output=final_md)
 
     return _update_step_history(
