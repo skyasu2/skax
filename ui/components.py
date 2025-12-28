@@ -126,3 +126,50 @@ def render_error_state(error_message: str):
              st.session_state.generated_plan = None
              st.session_state.input_key += 1
              st.rerun()
+
+
+def render_option_selector(current_state):
+    """
+    옵션 선택 UI 렌더링 (휴먼 인터럽트)
+    
+    Pydantic 스키마(OptionChoice) 기반의 옵션 목록을 렌더링하고,
+    사용자 선택을 처리합니다.
+    """
+    if not current_state:
+        return
+
+    # Pydantic 모델 or Dict 처리
+    options = getattr(current_state, "options", []) or current_state.get("options", [])
+    if not options:
+        return
+
+    cols = st.columns(len(options))
+    for i, opt in enumerate(options):
+        # Pydantic model or dict
+        title = getattr(opt, "title", opt.get("title", ""))
+        description = getattr(opt, "description", opt.get("description", ""))
+        
+        with cols[i]:
+            if st.button(f"{title}", key=f"opt_{i}", use_container_width=True, help=description):
+                # 선택 처리 로직
+                st.session_state.chat_history.append({
+                    "role": "user", "content": f"'{title}' 선택", "type": "text"
+                })
+                
+                # 입력 구성
+                original_input = getattr(current_state, "user_input", current_state.get("user_input", ""))
+                new_input = f"{original_input}\n\n[선택: {title} - {description}]"
+                
+                # 상태 업데이트 및 재실행 준비
+                st.session_state.current_state = None
+                st.session_state.pending_input = new_input
+                st.rerun()
+
+    st.markdown("""
+    <div style="display: flex; align-items: center; margin: 1.5rem 0 1rem 0;">
+        <div style="flex: 1; height: 1px; background: #ddd;"></div>
+        <span style="padding: 0 1rem; color: #888; font-size: 0.85rem;">또는 직접 입력</span>
+        <div style="flex: 1; height: 1px; background: #ddd;"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption("⌨️ 위 옵션 외에 다른 의견이 있다면 아래 입력창에 자유롭게 작성하세요")

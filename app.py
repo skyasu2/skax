@@ -27,7 +27,8 @@ from ui import (
     show_history_dialog,
     render_dev_tools,
     render_refinement_ui,
-    render_error_state  # [NEW]
+    render_error_state,
+    render_option_selector  # [NEW]
 )
 
 # =============================================================================
@@ -270,33 +271,11 @@ def render_main():
     # =========================================================================
     # 옵션 선택 UI (need_more_info 상태일 때)
     # =========================================================================
+    # =========================================================================
+    # 옵션 선택 UI (need_more_info 상태일 때)
+    # =========================================================================
     if st.session_state.current_state and st.session_state.current_state.get("need_more_info"):
-        options = st.session_state.current_state.get("options", [])
-
-        if options:
-            cols = st.columns(len(options))
-            for i, opt in enumerate(options):
-                title = opt.get("title", "")
-                description = opt.get("description", "")
-                with cols[i]:
-                    if st.button(f"{title}", key=f"opt_{i}", use_container_width=True, help=description):
-                        st.session_state.chat_history.append({
-                            "role": "user", "content": f"'{title}' 선택", "type": "text"
-                        })
-                        original_input = st.session_state.current_state.get("user_input", "")
-                        new_input = f"{original_input}\n\n[선택: {title} - {description}]"
-                        st.session_state.current_state = None
-                        st.session_state.pending_input = new_input
-                        st.rerun()
-
-            st.markdown("""
-            <div style="display: flex; align-items: center; margin: 1.5rem 0 1rem 0;">
-                <div style="flex: 1; height: 1px; background: #ddd;"></div>
-                <span style="padding: 0 1rem; color: #888; font-size: 0.85rem;">또는 직접 입력</span>
-                <div style="flex: 1; height: 1px; background: #ddd;"></div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.caption("⌨️ 위 옵션 외에 다른 의견이 있다면 아래 입력창에 자유롭게 작성하세요")
+        render_option_selector(st.session_state.current_state)
 
     # =========================================================================
     # 기획서 결과 표시
