@@ -129,18 +129,53 @@ def get_qa_app():
 
 def run_context_subgraph(state: PlanCraftState) -> PlanCraftState:
     """
-    Context Sub-graph 실행 래퍼
+    Context Sub-graph 최적화 실행 (Async Parallel Wrapper)
     
-    메인 Graph에서 단일 노드로 호출됩니다.
-    내부적으로 RAG + 웹 검색을 순차 실행합니다.
+    RAG 검색과 웹 검색을 병렬로 실행하여 응답 속도를 단축합니다.
+    Streamlit 동기 환경 호환을 위해 내부적으로 asyncio.run을 사용합니다.
     """
-    app = get_context_app()
-    result = app.invoke(state)
+    import asyncio
+    from graph.workflow import retrieve_context, fetch_web_context
+
+    async def _run_parallel():
+        # 병렬 실행 (Thread Pool)
+        task_rag = asyncio.to_thread(retrieve_context, state)
+        task_web = asyncio.to_thread(fetch_web_context, state)
+        
+        # 두 작업이 모두 완료될 때까지 대기
+        res_rag, res_web = await asyncio.gather(task_rag, task_web)
+        
+        return res_rag, res_web
+
+    # 비동기 실행
+    res_rag, res_web = asyncio.run(_run_parallel())
     
-    if hasattr(result, "model_copy"):
-        return result
-    # dict인 경우 PlanCraftState로 변환
-    return state.model_copy(update=result)
+    # -------------------------------------------------------------------------
+    # 결과 병합 (State Merge Strategy)
+    # -------------------------------------------------------------------------
+    
+    # 1. 실행 이력 병합
+    base_len = len(state.step_history)
+    new_rag_hist = res_rag.step_history[base_len:]
+    new_web_hist = res_web.step_history[base_len:]
+    
+    merged_history = list(state.step_history) + new_rag_hist + new_web_hist
+    
+    # 2. 에러 병합
+    combined_error = res_rag.error or res_web.error or None
+    
+    # 3. 컨텍스트 병합
+    updates = {
+        "rag_context": res_rag.rag_context,
+        "web_context": res_web.web_context,
+        "web_urls": res_web.web_urls,
+        "step_history": merged_history,
+        "error": combined_error,
+        "step_status": "FAILED" if combined_error else state.step_status,
+        "current_step": "context_gathering"
+    }
+    
+    return state.model_copy(update=updates)
 
 
 def run_generation_subgraph(state: PlanCraftState) -> PlanCraftState:

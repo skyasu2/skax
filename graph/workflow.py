@@ -550,8 +550,13 @@ def create_workflow() -> StateGraph:
     workflow = StateGraph(PlanCraftState)
 
     # 노드 등록 (래퍼 함수 사용)
-    workflow.add_node("retrieve", retrieve_context)
-    workflow.add_node("fetch_web", fetch_web_context)
+    # [UPDATE] 컨텍스트 수집 단계 병렬화 (Sub-graph Node)
+    from graph.subgraphs import run_context_subgraph
+    workflow.add_node("context_gathering", run_context_subgraph)
+    
+    # workflow.add_node("retrieve", retrieve_context)  # [REMOVED]
+    # workflow.add_node("fetch_web", fetch_web_context) # [REMOVED]
+    
     workflow.add_node("analyze", run_analyzer_node)
     
     # [NEW] 분기 처리용 노드 등록
@@ -565,9 +570,11 @@ def create_workflow() -> StateGraph:
     workflow.add_node("format", run_formatter_node)
 
     # 엣지 정의
-    workflow.set_entry_point("retrieve")
-    workflow.add_edge("retrieve", "fetch_web")
-    workflow.add_edge("fetch_web", "analyze")
+    # [UPDATE] 병렬 컨텍스트 수집 노드로 진입
+    workflow.set_entry_point("context_gathering")
+    workflow.add_edge("context_gathering", "analyze")
+    # workflow.add_edge("retrieve", "fetch_web") # [REMOVED]
+    # workflow.add_edge("fetch_web", "analyze") # [REMOVED]
 
     # [UPDATE] 조건부 분기 개선 (명시적 노드로 라우팅)
     workflow.add_conditional_edges(
