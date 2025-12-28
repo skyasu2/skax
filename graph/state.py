@@ -28,6 +28,7 @@ class PlanCraftInput(TypedDict):
     user_input: str
     file_content: Optional[str]
     refine_count: int
+    retry_count: int
     previous_plan: Optional[str]
     thread_id: str
 

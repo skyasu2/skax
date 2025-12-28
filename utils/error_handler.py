@@ -7,6 +7,7 @@ Error Handler Utility
 
 import functools
 import traceback
+from datetime import datetime
 from typing import Callable, Any
 from graph.state import PlanCraftState
 
@@ -28,12 +29,23 @@ def handle_node_error(func: Callable) -> Callable:
             tb = traceback.format_exc()
             print(f"[ERROR] Node '{func.__name__}' Failed: {error_msg}\n{tb}")
             
+            # 실패 이력 생성
+            current_history = getattr(state, "step_history", []) or []
+            fail_record = {
+                "step": func.__name__,
+                "status": "FAILED",
+                "summary": f"Error: {error_msg[:50]}...",
+                "error": error_msg,
+                "timestamp": datetime.now().isoformat()
+            }
+            
             # 에러 상태 업데이트 (Immutable Copy)
             updates = {
                 "error": error_msg,
                 "error_message": error_msg,
                 "step_status": "FAILED",
-                "last_error": error_msg  # 이력용
+                "last_error": error_msg,
+                "step_history": current_history + [fail_record]
             }
             
             # Pydantic 모델의 model_copy 사용
