@@ -407,7 +407,7 @@ def show_history_dialog():
 @st.dialog("🛠️ Dev Tools", width="large")
 def render_dev_tools():
     """개발자 도구 (모달)"""
-    tab_test, tab_graph, tab_history = st.tabs(["🧪 Agent Unit Test", "📊 Workflow Graph", "🕰️ State History"])
+    tab_test, tab_graph, tab_history, tab_schema = st.tabs(["🧪 Agent Unit Test", "📊 Workflow Graph", "🕰️ State History", "📐 Schema Viewer"])
     
     with tab_test:
         st.markdown("### Agent 단위 테스트")
@@ -506,31 +506,121 @@ def render_dev_tools():
             st.warning(f"Graph Visualization unavailable: {e}")
 
     with tab_history:
-        st.subheader("Time-Travel Debugger")
+        st.subheader("🕰️ Time-Travel Debugger")
         st.info(f"Current Thread ID: `{st.session_state.get('thread_id', 'unknown')}`")
         
-        if st.button("🔄 Refresh History", key="btn_refresh_hist"):
+        col_refresh, col_clear = st.columns([1, 1])
+        with col_refresh:
+            refresh_clicked = st.button("🔄 Refresh History", key="btn_refresh_hist", use_container_width=True)
+        with col_clear:
+            if st.button("🗑️ Clear History", key="btn_clear_hist", use_container_width=True):
+                st.session_state.pop("history_cache", None)
+                st.success("히스토리 캐시가 초기화되었습니다.")
+        
+        if refresh_clicked:
             try:
                 from graph.workflow import app as workflow_app
                 if "thread_id" in st.session_state:
                     config = {"configurable": {"thread_id": st.session_state.thread_id}}
                     history = list(workflow_app.get_state_history(config))
-                    
-                    if not history:
-                        st.info("아직 저장된 실행 이력이 없습니다.")
-                    else:
-                        for i, h in enumerate(history):
-                            ts = h.created_at[:19] if h.created_at else "Unknown"
-                            with st.expander(f"#{i+1} Snapshot ({ts})", expanded=(i==0)):
-                                st.write(f"**Next Step:** `{h.next}`")
-                                st.json(h.values)
+                    st.session_state.history_cache = history  # 캐시 저장
                 else:
                     st.warning("Thread ID가 초기화되지 않았습니다.")
+                    history = []
             except Exception as e:
                 st.error(f"히스토리 조회 실패: {str(e)}")
+                history = []
+        else:
+            history = st.session_state.get("history_cache", [])
+        
+        if not history:
+            st.info("🔍 'Refresh History' 버튼을 클릭하여 실행 이력을 불러오세요.")
+        else:
+            st.success(f"총 {len(history)}개의 스냅샷이 있습니다.")
+            
+            for i, h in enumerate(history):
+                ts = str(h.created_at)[:19] if h.created_at else "Unknown"
+                next_step = h.next[0] if h.next else "END"
+                
+                with st.expander(f"#{i+1} | {next_step.upper()} | {ts}", expanded=(i==0)):
+                    col_info, col_action = st.columns([3, 1])
+                    
+                    with col_info:
+                        st.write(f"**Next Step:** `{next_step}`")
+                        st.write(f"**Checkpoint ID:** `{h.config.get('configurable', {}).get('checkpoint_id', 'N/A')}`")
+                    
+                    with col_action:
+                        # 롤백 버튼 (현재 스냅샷이 아닌 경우에만)
+                        if i > 0:
+                            if st.button(f"⏪ 롤백", key=f"rollback_{i}", use_container_width=True):
+                                try:
+                                    from graph.workflow import app as workflow_app
+                                    # 해당 checkpoint로 상태 업데이트
+                                    workflow_app.update_state(
+                                        h.config,
+                                        h.values,
+                                        as_node=h.next[0] if h.next else None
+                                    )
+                                    # 세션 상태 동기화
+                                    st.session_state.current_state = h.values
+                                    if h.values.get("final_output"):
+                                        st.session_state.generated_plan = h.values.get("final_output")
+                                    st.success(f"✅ #{i+1} 시점으로 롤백되었습니다!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"롤백 실패: {str(e)}")
+                        else:
+                            st.caption("(현재)")
+                    
+                    # 상태 값 보기
+                    with st.container():
+                        st.json(h.values)
+    
+    # [NEW] Schema Viewer 탭
+    with tab_schema:
+        st.subheader("📐 Pydantic Schema Viewer")
+        st.info("State 및 Output 스키마를 JSON Schema 형태로 확인할 수 있습니다. 동적 폼 생성의 기반 데이터입니다.")
+        
+        schema_type = st.selectbox(
+            "스키마 선택",
+            ["PlanCraftState", "AnalysisResult", "StructureResult", "DraftResult", "JudgeResult"],
+            key="schema_select"
+        )
+        
+        try:
+            if schema_type == "PlanCraftState":
+                from graph.state import PlanCraftState
+                schema = PlanCraftState.model_json_schema()
+            elif schema_type == "AnalysisResult":
+                from utils.schemas import AnalysisResult
+                schema = AnalysisResult.model_json_schema()
+            elif schema_type == "StructureResult":
+                from utils.schemas import StructureResult
+                schema = StructureResult.model_json_schema()
+            elif schema_type == "DraftResult":
+                from utils.schemas import DraftResult
+                schema = DraftResult.model_json_schema()
+            elif schema_type == "JudgeResult":
+                from utils.schemas import JudgeResult
+                schema = JudgeResult.model_json_schema()
+            else:
+                schema = {}
+            
+            st.json(schema)
+            
+            # 필드 요약
+            if "properties" in schema:
+                st.markdown("#### 📋 필드 요약")
+                for field_name, field_info in schema.get("properties", {}).items():
+                    field_type = field_info.get("type", field_info.get("anyOf", "complex"))
+                    description = field_info.get("description", "")
+                    st.markdown(f"- **`{field_name}`** ({field_type}): {description}")
+                    
+        except Exception as e:
+            st.error(f"스키마 로드 실패: {str(e)}")
     
     st.markdown("---")
-    st.caption("Pydantic State Architecture v2.0")
+    st.caption("Pydantic State Architecture v2.0 | Time-Travel Enabled")
 
 
 def render_refinement_ui():
