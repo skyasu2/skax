@@ -70,25 +70,40 @@ def _generate_search_query_with_llm(user_input: str) -> str:
     try:
         llm = get_llm(model_type="gpt-4o-mini", temperature=0.3)
         
+        # [수정] 입력이 너무 길면 가장 최근 내용(뒤쪽) 위주로 자름 (컨텍스트 오염 방지)
+        # 이전 턴의 전체 대화나 로그가 넘어올 경우를 대비해 뒷부분(최신 요청)을 우선합니다.
+        if len(user_input) > 2000:
+            truncated_input = user_input[-2000:]
+        else:
+            truncated_input = user_input
+
         system_prompt = (
-            "당신은 웹 검색 쿼리 생성기입니다. 사용자의 입력을 분석하여 "
-            "시장 조사, 트렌드 파악, 사례 연구에 적합한 '핵심 검색 키워드'만 추출하세요.\n"
-            "- 불필요한 조사, 서술어, 인사말, 구분선(--- [추가 요청] ---) 등은 모두 제거합니다.\n"
-            "- 기획 의도에 맞는 전문적인 키워드 조합으로 변환합니다.\n"
-            "- 출력은 오직 검색 쿼리 문자열 하나만 반환합니다. (따옴표 없이)"
+            "당신은 전문적인 '웹 검색 키워드 추출기'입니다. 주어진 텍스트에서 기획서 작성에 필요한 핵심 주제를 파악하여 검색 쿼리를 생성하세요.\n\n"
+            "## 지침\n"
+            "1. 사용자의 **가장 최근 요구사항**에 집중하세요. (텍스트 중간의 '---' 구분선 등이 있다면 그 뒤의 내용을 우선함)\n"
+            "2. '기획서', '작성', '도와줘', '추천해줘' 같은 **일반적인 명령어는 모두 제거**하세요.\n"
+            "3. 오직 **[핵심 주제] + [시장 규모/트렌드/통계/사례]** 형태의 구체적인 키워드 조합으로 변환하세요.\n"
+            "4. 주제를 파악할 수 없거나 무의미한 입력(단순 인사, 부호 등)이면 'NO_QUERY'라고만 답하세요.\n\n"
+            "## 예시\n"
+            "- 입력: '은퇴한 노부부를 위한 실버타운 플랫폼 기획해줘'\n"
+            "- 출력: 프리미엄 실버타운 매칭 플랫폼 시장 규모 트렌드\n\n"
+            "- 입력: '유튜브 숏폼 자동 편집기 만들어줘'\n"
+            "- 출력: AI 숏폼 자동 편집 SaaS 시장 분석 경쟁사\n\n"
+            "- 입력: 'ㅋㅋㅋ 안녕'\n"
+            "- 출력: NO_QUERY"
         )
         
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_input}
+            {"role": "user", "content": truncated_input}
         ]
         
         response = llm.invoke(messages)
         query = response.content.strip()
         
-        # 쿼리가 유효하지 않으면 Fallback
-        if not query or len(query) < 2:
-            return _generate_search_query_regex(user_input)
+        # 쿼리가 유효하지 않으면 빈 문자열 반환 (검색 스킵 유도)
+        if query == "NO_QUERY" or not query or len(query) < 2:
+            return ""
             
         # 최신 연도 보정
         current_year = datetime.now().year

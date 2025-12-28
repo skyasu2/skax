@@ -52,7 +52,9 @@ class WriterAgent:
         base_llm = get_llm(model_type=model_type, temperature=0.7)
 
         # with_structured_output: LangChain Best Practice
-        self.llm = base_llm.with_structured_output(DraftResult)
+        # with_structured_output: LangChain Best Practice
+        # Azure OpenAI 구형 모델/API 버전 호환성을 위해 function_calling 모드 강제
+        self.llm = base_llm.with_structured_output(DraftResult, method="function_calling")
 
     def run(self, state: PlanCraftState) -> PlanCraftState:
         """
