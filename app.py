@@ -382,7 +382,7 @@ def render_main():
                  if st.button("기획서 보기", type="primary", use_container_width=True):
                      show_plan_dialog()
              with col_act2:
-                 if st.button("🔍 분석 내용 확인", use_container_width=True):
+                 if st.button("🔍 AI 분석 데이터 (설계도)", use_container_width=True):
                      show_analysis_dialog()
 
              # 실행 과정 시각화 (메인 통합)
