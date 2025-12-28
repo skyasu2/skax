@@ -9,6 +9,19 @@ class FileLogger:
     def __init__(self):
         if not os.path.exists(LOG_DIR):
             os.makedirs(LOG_DIR)
+        else:
+            # [수정] 기존 로그 파일 삭제 (Clean Start)
+            # 실행 시마다 이전 로그를 정리하여 디스크 공간을 확보하고 혼란을 방지합니다.
+            import shutil
+            for filename in os.listdir(LOG_DIR):
+                file_path = os.path.join(LOG_DIR, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    print(f"Failed to delete {file_path}. Reason: {e}")
         
         # 실행 시마다 새로운 로그 파일 생성 (시간별)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

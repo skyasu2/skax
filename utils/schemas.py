@@ -73,6 +73,13 @@ class AnalysisResult(BaseModel):
     option_question: str = Field(default="", description="옵션 선택을 위한 질문")
     is_general_query: bool = Field(default=False, description="일반 질문 여부 (기획서 생성이 아님)")
     general_answer: Optional[str] = Field(default=None, description="일반 질문에 대한 직접 답변")
+    
+    # [추가] 문서 유형 분류
+    doc_type: str = Field(
+        default="web_app_plan", 
+        description="생성할 문서 유형 (web_app_plan, business_plan 중 하나)"
+    )
+    
     need_more_info: bool = Field(default=False, description="추가 정보 필요 여부")
 
     @model_validator(mode='after')
