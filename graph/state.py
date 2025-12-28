@@ -71,6 +71,9 @@ class PlanCraftState(BaseModel):
     # [NEW] 시계열 기준점 (Time Context)
     execution_time: Optional[str] = Field(default=None, description="워크플로우 실행 시각 (모든 에이전트의 시계열 기준)")
 
+    # [NEW] 에러 처리 및 재시도 (Error Handling & Retry)
+    retry_count: int = Field(default=0, description="재시도 횟수")
+
     @model_validator(mode='after')
     def sync_analysis_fields(self) -> Self:
         """
@@ -78,7 +81,7 @@ class PlanCraftState(BaseModel):
         
         - analysis.need_more_info -> self.need_more_info 동기화
         - analysis.options -> self.options 동기화
-        - error 발생 시 current_step 보정
+        - error 발생 시 current_step 보정 및 step_status 업데이트
         """
         # analysis 객체가 있으면 need_more_info, options 동기화
         if self.analysis is not None:
@@ -95,9 +98,12 @@ class PlanCraftState(BaseModel):
                 if not self.option_question:
                     self.option_question = self.analysis.option_question
         
-        # error가 있으면 current_step에 "_error" suffix 추가 (이미 없는 경우)
-        if self.error and not self.current_step.endswith("_error"):
-            self.current_step = f"{self.current_step}_error"
+        # error가 있으면 current_step에 "_error" suffix 추가 및 status FAILED 처리
+        if self.error:
+            if not self.current_step.endswith("_error"):
+                self.current_step = f"{self.current_step}_error"
+            if self.step_status != "FAILED":
+                self.step_status = "FAILED"
         
         return self
 

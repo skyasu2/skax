@@ -26,7 +26,8 @@ from ui import (
     show_analysis_dialog,
     show_history_dialog,
     render_dev_tools,
-    render_refinement_ui
+    render_refinement_ui,
+    render_error_state  # [NEW]
 )
 
 # =============================================================================
@@ -253,6 +254,18 @@ def render_main():
     # =========================================================================
     for msg in st.session_state.chat_history:
         render_chat_message(msg["role"], msg["content"], msg.get("type", "text"))
+        
+    # [NEW] 에러 발생 시 Fallback UI 표시
+    if st.session_state.current_state:
+        # Pydantic 모델 안전 접근 (dict or model)
+        err = None
+        if isinstance(st.session_state.current_state, dict):
+            err = st.session_state.current_state.get("error")
+        else:
+            err = getattr(st.session_state.current_state, "error", None)
+            
+        if err:
+            render_error_state(err)
 
     # =========================================================================
     # 옵션 선택 UI (need_more_info 상태일 때)
@@ -438,6 +451,15 @@ def render_main():
                     st.session_state.chat_history.append({"role": "assistant", "content": ans, "type": "text"})
 
             except Exception as e:
+                # [NEW] State에도 에러 기록 (Fallback UI용)
+                if st.session_state.current_state:
+                     # Pydantic 모델인 경우
+                     if hasattr(st.session_state.current_state, "model_copy"):
+                         st.session_state.current_state = st.session_state.current_state.model_copy(update={
+                             "error": str(e),
+                             "step_status": "FAILED"
+                         })
+                
                 st.session_state.chat_history.append({
                     "role": "assistant", "content": f"❌ 오류 발생: {str(e)}", "type": "error"
                 })

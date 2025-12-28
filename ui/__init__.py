@@ -7,7 +7,8 @@ PlanCraft Agent의 UI 컴포넌트들을 모듈화합니다.
 from ui.components import (
     render_progress_steps,
     render_timeline,
-    render_chat_message
+    render_chat_message,
+    render_error_state  # [NEW]
 )
 
 from ui.dialogs import (
@@ -24,6 +25,7 @@ __all__ = [
     "render_progress_steps",
     "render_timeline", 
     "render_chat_message",
+    "render_error_state",  # [NEW]
     # Dialogs
     "show_plan_dialog",
     "show_analysis_dialog",

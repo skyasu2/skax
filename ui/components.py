@@ -92,3 +92,37 @@ def render_chat_message(role: str, content: str, msg_type: str = "text"):
     else:  # assistant
         with st.chat_message("assistant"):
             st.markdown(content)
+
+
+def render_error_state(error_message: str):
+    """에러 상태 및 재시도 UI 렌더링"""
+    st.markdown("---")
+    st.error(f"❌ 오류가 발생했습니다:\n\n{error_message}")
+    
+    col_retry, col_reset = st.columns([1, 1])
+    with col_retry:
+        if st.button("🔄 다시 시도", key="btn_retry_error", use_container_width=True):
+            # 재시도 로직: 에러 클리어 후 rerun
+            # (실제 재실행은 pending_input 처리를 다시 하거나, LangGraph 상태 복구가 필요함)
+            # 여기서는 간단히 에러 상태만 지우고 pending_input을 다시 트리거하는 방식 고려
+            
+            if st.session_state.current_state:
+                # 에러 플래그 해제
+                # Pydantic 모델이므로 불변성 고려해야 하나, session_state 내 객체는 직접 수정 가능하다고 가정
+                # 또는 dict 형태로 관리될 경우
+                if hasattr(st.session_state.current_state, "error"):
+                    st.session_state.current_state.error = None
+                if hasattr(st.session_state.current_state, "step_status"):
+                    st.session_state.current_state.step_status = "RUNNING"
+                if hasattr(st.session_state.current_state, "retry_count"):
+                     st.session_state.current_state.retry_count += 1
+            
+            st.rerun()
+            
+    with col_reset:
+        if st.button("🗑️ 대화 초기화", key="btn_reset_error", use_container_width=True):
+             st.session_state.chat_history = []
+             st.session_state.current_state = None
+             st.session_state.generated_plan = None
+             st.session_state.input_key += 1
+             st.rerun()
