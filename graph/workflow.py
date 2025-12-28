@@ -438,6 +438,54 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
 
 
 # =============================================================================
+# 휴먼 인터럽트 노드 (option_pause_node)
+# =============================================================================
+
+try:
+    from langgraph.types import interrupt, Command
+except ImportError:
+    # LangGraph 호환성 Mock
+    def interrupt(value): return None
+    class Command:
+        def __init__(self, update=None, goto=None):
+            self.update = update
+            self.goto = goto
+
+
+def option_pause_node(state: PlanCraftState) -> Command:
+    """
+    휴먼 인터럽트 처리 노드 (LangGraph 공식 패턴 적용)
+    
+    이 노드는 실행을 일시 중단하고 사용자 입력을 기다립니다.
+    """
+    from graph.interrupt_utils import create_option_interrupt, handle_user_response
+    
+    # 1. 인터럽트 페이로드 생성
+    payload = create_option_interrupt(state)
+    payload["type"] = "option_selector"
+    
+    # 2. 실행 중단 및 사용자 응답 대기
+    try:
+        user_response = interrupt(payload)
+    except Exception:
+        user_response = None
+    
+    # 3. 사용자 응답 처리 (Resume 후)
+    if user_response:
+        new_state = handle_user_response(state, user_response)
+        
+        # 4. 다음 단계로 이동 (Command 반환)
+        # analyze 단계로 돌아가서 새로운 정보를 바탕으로 다시 분석
+        return Command(
+            update=new_state,
+            goto="analyze" 
+        )
+    
+    # interrupt가 지원되지 않는 경우 (Fallback)
+    return Command(goto="analyze")
+
+
+# =============================================================================
 # 워크플로우 생성
 # =============================================================================
 
