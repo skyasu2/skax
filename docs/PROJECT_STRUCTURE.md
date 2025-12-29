@@ -250,15 +250,13 @@ plancraft/
 │   ├── test_time_travel.py        # 타임트래블 테스트 (4.6KB)
 │   └── test_mcp.py                # MCP 테스트 (1.5KB)
 │
-├── 📂 docs/                       # 📖 문서 (14 files)
+├── 📂 docs/                       # 📖 문서
 │   ├── PROJECT_STRUCTURE.md       # 프로젝트 구조 (이 문서)
-│   ├── architecture.md            # 시스템 아키텍처
-│   ├── architecture.mermaid       # 아키텍처 다이어그램
-│   ├── agent-design.md            # 에이전트 설계
-│   ├── api-spec.md                # API 명세
-│   ├── web-search-design.md       # 웹 검색 설계
-│   ├── DEPLOYMENT.md              # Docker 배포 가이드
-│   └── deployment-guide.md        # 전체 배포 가이드
+│   ├── FINAL_PROJECT_REPORT.md    # 최종 과제 리포트
+│   ├── deployment-guide.md        # 배포 가이드
+│   ├── SYSTEM_DIAGRAM.md          # 시스템 다이어그램
+│   ├── MULTI_AGENT_ANALYSIS.md    # 멀티 에이전트 분석
+│   ├── 📂 guidelines/             # 개발 가이드 (Architecture Audit 등)
 │
 ├── 📂 logs/                       # 📋 실행 로그 (Git 제외)
 └── 📂 outputs/                    # 📤 출력 파일 (Git 제외)
@@ -472,9 +470,8 @@ streamlit run app.py
 
 ## 📚 관련 문서
 
-- [시스템 아키텍처](architecture.md)
-- [에이전트 설계](agent-design.md)
-- [API 명세](api-spec.md)
-- [웹 검색 설계](web-search-design.md)
+- [최종 과제 리포트](FINAL_PROJECT_REPORT.md)
+- [시스템 다이어그램](SYSTEM_DIAGRAM.md)
+- [아키텍처 리뷰](guidelines/ARCHITECTURE_REVIEW.md)
 - [배포 가이드](deployment-guide.md)
-- [Docker 배포](DEPLOYMENT.md)
+- [멀티 에이전트 분석](MULTI_AGENT_ANALYSIS.md)
