@@ -61,7 +61,9 @@ Best Practice 적용:
 
 from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
-from langgraph.checkpoint.memory import MemorySaver  # 체크포인터
+from langgraph.graph import StateGraph, END
+from langgraph.types import interrupt, Command
+from utils.checkpointer import get_checkpointer  # [NEW] Factory 패턴
 from langchain_core.runnables import RunnableBranch  # [NEW] 분기 패턴
 from graph.state import PlanCraftState, MIN_REMAINING_STEPS, MAX_REFINE_LOOPS
 from agents import analyzer, structurer, writer, reviewer, refiner, formatter
@@ -561,14 +563,24 @@ def option_pause_node(state: PlanCraftState) -> Command:
     payload["type"] = "option_selector"
     
     # =========================================================================
-    # [INTERRUPT] 실행 중단 - 사용자 응답 대기
+    # [INTERRUPT] 실행 중단 - 사용자 응답 대기 (무한 루프로 검증)
     # =========================================================================
-    # interrupt() 호출 시:
-    # - 그래프 실행이 Pause됨
-    # - checkpointer가 현재 상태 저장
-    # - UI에서 사용자 입력 받음
-    # - Command(resume=user_input)으로 Resume 시 이 지점부터 재개
-    user_response = interrupt(payload)
+    user_response = None
+    
+    # [NEW] Input Validation Loop - Code Reviewer's Advice
+    while True:
+        # interrupt() 호출 시 실행 중단 -> Resume 시 값 반환
+        user_response = interrupt(payload)
+        
+        # 유효성 검사: 값이 존재해야 함 (None, 빈 문자열 등 방지)
+        if user_response:
+            print(f"[Human-Node] Valid Input Received: {user_response}")
+            break
+            
+        print("[Human-Node] Invalid Input (Empty). Re-interrupting...")
+        # 유효하지 않으면 루프가 돌면서 다시 interrupt(payload) 호출
+        # (UI에서는 다시 입력창이 뜸)
+    
     
     # =========================================================================
     # [AFTER INTERRUPT] Resume 후 실행되는 코드
@@ -765,8 +777,9 @@ def create_subgraph_workflow() -> StateGraph:
 
 def compile_workflow(use_subgraphs: bool = False):
     """워크플로우 컴파일"""
-    # [NEW] 인메모리 체크포인터 사용 (Time-Travel 가능)
-    checkpointer = MemorySaver()
+    # 체크포인터 설정 (Factory 사용)
+    from utils.checkpointer import get_checkpointer
+    checkpointer = get_checkpointer()
     
     if use_subgraphs:
         return create_subgraph_workflow().compile(checkpointer=checkpointer)
