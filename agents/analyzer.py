@@ -95,6 +95,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
                 analysis_dict["option_question"] = None
                 analysis_dict["options"] = []
 
+        # [Rule Override 2] (Safety Net)
+        # 옵션 리스트가 비어있지 않다면, 이는 LLM이 추가 질문을 의도한 것이므로 무조건 need_more_info=True여야 함.
+        # (LLM이 실수로 need_more_info: false를 반환하여 UI에 질문이 안 뜨는 경우 방지)
+        if analysis_dict.get("options") and len(analysis_dict["options"]) > 0:
+             analysis_dict["need_more_info"] = True
+
         updates = {
             "analysis": analysis_dict,
             "need_more_info": analysis_dict.get("need_more_info", False),
