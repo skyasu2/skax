@@ -57,11 +57,40 @@ def run(state: PlanCraftState) -> PlanCraftState:
     refine_count = state.get("refine_count", 0)
     previous_plan = state.get("previous_plan")
     
+    # 2. Review Context (Refine 모드일 때 필수)
+    review_data = state.get("review")
+    review_feedback_msg = ""
+    
+    if refine_count > 0 and review_data:
+        # dict 또는 객체 처리
+        if isinstance(review_data, dict):
+            verdict = review_data.get("verdict", "")
+            feedback_summary = review_data.get("feedback_summary", "")
+            critical_issues = review_data.get("critical_issues", [])
+            action_items = review_data.get("action_items", [])
+        else:
+            verdict = getattr(review_data, "verdict", "")
+            feedback_summary = getattr(review_data, "feedback_summary", "")
+            critical_issues = getattr(review_data, "critical_issues", [])
+            action_items = getattr(review_data, "action_items", [])
+
+        review_feedback_msg = f"""
+=====================================================================
+🚨 [REVISION REQUIRED] 이전 버전에 대한 심사 피드백 (반드시 반영할 것) 🚨
+판정: {verdict}
+지적 사항: {feedback_summary}
+치명적 문제: {', '.join(critical_issues) if critical_issues else '없음'}
+Action Items (실행 지침):
+{chr(10).join([f'- {item}' for item in action_items])}
+=====================================================================
+"""
+    
     if refine_count > 0 and previous_plan:
-        previous_plan_context = f"\n<previous_version>\n{previous_plan}\n</previous_version>\n\n위 이전 버전을 참고하여 더 나은 내용으로 개선하세요.\n"
+        previous_plan_context = f"\n<previous_version>\n{previous_plan}\n</previous_version>\n\n위 이전 버전과 심사 피드백을 참고하여 내용을 획기적으로 개선하세요.\n"
 
     # [NEW] doc_type에 따라 프롬프트 선택
     system_prompt, user_prompt_template = _get_prompts_by_doc_type(state)
+
 
     # =========================================================================
     # [NEW] 실시간 웹 검색 (수치 및 근거 보강)
@@ -117,9 +146,14 @@ def run(state: PlanCraftState) -> PlanCraftState:
         print(f"[ERROR] Prompt Formatting Failed: {e}")
         return update_state(state, error=f"프롬프트 포맷 오류: {str(e)}")
 
-    # 이전 버전 컨텍스트 추가
+    # 이전 버전 컨텍스트 및 피드백 추가 (최우선 순위)
+    prepend_msg = ""
+    if review_feedback_msg:
+        prepend_msg += review_feedback_msg + "\n"
     if previous_plan_context:
-        formatted_prompt = previous_plan_context + "\n" + formatted_prompt
+         prepend_msg += previous_plan_context + "\n"
+         
+    formatted_prompt = prepend_msg + formatted_prompt
 
     # 시간 지시 추가 (일정/로드맵 정확성)
     formatted_prompt += get_time_instruction()
