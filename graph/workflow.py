@@ -599,6 +599,11 @@ def option_pause_node(state: PlanCraftState) -> Command:
     MAX_RETRIES = 5
     retry_count = 0
     
+    # [CRITICAL WARNING for Maintainers]
+    # interrupt() 호출 이전에는 절대 LLM 호출, DB 저장 등 Side Effect가 있는 코드를 배치하지 마십시오.
+    # 재개(Resume) 시 이 노드는 처음부터 다시 실행되므로, Side Effect가 중복 실행(Duplicate Execution)될 수 있습니다.
+    # (LangGraph Best Practice: Side Effect는 항상 interrupt 이후 혹은 별도 노드에서 처리)
+
     # [NEW] Input Validation Loop with Safety Limit
     while retry_count < MAX_RETRIES:
         # interrupt() 호출 시 실행 중단 -> Resume 시 값 반환
@@ -897,7 +902,7 @@ def run_plancraft(
         result = final_state.model_dump()
     elif isinstance(final_state, dict):
         result = final_state
-        
+
     # 인터럽트 정보 추가
     if interrupt_payload:
         result["__interrupt__"] = interrupt_payload
