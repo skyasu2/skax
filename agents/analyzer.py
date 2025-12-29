@@ -5,6 +5,7 @@ from datetime import datetime
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import AnalysisResult
+from utils.time_context import get_time_context, get_time_instruction
 from graph.state import PlanCraftState, update_state
 from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_USER_PROMPT
 
@@ -29,21 +30,18 @@ def run(state: PlanCraftState) -> PlanCraftState:
         context_parts.append(f"[기획서 작성 가이드]\n{rag_context}")
     context = "\n\n".join(context_parts) if context_parts else "없음"
     
-    # 3. 프롬프트 구성
-    current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    system_msg_content = (
-        f"Current System Time: {current_time_str}\n"
-        "NOTE: All analysis and reasoning MUST be based on this current time.\n\n"
-        f"{ANALYZER_SYSTEM_PROMPT}"
-    )
+    # 3. 프롬프트 구성 (시간 컨텍스트 주입)
+    system_msg_content = get_time_context() + ANALYZER_SYSTEM_PROMPT
+
+    user_msg_content = ANALYZER_USER_PROMPT.format(
+        user_input=user_input,
+        previous_plan=previous_plan if previous_plan else "없음",
+        context=context
+    ) + get_time_instruction()
 
     messages = [
         {"role": "system", "content": system_msg_content},
-        {"role": "user", "content": ANALYZER_USER_PROMPT.format(
-            user_input=user_input,
-            previous_plan=previous_plan if previous_plan else "없음",
-            context=context
-        )}
+        {"role": "user", "content": user_msg_content}
     ]
     
     # 4. LLM 호출

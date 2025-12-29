@@ -4,6 +4,7 @@ PlanCraft Agent - Structurer Agent
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import StructureResult
+from utils.time_context import get_time_context
 from graph.state import PlanCraftState, update_state
 from prompts.structurer_prompt import STRUCTURER_SYSTEM_PROMPT, STRUCTURER_USER_PROMPT
 
@@ -25,13 +26,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
     web_context = state.get("web_context", "")
     context = f"{rag_context}\n{web_context}".strip()
     
-    # Analysis 내용을 문자열로 변환하여 프롬프트에 주입
+    # Analysis 내용을 문자열로 변환
     analysis_str = str(analysis)
     
-    # 2. 프롬프트 구성
-    # 프롬프트 플레이스홀더: {analysis}, {context}
+    # 2. 프롬프트 구성 (시간 컨텍스트 주입)
     messages = [
-        {"role": "system", "content": STRUCTURER_SYSTEM_PROMPT},
+        {"role": "system", "content": get_time_context() + STRUCTURER_SYSTEM_PROMPT},
         {"role": "user", "content": STRUCTURER_USER_PROMPT.format(
             analysis=analysis_str,
             context=context if context else "없음"

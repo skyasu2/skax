@@ -4,6 +4,7 @@ PlanCraft Agent - Writer Agent
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import DraftResult
+from utils.time_context import get_time_context, get_time_instruction
 from graph.state import PlanCraftState, update_state
 from prompts.writer_prompt import WRITER_SYSTEM_PROMPT, WRITER_USER_PROMPT
 
@@ -32,9 +33,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
     if refine_count > 0 and previous_plan:
         previous_plan_context = f"\n<previous_version>\n{previous_plan}\n</previous_version>\n\n위 이전 버전을 참고하여 더 나은 내용으로 개선하세요.\n"
 
-    # 2. 프롬프트 구성
-    # WRITER_USER_PROMPT는 {user_input}, {structure}, {web_context}, {web_urls}, {context}를 요구함
-    
+    # 2. 프롬프트 구성 (시간 컨텍스트 주입)
     structure_str = str(structure)
     
     # Web URLs 포맷팅
@@ -51,17 +50,18 @@ def run(state: PlanCraftState) -> PlanCraftState:
             context=rag_context if rag_context else "없음"
         )
     except KeyError as e:
-        # 혹시라도 플레이스홀더 불일치 시 안전장치
         print(f"[ERROR] Prompt Formatting Failed: {e}")
-        # 최소한의 정보로 대체하거나 에러 리턴
         return update_state(state, error=f"프롬프트 포맷 오류: {str(e)}")
 
-    # 이전 버전 컨텍스트 추가 (프롬프트 상단에)
+    # 이전 버전 컨텍스트 추가
     if previous_plan_context:
         formatted_prompt = previous_plan_context + "\n" + formatted_prompt
 
+    # 시간 지시 추가 (일정/로드맵 정확성)
+    formatted_prompt += get_time_instruction()
+
     messages = [
-        {"role": "system", "content": WRITER_SYSTEM_PROMPT},
+        {"role": "system", "content": get_time_context() + WRITER_SYSTEM_PROMPT},
         {"role": "user", "content": formatted_prompt}
     ]
     
