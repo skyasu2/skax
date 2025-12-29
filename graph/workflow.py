@@ -475,35 +475,53 @@ except ImportError:
 
 def option_pause_node(state: PlanCraftState) -> Command:
     """
-    휴먼 인터럽트 처리 노드 (LangGraph 공식 패턴 적용)
+    휴먼 인터럽트 처리 노드 (LangGraph 공식 Best Practice 적용)
     
-    이 노드는 실행을 일시 중단하고 사용자 입력을 기다립니다.
+    LangGraph Human Interrupt 필수 요소:
+    1. interrupt() 함수로 Pause
+    2. Command(resume=...) 로 Resume
+    3. checkpointer로 상태 저장 (compile 시 설정됨)
+    4. thread_id로 세션 관리
+    5. interrupt 전에는 side effect 없음 (비효과적 코드만)
+    
+    주의사항:
+    - interrupt 전에 외부 API 호출, DB 쓰기 금지 (Resume 시 중복 실행됨)
+    - interrupt 이후에 side effect 배치
     """
     from graph.interrupt_utils import create_option_interrupt, handle_user_response
     
-    # 1. 인터럽트 페이로드 생성
+    # =========================================================================
+    # [BEFORE INTERRUPT] 비효과적 코드만 (side effect 없음)
+    # =========================================================================
+    # 1. 인터럽트 페이로드 생성 (순수 함수, 외부 호출 없음)
     payload = create_option_interrupt(state)
     payload["type"] = "option_selector"
     
-    # 2. 실행 중단 및 사용자 응답 대기
-    try:
-        user_response = interrupt(payload)
-    except Exception:
-        user_response = None
+    # =========================================================================
+    # [INTERRUPT] 실행 중단 - 사용자 응답 대기
+    # =========================================================================
+    # interrupt() 호출 시:
+    # - 그래프 실행이 Pause됨
+    # - checkpointer가 현재 상태 저장
+    # - UI에서 사용자 입력 받음
+    # - Command(resume=user_input)으로 Resume 시 이 지점부터 재개
+    user_response = interrupt(payload)
     
-    # 3. 사용자 응답 처리 (Resume 후)
-    if user_response:
-        new_state = handle_user_response(state, user_response)
-        
-        # 4. 다음 단계로 이동 (Command 반환)
-        # analyze 단계로 돌아가서 새로운 정보를 바탕으로 다시 분석
-        return Command(
-            update=new_state,
-            goto="analyze" 
-        )
+    # =========================================================================
+    # [AFTER INTERRUPT] Resume 후 실행되는 코드
+    # =========================================================================
+    # user_response는 Resume 시 Command(resume=...)로 전달된 값
     
-    # interrupt가 지원되지 않는 경우 (Fallback)
-    return Command(goto="analyze")
+    # 3. 사용자 응답으로 상태 업데이트
+    updated_state = handle_user_response(state, user_response)
+    
+    # 4. Command로 다음 노드 지정 및 상태 업데이트
+    # - update: 상태 변경 사항
+    # - goto: 다음 실행할 노드
+    return Command(
+        update=updated_state,
+        goto="analyze"  # 새 정보로 다시 분석
+    )
 
 
 # =============================================================================
