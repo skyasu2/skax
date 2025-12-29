@@ -80,6 +80,9 @@ def init_session_state():
         st.session_state.input_key = 0
     if "prefill_prompt" not in st.session_state:
         st.session_state.prefill_prompt = None
+    # [NEW] 알림 트리거 플래그
+    if "trigger_notification" not in st.session_state:
+        st.session_state.trigger_notification = False
 
 
 # =============================================================================
@@ -90,6 +93,13 @@ def render_main():
     # =========================================================================
     # 헤더
     # =========================================================================
+    
+    # [CHECK] 예약된 알림이 있으면 실행
+    if st.session_state.get("trigger_notification"):
+        from ui.components import trigger_browser_notification
+        trigger_browser_notification("PlanCraft 알림", "기획서 작성이 완료되었습니다! 📄")
+        st.session_state.trigger_notification = False
+
     col_title, col_menu = st.columns([6, 1])
 
     with col_title:
@@ -251,6 +261,9 @@ def render_main():
                         # C. 기획서 완성
                         st.session_state.generated_plan = generated_plan
                         st.session_state.chat_history.append({"role": "assistant", "content": "✅ 기획서가 완성되었습니다!", "type": "plan"})
+                        
+                        # [NEW] 알림 예약 (Rerun 후 실행됨)
+                        st.session_state.trigger_notification = True
                         
                         now_str = datetime.now().strftime("%H:%M:%S")
                         if not st.session_state.plan_history or st.session_state.plan_history[-1]['content'] != generated_plan:
