@@ -144,33 +144,6 @@ def should_refine_or_restart(state: PlanCraftState) -> str:
     verdict = review.get("verdict", "REVISE")
     restart_count = state.get("restart_count", 0)
     
-    analysis = state.get("analysis", {})
-    doc_type = "web_app_plan"
-    if isinstance(analysis, dict):
-        doc_type = analysis.get("doc_type", "web_app_plan")
-    elif hasattr(analysis, "doc_type"):
-        doc_type = getattr(analysis, "doc_type")
-        
-    refine_count = state.get("refine_count", 0)
-    
-    # [NEW] 동적 임계값 (Dynamic Threshold) 
-    # 기본: 9점 PASS
-    pass_threshold = 9.0
-    
-    # 1. 비IT 모드 완화 (-1.0점)
-    if doc_type == "business_plan":
-        pass_threshold -= 1.0  # 8.0점
-        
-    # 2. 반복 횟수에 따른 완화 (회당 -1.0점)
-    # 1회차: 8.0 / 2회차: 7.0 / 3회차: 6.0
-    if refine_count > 0:
-        pass_threshold -= (refine_count * 1.0)
-        
-    # 최소 6.0점까지 하한선
-    pass_threshold = max(6.0, pass_threshold)
-    
-    print(f"[ROUTING] 현재 기준 점수: {pass_threshold}점 (Score: {score}, Verdict: {verdict})")
-
     # 무한 루프 방지: 최대 2회 복귀
     if restart_count >= 2:
         print(f"[ROUTING] 최대 복귀 횟수 도달 ({restart_count}), Refiner로 진행")
@@ -178,23 +151,12 @@ def should_refine_or_restart(state: PlanCraftState) -> str:
     
     # 점수/판정에 따른 분기
     if score < 5 or verdict == "FAIL":
-        # 단, 이미 많이 개선했다면(refine_count >= 2) 그냥 통과시킬 수도 있음
-        if refine_count >= 2:
-             print(f"[ROUTING] 점수 낮지만 반복 횟수 초과로 강제 완료")
-             return "complete"
-             
         print(f"[ROUTING] 점수 낮음 ({score}점, {verdict}), Analyzer로 복귀")
         return "restart"  # Analyzer로 복귀
-        
-    elif score >= pass_threshold or verdict == "PASS":
-        print(f"[ROUTING] 품질 통과 (기준 {pass_threshold}점 달성), 완료")
+    elif score >= 9 and verdict == "PASS":
+        print(f"[ROUTING] 품질 우수 ({score}점, {verdict}), 바로 완료")
         return "complete"  # Formatter로
     else:
-        # 안전장치: 3회 이상 돌았으면 그냥 통과
-        if refine_count >= 3:
-             print(f"[ROUTING] Refine 루프 한계 도달 (3회), 강제 완료")
-             return "complete"
-
         print(f"[ROUTING] 개선 필요 ({score}점, {verdict}), Refiner로")
         return "refine"   # Refiner로
 # =============================================================================
