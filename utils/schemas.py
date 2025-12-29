@@ -23,7 +23,7 @@ Structured Output을 통해 LLM 응답의 일관성과 타입 안전성을 보�
     analysis_dict = analysis.model_dump()
 """
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ValidationInfo, FieldValidationInfo
 from typing import List, Optional, Self, Literal, Dict, Any
 
 
@@ -257,3 +257,33 @@ class CreativeIdea(BaseModel):
 class CreativeIdeaList(BaseModel):
     """아이디어 목록"""
     ideas: List[CreativeIdea] = Field(description="생성된 아이디어 목록 (보통 3개)")
+
+class AgentResponse(BaseModel):
+    """에이전트 응답 기본 스키마"""
+    final_output: str
+    need_more_info: bool = False
+    options: Optional[List[Dict[str, str]]] = None
+
+class ResumeInput(BaseModel):
+    """
+    [HITL] 사용자 Resume 입력 검증 스키마
+    - selected_option: 옵션 선택 시 (dict 형태: id, title, description)
+    - text_input: 직접 입력 시 (str)
+    """
+    selected_option: Optional[Dict[str, str]] = Field(None, description="선택된 옵션 데이터")
+    text_input: Optional[str] = Field(None, description="사용자 직접 입력 텍스트")
+
+    @field_validator('selected_option', 'text_input')
+    @classmethod
+    def check_at_least_one(cls, v: Optional[Any], info: FieldValidationInfo) -> Optional[Any]:
+        # Pydantic v2에서는 validator가 필드별로 호출되므로, 다른 필드의 값을 직접 참조하기 어려움.
+        # 이 검증은 model_validator에서 하는 것이 더 적합함.
+        # 여기서는 단순히 값을 반환하고, 실제 "하나 이상 존재" 로직은 model_validator에서 처리하거나
+        # 이 스키마를 사용하는 로직에서 처리하는 것이 권장됨.
+        return v
+
+    @model_validator(mode='after')
+    def validate_at_least_one_input(self) -> Self:
+        if self.selected_option is None and self.text_input is None:
+            raise ValueError("selected_option 또는 text_input 중 하나는 반드시 제공되어야 합니다.")
+        return self

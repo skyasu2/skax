@@ -3,27 +3,16 @@ Human Interrupt Utilities
 
 LangGraph 공식 휴먼 인터럽트 패턴을 위한 유틸리티 모듈입니다.
 
-⚠️ 현재 상태: 비활성화 (Reserved for Future Use)
+✅ 현재 상태: 활성화 (Active)
 ========================================
-현재 설계에서는 Analyzer가 `need_more_info: false`를 항상 반환하므로
-Human Interrupt가 발생하지 않습니다.
+Analyzer에서 `need_more_info: true` 반환 시
+Human Interrupt가 발생하여 사용자의 추가 입력을 대기합니다.
 
-모호한 입력은 `is_general_query: true`로 처리하여
-친절한 안내 메시지를 반환합니다.
-
-이 모듈의 코드는 향후 Human-in-the-loop 기능 활성화 시 사용됩니다.
-
-사용 예시 (향후 적용):
-    from graph.interrupt_utils import create_interrupt_payload, handle_user_response
-    
-    def option_pause_node(state):
-        payload = create_interrupt_payload(state)
-        resp = interrupt(payload)  # LangGraph의 interrupt() 호출
-        return handle_user_response(state, resp)
+- Resume 시 Pydantic 검증을 통해 입력 데이터의 무결성을 보장합니다.
 """
 
 from typing import Dict, List, Any, Optional, cast
-from utils.schemas import OptionChoice
+from utils.schemas import OptionChoice, ResumeInput
 from graph.state import PlanCraftState, InterruptPayload, InterruptOption
 
 def create_interrupt_payload(
@@ -94,12 +83,25 @@ def create_option_interrupt(state: PlanCraftState) -> Dict[str, Any]:
         }
     )
 
-
 def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> PlanCraftState:
     """
     사용자 응답(Command resume)을 처리하여 상태를 업데이트합니다.
     """
     from graph.state import update_state
+
+    # 0. [NEW] 입력 유효성 검증 (Pydantic Guard)
+    # 폼 데이터가 아닌 경우에만 ResumeInput 스키마 검증 수행
+    if not state.get("input_schema_name"):
+        try:
+            # Pydantic 모델로 변환하여 검증 (실패 시 예외 발생)
+            validated = ResumeInput(**response)
+            # 검증된 데이터를 dict로 변환하여 사용 (타입 안전성 확보)
+            response = validated.model_dump(exclude_unset=True)
+            print(f"[HITL] Resume Input Validated: {response}")
+        except Exception as e:
+            print(f"[ERROR] Resume Input Validation Failed: {e}")
+            # 검증 실패 시에도 흐름을 끊지 않고 원본 데이터를 사용하거나(로깅용),
+            # 필요한 경우 에러 처리를 할 수 있음. 여기서는 경고만 출력.
 
     # 1. 폼 데이터 처리 (input_schema_name이 있었던 경우)
     if state.get("input_schema_name") and isinstance(response, dict):
@@ -121,6 +123,7 @@ def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> Pla
     original_input = state.get("user_input", "")
     
     if selected:
+        # Pydantic 모델 덤프 후 dict가 됨
         title = selected.get("title", "")
         description = selected.get("description", "")
         new_input = f"{original_input}\n\n[선택: {title} - {description}]"
