@@ -22,6 +22,23 @@ def run(state: PlanCraftState) -> PlanCraftState:
     web_context = state.get("web_context", "")
     previous_plan = state.get("previous_plan")
     
+    # [FIX] 파일 내용 통합 (짧은 입력 대응)
+    file_content = state.get("file_content")
+    file_context_msg = ""
+    
+    if file_content:
+        # 길이 제한 (토큰 비용 및 컨텍스트 초과 방지)
+        MAX_FILE_LENGTH = 10000
+        if len(file_content) > MAX_FILE_LENGTH:
+            file_content = file_content[:MAX_FILE_LENGTH] + "\n...(내용이 너무 길어 생략됨)..."
+            print(f"[Analyzer] 파일 내용이 너무 길어 {MAX_FILE_LENGTH}자로 단축되었습니다.")
+            
+        file_context_msg = f"\n\n=== [첨부 파일 내용 (중요)] ===\n{file_content}\n=============================\n"
+        
+        # 사용자 입력이 매우 짧으면 파일 내용이 주가 됨을 알림
+        if len(user_input.strip()) < 10:
+             print("[Analyzer] 사용자 입력이 짧아 첨부 파일 내용을 중심으로 분석합니다.")
+
     # 2. 컨텍스트 구성
     review_data = state.get("review")
     current_analysis = state.get("analysis") # [NEW] 현재 분석 상태 (컨펌용)
@@ -46,6 +63,10 @@ def run(state: PlanCraftState) -> PlanCraftState:
         )
     
     context_parts = []
+    if file_context_msg:
+        # 파일 내용을 컨텍스트 최상단에 배치
+        context_parts.append(file_context_msg)
+        
     if web_context:
         context_parts.append(f"[웹에서 가져온 정보]\n{web_context}")
     if rag_context:
