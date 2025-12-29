@@ -65,6 +65,11 @@ class PlanCraftOutput(TypedDict, total=False):
     options: Optional[List[dict]]
     option_question: Optional[str]
     need_more_info: bool
+    
+    # [NEW] 토큰 사용량 및 비용 추적
+    token_usage: Optional[dict]  # {input_tokens, output_tokens, total_tokens}
+    estimated_cost: Optional[float]  # 예상 비용 (USD)
+
 
 
 # =============================================================================

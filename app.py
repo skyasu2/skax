@@ -286,7 +286,19 @@ def render_main():
                     elif generated_plan:
                         # C. 기획서 완성
                         st.session_state.generated_plan = generated_plan
-                        st.session_state.chat_history.append({"role": "assistant", "content": "✅ 기획서가 완성되었습니다!", "type": "plan"})
+                        
+                        # [NEW] 토큰 사용량 정보 수집
+                        usage_info = ""
+                        if hasattr(streamlit_callback, 'get_usage_summary'):
+                            usage = streamlit_callback.get_usage_summary()
+                            if usage.get("total_tokens", 0) > 0:
+                                usage_info = f"\n\n---\n📊 **토큰 사용량**: {usage['total_tokens']:,}개 (입력: {usage['input_tokens']:,}, 출력: {usage['output_tokens']:,})\n💰 **예상 비용**: ${usage['estimated_cost_usd']:.4f} (약 {int(usage['estimated_cost_krw'])}원)"
+                        
+                        st.session_state.chat_history.append({
+                            "role": "assistant", 
+                            "content": f"✅ 기획서가 완성되었습니다!{usage_info}", 
+                            "type": "plan"
+                        })
                         
                         # [NEW] 알림 예약 (Rerun 후 실행됨)
                         st.session_state.trigger_notification = True
@@ -300,6 +312,7 @@ def render_main():
                         chat_summary = final_result.get("chat_summary", "")
                         if chat_summary:
                              st.session_state.chat_history.append({"role": "assistant", "content": chat_summary, "type": "summary"})
+
                     
                     else:
                         # D. 기타 (분석 단계 등)
