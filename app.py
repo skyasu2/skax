@@ -223,11 +223,8 @@ def render_main():
 
              render_refinement_ui()
 
-    # =========================================================================
-    # [UX] 상태 표시기를 위한 Placeholder 위치 (채팅 아래, 입력창 위)
-    # =========================================================================
-    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
-    status_placeholder = st.empty()
+    # [MOVED] 상태 표시기 위치는 더 아래로 이동됨
+
 
     # =========================================================================
     # 하단 입력 영역
@@ -262,6 +259,13 @@ def render_main():
             if st.button("❌ 취소", use_container_width=True):
                 st.session_state.prefill_prompt = None
                 st.rerun()
+
+    # =========================================================================
+    # [UX] 상태 표시기를 위한 Placeholder 위치 (채팅 입력창 바로 위!)
+    # =========================================================================
+    st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+    status_placeholder = st.empty()
+
 
     # 채팅 입력창
     placeholder_text = "💬 자유롭게 대화를 입력하세요..."
