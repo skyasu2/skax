@@ -3,6 +3,16 @@ Human Interrupt Utilities
 
 LangGraph 공식 휴먼 인터럽트 패턴을 위한 유틸리티 모듈입니다.
 
+⚠️ 현재 상태: 비활성화 (Reserved for Future Use)
+========================================
+현재 설계에서는 Analyzer가 `need_more_info: false`를 항상 반환하므로
+Human Interrupt가 발생하지 않습니다.
+
+모호한 입력은 `is_general_query: true`로 처리하여
+친절한 안내 메시지를 반환합니다.
+
+이 모듈의 코드는 향후 Human-in-the-loop 기능 활성화 시 사용됩니다.
+
 사용 예시 (향후 적용):
     from graph.interrupt_utils import create_interrupt_payload, handle_user_response
     

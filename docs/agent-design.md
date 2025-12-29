@@ -86,14 +86,14 @@ Step 2: 핵심 요소 추출
 ├── 타겟 사용자
 └── 제공 가치
 
-Step 3: 정보 충분성 판단
-├── 목표 사용자 명확성
-├── 핵심 기능 구체성
-└── 범위/일정 정의 여부
+Step 3: 자율 판단 (⭐ 핵심)
+├── RAG/웹 컨텍스트로 부족한 정보 보완
+├── 업계 베스트 프렉티스로 가정 수립
+└── 질문 없이 바로 진행!
 
 Step 4: 최종 판단
-├── 충분 → need_more_info = false
-└── 부족 → 질문 2~3개 생성
+├── 모호한 입력 → is_general_query = true (친절한 안내)
+└── 명확한 요청 → 분석 결과 반환 (need_more_info = false)
 ```
 
 #### 출력 스키마 (Pydantic)
@@ -104,10 +104,14 @@ class AnalysisResult(BaseModel):
     purpose: str            # 기획 목적
     target_users: str       # 타겟 사용자
     key_features: List[str] # 주요 기능
-    missing_info: List[str] # 누락 정보
-    questions: List[str]    # 추가 질문
-    need_more_info: bool    # 추가 정보 필요 여부
+    assumptions: List[str]  # AI가 세운 합리적 가정
+    is_general_query: bool  # 일반 대화 여부
+    general_answer: str     # 일반 대화 응답
+    need_more_info: bool    # 항상 false (질문 금지 정책)
 ```
+
+> ⚠️ **설계 원칙**: `need_more_info`는 항상 `false`입니다.
+> 모호한 입력은 `is_general_query: true`로 처리하여 친절한 안내 메시지를 반환합니다.
 
 ---
 
