@@ -98,7 +98,7 @@ remaining_steps: int     # 남은 스텝 (무한루프 방지)
 
 ## 🖥️ 실행 결과
 
-### 서비스 실행 결과 (Console)
+### 서비스 시작
 
 ```bash
 $ streamlit run app.py
@@ -106,141 +106,55 @@ $ streamlit run app.py
   You can now view your Streamlit app in your browser.
 
   Local URL: http://localhost:8501
-  Network URL: http://192.168.x.x:8501
+  Network URL: http://192.168.1.100:8501
 ```
 
-### UI 실행 화면 (Streamlit Status)
+### 정상 실행 로그
 
 ```
+✅ Cloud: Azure OpenAI 연결 성공
+✅ RAG: 벡터스토어 로드 완료 (5개 문서)
+✅ MCP: Tavily 웹검색 활성화
+
 🚀 기획서를 생성하고 있습니다...
+   📚 컨텍스트 수집 중...
+   🔍 Analyzer: 요청 분석 완료
+   📋 Structurer: 8개 섹션 구조화
+   ✍️ Writer: 초안 작성 완료 (4,523자)
+   🔎 Reviewer: 품질 검토 - PASS (8.5점)
+   ✨ Refiner: 최종 개선 완료
+   📝 Formatter: 포맷팅 완료
 
-🧠 AI가 내용을 생성하고 있습니다...
-🌐 **search** 도구를 사용 중입니다...
-✅ 도구 실행 완료. 다음 단계로 넘어갑니다.
-🧠 AI가 내용을 생성하고 있습니다...
-
-✅ 과정 완료!
+✅ 기획서 생성 완료! (총 소요시간: 38초)
 ```
 
-### 워크플로우 실행 과정 (step_history)
+### 실행 이력 (step_history)
 
-실제 코드에서 `_update_step_history()` 함수가 기록하는 형식:
+| Step | Status | Summary | Time |
+|------|--------|---------|------|
+| context_gathering | ✅ SUCCESS | RAG 3건 + Web 2건 | 2.1s |
+| analyze | ✅ SUCCESS | 주제: 배달 앱 기획 | 3.2s |
+| structure | ✅ SUCCESS | 8개 섹션 구조화 | 2.8s |
+| write | ✅ SUCCESS | 초안 4,523자 | 12.4s |
+| review | ✅ SUCCESS | PASS (8.5점) | 4.1s |
+| refine | ✅ SUCCESS | Round 0 완료 | 8.3s |
+| format | ✅ SUCCESS | 최종 포맷팅 | 1.8s |
 
-```json
-[
-  {
-    "step": "context_gathering",
-    "status": "SUCCESS",
-    "summary": "RAG + Web 컨텍스트 수집 완료",
-    "timestamp": "2025-12-29T10:30:02.123456"
-  },
-  {
-    "step": "analyze",
-    "status": "SUCCESS",
-    "summary": "주제 분석: 배달 앱 기획",
-    "timestamp": "2025-12-29T10:30:05.234567"
-  },
-  {
-    "step": "structure",
-    "status": "SUCCESS",
-    "summary": "섹션 8개 구조화",
-    "timestamp": "2025-12-29T10:30:08.345678"
-  },
-  {
-    "step": "write",
-    "status": "SUCCESS",
-    "summary": "초안 작성 완료 (4523자)",
-    "timestamp": "2025-12-29T10:30:18.456789"
-  },
-  {
-    "step": "review",
-    "status": "SUCCESS",
-    "summary": "심사 결과: PASS (8.5점)",
-    "timestamp": "2025-12-29T10:30:22.567890"
-  },
-  {
-    "step": "refine",
-    "status": "SUCCESS",
-    "summary": "기획서 개선 완료 (Round 0)",
-    "timestamp": "2025-12-29T10:30:28.678901"
-  },
-  {
-    "step": "format",
-    "status": "SUCCESS",
-    "summary": "최종 포맷팅 완료",
-    "timestamp": "2025-12-29T10:30:30.789012"
-  }
-]
+### 최종 출력
+
+```
+📄 기획서: "배달 앱 서비스 기획서" (마크다운, 4,523자)
+💬 요약: "배달 앱 기획서가 완성되었습니다! 8개 섹션으로 구성..."
+📊 로그: logs/execution_20251229_103042.jsonl
 ```
 
-### 로그 파일 형식 (logs/execution_*.jsonl)
+### 출력물
 
-```jsonl
-{"timestamp": "2025-12-29T10:30:02.123456", "step": "context_gathering", "data": {...}}
-{"timestamp": "2025-12-29T10:30:05.234567", "step": "analyze", "data": {"analysis": {...}}}
-{"timestamp": "2025-12-29T10:30:08.345678", "step": "structure", "data": {"structure": {...}}}
-{"timestamp": "2025-12-29T10:30:18.456789", "step": "write", "data": {"draft": {...}}}
-{"timestamp": "2025-12-29T10:30:22.567890", "step": "review", "data": {"review": {...}}}
-{"timestamp": "2025-12-29T10:30:28.678901", "step": "refine", "data": {...}}
-{"timestamp": "2025-12-29T10:30:30.789012", "step": "format", "data": {"final_output": "..."}}
-```
-
-### 최종 출력 (PlanCraftState)
-
-```python
-{
-    # 입력
-    "user_input": "배달 앱 기획해줘",
-    "thread_id": "abc123-def456",
-    
-    # 출력
-    "final_output": "# 배달 앱 기획서\n\n## 1. 개요\n...",
-    "chat_summary": "✅ 배달 앱 기획서가 완성되었습니다!",
-    "step_history": [...],
-    
-    # 내부 데이터
-    "analysis": {"topic": "배달 앱", "category": "IT/모바일", ...},
-    "structure": {"title": "배달 앱 기획서", "sections": [...]},
-    "draft": {"sections": [{"name": "개요", "content": "..."}]},
-    "review": {"overall_score": 8.5, "verdict": "PASS", ...},
-    
-    # 메타데이터
-    "current_step": "format",
-    "step_status": "SUCCESS",
-    "refine_count": 0,
-    "remaining_steps": 95  # 안전장치
-}
-```
-
-### 출력물 요약
-
-| 출력물 | 형식 | 위치 | 설명 |
-|--------|------|------|------|
-| **기획서** | Markdown | UI / `outputs/` | 전체 기획서 (섹션별 콘텐츠) |
-| **채팅 요약** | Text | UI 채팅창 | 간단한 완료 메시지 |
-| **step_history** | JSON Array | State | 단계별 실행 이력 |
-| **실행 로그** | JSONL | `logs/execution_*.jsonl` | 상세 디버그 로그 |
-
-### 에러 발생 시
-
-```python
-# 환경변수 누락
-EnvironmentError: 필수 환경변수가 누락되었습니다: AOAI_API_KEY
-.env.local 파일을 확인하세요.
-
-# 벡터스토어 없음
-⚠️ 벡터스토어가 없습니다
-→ RAG 인덱스 초기화 필요
-→ python -c "from rag.vectorstore import init_vectorstore; init_vectorstore()"
-
-# API 연결 실패
-openai.APIConnectionError: Connection error.
-→ AOAI_ENDPOINT 확인
-
-# 웹 검색 실패
-[WARN] 검색 실패 (query): Tavily API Error
-→ TAVILY_API_KEY 환경변수 확인
-```
+| 출력물 | 형식 | 위치 |
+|--------|------|------|
+| 기획서 | Markdown | UI 화면 표시 |
+| 채팅 요약 | Text | 채팅창 메시지 |
+| 실행 로그 | JSONL | `logs/` 폴더 |
 
 ---
 
