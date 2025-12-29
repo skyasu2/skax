@@ -24,21 +24,20 @@ def run(state: PlanCraftState) -> PlanCraftState:
     
     # 2. 컨텍스트 구성
     review_data = state.get("review")
-    
-    # 2. 컨텍스트 구성
-    context_parts = []
+    review_context = "없음"
+
     if review_data:
-        # [NEW] 재진입 시 리뷰 피드백 반영
         # review_data 형식: {"overall_score": int, "feedback_summary": str, "verdict": str}
         feedback_summary = review_data.get("feedback_summary", "구체적 피드백 없음")
         score = review_data.get("overall_score", 0)
-        context_parts.append(
+        review_context = (
             f"=== 🚨 이전 버전에 대한 긴급 피드백 (필수 반영) ===\n"
             f"평가 점수: {score}점\n"
             f"지적 사항: {feedback_summary}\n"
-            f"지시: 위 지적 사항을 분석 단계에서부터 근본적으로 해결할 수 있는 방안을 제시하세요."
+            f"지시: 분석 단계에서부터 위 지적 사항을 근본적으로 해결할 수 있는 방안을 제시하세요."
         )
     
+    context_parts = []
     if web_context:
         context_parts.append(f"[웹에서 가져온 정보]\n{web_context}")
     if rag_context:
@@ -48,10 +47,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
     # 3. 프롬프트 구성 (시간 컨텍스트 주입)
     system_msg_content = get_time_context() + ANALYZER_SYSTEM_PROMPT
 
+    # [FIX] 프롬프트 템플릿의 {review_data} 인자 전달
     user_msg_content = ANALYZER_USER_PROMPT.format(
         user_input=user_input,
         previous_plan=previous_plan if previous_plan else "없음",
-        context=context
+        context=context,
+        review_data=review_context
     ) + get_time_instruction()
 
     messages = [
