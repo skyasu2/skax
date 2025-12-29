@@ -51,7 +51,7 @@ PlanCraft Agent는 LangGraph 기반 Multi-Agent 시스템으로, 사용자의 �
          ▼              ▼              ▼
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
 │  RAG/FAISS  │  │ Web Search  │  │ Azure OpenAI│
-│             │  │ (DuckDuckGo)│  │  (GPT-4o)   │
+│             │  │  (Tavily)  │  │  (GPT-4o)   │
 └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
@@ -217,7 +217,7 @@ def should_search_web(user_input, rag_context):
 | LLM | Azure OpenAI (GPT-4o, GPT-4o-mini) |
 | Vector DB | FAISS |
 | Embedding | text-embedding-3-large |
-| Web Search | DuckDuckGo (무료) |
+| Web Search | Tavily |
 | Validation | Pydantic (Agent 스키마) |
 | State Management | TypedDict + update_state() |
 | Checkpointing | LangGraph MemorySaver |

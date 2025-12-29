@@ -6,7 +6,7 @@
 
 - Python 3.10 이상
 - 4GB RAM 이상 (FAISS 인덱싱용)
-- 인터넷 연결 (Azure OpenAI, DuckDuckGo 접근)
+- 인터넷 연결 (Azure OpenAI, Tavily 접근)
 
 ### 1.2 Azure OpenAI 리소스
 
@@ -229,7 +229,7 @@ python -c "from rag.vectorstore import init_vectorstore; init_vectorstore()"
 ⚠️ 웹 조회 단계 오류
 ```
 
-**해결**: 인터넷 연결 확인, `duckduckgo-search` 패키지 설치 확인
+**해결**: 인터넷 연결 확인, `TAVILY_API_KEY` 환경변수 설정 확인
 
 ### 9.4 메모리 부족
 
