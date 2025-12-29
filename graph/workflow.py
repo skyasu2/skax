@@ -63,7 +63,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import MemorySaver  # 체크포인터
 from langchain_core.runnables import RunnableBranch  # [NEW] 분기 패턴
-from graph.state import PlanCraftState
+from graph.state import PlanCraftState, MIN_REMAINING_STEPS, MAX_REFINE_LOOPS
 from agents import analyzer, structurer, writer, reviewer, refiner, formatter
 from utils.config import Config
 from utils.file_logger import get_file_logger
@@ -566,12 +566,31 @@ def create_workflow() -> StateGraph:
     # [UPDATE] Refiner 조건부 엣지 - REVISE 판정 시 재작성 루프
     def should_refine_again(state: PlanCraftState) -> str:
         """
-        Refiner 후 다음 단계 결정
+        Refiner 후 다음 단계 결정 (Graceful End-of-Loop 패턴 적용)
 
-        - refined=True & refine_count < 3: 재작성 (structure로 회귀)
-        - 그 외: 완료 (format으로 진행)
+        안전 탈출 조건 (OR 연산):
+        1. refined=False: 개선 불필요 (PASS 판정)
+        2. refine_count >= MAX_REFINE_LOOPS: 최대 루프 도달
+        3. remaining_steps <= MIN_REMAINING_STEPS: 남은 스텝 부족
+        
+        위 조건 중 하나라도 충족하면 format으로 진행하여 완료합니다.
         """
-        if state.get("refined") and state.get("refine_count", 0) < 3:
+        refined = state.get("refined", False)
+        refine_count = state.get("refine_count", 0)
+        remaining_steps = state.get("remaining_steps", 100)  # 기본값 충분히 크게
+        
+        # [NEW] Graceful End-of-Loop: 남은 스텝이 부족하면 안전하게 종료
+        if remaining_steps <= MIN_REMAINING_STEPS:
+            print(f"[WARN] 남은 스텝 부족 ({remaining_steps}), 루프 종료")
+            return "complete"
+        
+        # 최대 루프 횟수 초과
+        if refine_count >= MAX_REFINE_LOOPS:
+            print(f"[WARN] 최대 루프 도달 ({refine_count}), 루프 종료")
+            return "complete"
+        
+        # 개선 필요 여부
+        if refined:
             return "retry"
         return "complete"
 
