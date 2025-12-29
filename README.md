@@ -23,21 +23,25 @@ Analyzer → Structurer → Writer → Reviewer → Refiner → Formatter
 - 📝 **실시간 미리보기**: 제안된 컨셉(주제/목적/기능)을 확인 후 진행
 - 💬 **자유 입력**: 버튼 선택 외에도 채팅으로 추가 요구사항 전달 가능
 
-### 3. **동적 라우팅 & 자가 개선**
-| Reviewer 점수 | 다음 행동 |
-|--------------|----------|
-| < 5점 (FAIL) | Analyzer로 복귀 (재분석) |
-| 5~8점 (REVISE) | Refiner 실행 (개선) |
-| ≥ 9점 (PASS) | Formatter 실행 (완료) |
+### 3. **동적 라우팅 & 지능형 에이전트**
+- 🧠 **Writer의 자기 성찰 (Self-Correction)**: 섹션 누락이나 포맷 오류 시 LLM이 스스로 인지하고 자동 수정 (Reviewer 개입 최소화)
+- 📊 **재무 계획 테이블 강제**: 줄글이 아닌 명확한 마크다운 테이블(Table)로 재무 계획 생성 보장
+- 🚦 **Reviewer 기반 라우팅**:
+  - < 5점 (FAIL): Analyzer 복귀
+  - 5~8점 (REVISE): Refiner 실행 (최대 3회)
+  - ≥ 9점 (PASS): Formatter 실행
 
 ### 4. **병렬 컨텍스트 수집**
 RAG(문서 검색)와 Web Search를 **동시 실행**하여 응답 속도 30% 향상
 
-### 5. **운영 안정성**
-- ✅ 무한 루프 방지 (최대 3회 Refinement)
-- ✅ 체크포인터 (Memory/PostgreSQL/Redis)
-- ✅ Time-Travel (롤백) 지원
-- ✅ 브라우저 알림 (완료 시 Notification)
+### 5. **파일 기반 분석 (New)**
+PDF, DOCX, TXT 파일을 업로드하면 내용을 자동으로 요약·분석하여 기획서에 반영합니다.
+
+### 6. **운영 안정성**
+- ✅ **Interrupt-First 설계**: LLM/API 호출 전 사이드 이펙트 없는 일시 중단(Pause) 보장
+- ✅ **무한 루프 방지**: 최대 3회 재작성 제한 및 Fallback 처리
+- ✅ **체크포인터**: Memory/PostgreSQL/Redis 지원 (Time-Travel 가능)
+- ✅ **URL/Code Safe**: 정규식 후처리 부작용을 제거하여 링크/코드 블록 깨짐 원천 방지
 
 ---
 

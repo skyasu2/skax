@@ -6,13 +6,28 @@ PlanCraft Advanced Scenarios Tests
 """
 
 import pytest
+import time
+from functools import wraps
 from unittest.mock import MagicMock, patch
 from graph.state import PlanCraftState, create_initial_state, update_state
 from utils.schemas import AnalysisResult, OptionChoice
 
+# 메트릭 측정 데코레이터
+def measure_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        duration = (end_time - start_time) * 1000  # ms
+        print(f"\n[Metric] {func.__name__}: {duration:.2f}ms")
+        return result
+    return wrapper
+
 class TestAdvancedScenarios:
     """고급 시나리오 테스트 모음 (TypedDict 기반)"""
 
+    @measure_time
     def test_scenario_human_interrupt_flow(self):
         """
         [시나리오 A] 휴먼 인터럽트 흐름 검증
@@ -89,6 +104,7 @@ class TestAdvancedScenarios:
         # 다시 라우팅 체크 -> 이제는 continue여야 함
         assert should_ask_user(resumed_state) == "continue"
 
+    @measure_time
     def test_scenario_error_and_retry(self):
         """
         [시나리오 B] 에러 발생 및 재시도 흐름 검증
@@ -130,6 +146,7 @@ class TestAdvancedScenarios:
         assert retried_state.get("step_status") == "RUNNING"
         assert retried_state.get("retry_count") == 1
 
+    @measure_time
     def test_scenario_general_query(self):
         """
         [시나리오 C] 일반 질의 처리 흐름 검증
@@ -167,6 +184,7 @@ class TestAdvancedScenarios:
         assert last_history.get("step") == "general_response"
         assert last_history.get("status") == "SUCCESS"
 
+    @measure_time
     def test_scenario_refiner_loop(self):
         """
         [시나리오 D] Refiner 재작성 루프 검증
