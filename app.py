@@ -249,12 +249,32 @@ def render_main():
                         st.session_state.generated_plan = None 
 
                     elif need_more_info:
-                        # B. 추가 정보 요청
-                        q = final_result.get("option_question", "추가 정보가 필요합니다.")
+                        # B. 추가 정보 요청 & 기획 제안 미리보기
+                        q = final_result.get("option_question", "다음과 같이 기획 방향을 제안합니다.")
                         opts = final_result.get("options", [])
-                        msg_content = f"🤔 **{q}**\n\n"
-                        for o in opts:
-                            msg_content += f"- **{o.get('title')}**: {o.get('description')}\n"
+                        
+                        # [UX] 제안 내용 미리보기 구성
+                        preview_msg = ""
+                        if analysis_res:
+                            p_topic = analysis_res.get("topic", "미정")
+                            p_purpose = analysis_res.get("purpose", "")
+                            p_features = analysis_res.get("key_features", [])
+                            
+                            preview_msg += f"**📌 제안 컨셉**: {p_topic}\n"
+                            if p_purpose:
+                                preview_msg += f"**🎯 기획 의도**: {p_purpose}\n"
+                            if p_features:
+                                feats = ", ".join(p_features[:4]) # 최대 4개
+                                preview_msg += f"**💡 주요 기능**: {feats} 등\n"
+                            preview_msg += "\n"
+
+                        msg_content = f"🤔 **{q}**\n\n{preview_msg}"
+                        
+                        # 옵션 설명 추가
+                        if opts:
+                            for o in opts:
+                                msg_content += f"- **{o.get('title')}**: {o.get('description')}\n"
+
                         st.session_state.chat_history.append({"role": "assistant", "content": msg_content, "type": "options"})
 
                     elif generated_plan:
