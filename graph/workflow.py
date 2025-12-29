@@ -91,7 +91,7 @@ def _update_step_history(state: PlanCraftState, step_name: str, status: str, sum
     
     # 시간 측정
     import time
-    if start_time == 0.0:
+    if not start_time:  # 0.0 or None
         start_time = time.time() # fallback
         
     execution_time = f"{time.time() - start_time:.2f}s"
@@ -245,6 +245,8 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
                                 url = res.get("url", "URL 없음")
                                 snippet = res.get("snippet", "")[:200]
                                 formatted_result += f"- [{title}]({url})\n  {snippet}\n"
+                                if url and url.startswith("http"):
+                                    web_urls.append(url)
                         if not formatted_result and "formatted" in search_result:
                             formatted_result = search_result["formatted"]
                             

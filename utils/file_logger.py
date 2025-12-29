@@ -27,7 +27,7 @@ class FileLogger:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_file = os.path.join(LOG_DIR, f"execution_{timestamp}.jsonl")
         
-    def log(self, step: str, data: dict):
+    def log(self, step: str, data: Any):
         """
         단계별 로그를 JSONL 형식으로 기록합니다.
         
@@ -41,8 +41,19 @@ class FileLogger:
             "data": self._serialize(data)
         }
         
-        with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+        try:
+            with open(self.log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+        except Exception as e:
+            print(f"[FileLogger] Logging failed: {e}")
+
+    def info(self, message: str):
+        """정보 로그 기록 (log 메소드 래퍼)"""
+        self.log("INFO", {"message": message})
+        
+    def error(self, message: str):
+        """에러 로그 기록 (log 메소드 래퍼)"""
+        self.log("ERROR", {"message": message})
 
     def _serialize(self, obj: Any) -> Any:
         """JSON 직렬화 불가능한 객체 처리"""
