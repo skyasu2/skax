@@ -2,21 +2,35 @@
 .env
 .env.local
 .env.*
+!*.example
 
 # Python
 __pycache__/
 *.py[cod]
 *.class
 .venv/
+.pytest_cache/
+
+# Logs
+logs/
+streamlit_logs/
+*.log
+test_output*.log
+
+# Outputs
+outputs/
 
 # Streamlit
-streamlit_logs/
 .streamlit/
+
+# IDE
+.vscode/
+.idea/
 
 # Ignore old dir
 insoft.0307_275_a5a80dbb-e86b-49ab-acb9-f3b24563c869/
 
+# Docs - internal only
 docs/INTERNAL_PLAN.md
-
 docs/BOOTCAMP_GUIDE.md
-!*.example
+docs/*.png

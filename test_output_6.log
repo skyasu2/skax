@@ -1,9 +1,0 @@
-============================= test session starts =============================
-platform win32 -- Python 3.13.5, pytest-9.0.2, pluggy-1.6.0
-rootdir: D:\개인\ai ax\pro
-plugins: anyio-4.9.0, langsmith-0.5.1
-collected 3 items
-
-tests\test_interrupt_unit.py ...                                         [100%]
-
-============================== 3 passed in 1.07s ==============================
