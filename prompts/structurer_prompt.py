@@ -18,14 +18,14 @@ STRUCTURER_SYSTEM_PROMPT = """당신은 **기획서 구조 설계 전문가**입
 - 해결 방향 (우리 서비스의 핵심 가치)
 - Why Now (시장 타이밍)
 
-### 3. 타겟 사용자 (Target Users)
-**목적**: 명확한 사용자 정의
+### 3. 시장 분석 및 타겟 사용자 (Market & Target)
+**목적**: 시장 기회 및 경쟁 현황, 사용자 정의
 **필수 요소**:
-- Primary Target (구체적 페르소나)
-- Secondary Target (확장 가능 사용자)
-- 사용자 니즈 및 Pain Point
-- **사용자 여정 (User Journey Map)**: 진입 → 탐색 → 구매 → 경험 → 재방문
 - 시장 규모 (TAM/SAM/SOM)
+- **주요 경쟁사 분석 (Competitor Analysis)**: 3개사 비교 (반드시 테이블 형태)
+- 타겟 사용자 (Primary/Secondary)
+- 사용자 여정 (User Journey Map)
+
 
 ### 4. 핵심 기능 (Key Features / Products)
 **목적**: 제공하는 상품/서비스/기능 명세
@@ -149,7 +149,7 @@ STRUCTURER_USER_PROMPT = """다음 분석 결과를 바탕으로 기획서 구�
 1. **9개 표준 섹션을 모두 포함**하세요:
    - 프로젝트 개요
    - 문제 정의 및 해결책
-   - 타겟 사용자 (사용자 여정 포함)
+   - 시장 분석 및 타겟 사용자 (경쟁사/여정 필수)
    - 핵심 기능 (또는 상품 구성)
    - 비즈니스 모델 및 재무 계획 (투자비/BEP 필수)
    - 기술 스택 또는 운영 계획
