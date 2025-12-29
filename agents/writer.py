@@ -6,13 +6,14 @@ from utils.llm import get_llm
 from utils.schemas import DraftResult
 from utils.time_context import get_time_context, get_time_instruction
 from graph.state import PlanCraftState, update_state
+from utils.settings import settings
 
 # 프롬프트 임포트 (IT용 / 일반 사업용)
 from prompts.writer_prompt import WRITER_SYSTEM_PROMPT, WRITER_USER_PROMPT
 from prompts.business_plan_prompt import BUSINESS_PLAN_SYSTEM_PROMPT, BUSINESS_PLAN_USER_PROMPT
 
 # LLM 초기화 (일관성 위해 temperature 낮춤)
-writer_llm = get_llm(temperature=0.4).with_structured_output(DraftResult)
+writer_llm = get_llm(temperature=settings.LLM_TEMPERATURE_STRICT).with_structured_output(DraftResult)
 
 
 def _get_prompts_by_doc_type(state: PlanCraftState) -> tuple:
@@ -164,8 +165,9 @@ Action Items (실행 지침):
     ]
 
     
+    
     # 3. LLM 호출 및 Self-Correction (Reflection Loop)
-    max_retries = 2
+    max_retries = settings.WRITER_MAX_RETRIES
     current_try = 0
     final_draft_dict = None
     last_error = None
@@ -188,7 +190,7 @@ Action Items (실행 지침):
             section_count = len(sections)
             
             # 필수 섹션 수 (최소 9개, 권장 10개)
-            MIN_SECTIONS = 9 
+            MIN_SECTIONS = settings.WRITER_MIN_SECTIONS 
             
             if section_count < MIN_SECTIONS:
                 print(f"[Writer Reflection] ⚠️ 섹션 개수 부족 ({section_count}/{MIN_SECTIONS}). 재작성합니다.")

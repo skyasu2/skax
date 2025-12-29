@@ -22,13 +22,15 @@ def run(state: PlanCraftState) -> PlanCraftState:
     web_context = state.get("web_context", "")
     previous_plan = state.get("previous_plan")
     
-    # [FIX] 파일 내용 통합 (짧은 입력 대응)
+    # [FILE] 파일 내용 통합 (길이 제한 적용)
+    from utils.settings import settings
+    MAX_FILE_LENGTH = settings.MAX_FILE_LENGTH
+    
     file_content = state.get("file_content")
     file_context_msg = ""
     
     if file_content:
         # 길이 제한 (토큰 비용 및 컨텍스트 초과 방지)
-        MAX_FILE_LENGTH = 10000
         if len(file_content) > MAX_FILE_LENGTH:
             file_content = file_content[:MAX_FILE_LENGTH] + "\n...(내용이 너무 길어 생략됨)..."
             print(f"[Analyzer] 파일 내용이 너무 길어 {MAX_FILE_LENGTH}자로 단축되었습니다.")

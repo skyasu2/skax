@@ -63,7 +63,11 @@ from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
 from utils.checkpointer import get_checkpointer  # [NEW] Factory 패턴
 from langchain_core.runnables import RunnableBranch  # [NEW] 분기 패턴
-from graph.state import PlanCraftState, MIN_REMAINING_STEPS, MAX_REFINE_LOOPS
+from graph.state import PlanCraftState
+from utils.settings import settings
+
+# [UPDATE] 로깅 핸들러 데코레이터
+from functools import wraps
 from agents import analyzer, structurer, writer, reviewer, refiner, formatter
 from utils.config import Config
 from utils.file_logger import get_file_logger
@@ -803,12 +807,12 @@ def create_workflow() -> StateGraph:
         remaining_steps = state.get("remaining_steps", 100)  # 기본값 충분히 크게
         
         # [NEW] Graceful End-of-Loop: 남은 스텝이 부족하면 안전하게 종료
-        if remaining_steps <= MIN_REMAINING_STEPS:
+        if remaining_steps <= settings.MIN_REMAINING_STEPS:
             print(f"[WARN] 남은 스텝 부족 ({remaining_steps}), 루프 종료")
             return "complete"
         
         # 최대 루프 횟수 초과
-        if refine_count >= MAX_REFINE_LOOPS:
+        if refine_count >= settings.MAX_REFINE_LOOPS:
             print(f"[WARN] 최대 루프 도달 ({refine_count}), 루프 종료")
             return "complete"
         
