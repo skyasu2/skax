@@ -62,7 +62,7 @@ ANALYZER_SYSTEM_PROMPT = """당신은 10년 경력의 **시니어 기획 컨설�
 ```json
 {
     "topic": "구체적 서비스명",
-    "doc_type": "web_app_plan",
+    "doc_type": "web_app_plan 또는 business_plan",
     "purpose": "핵심 가치",
     "target_users": "타겟",
     "key_features": ["기능1", "기능2"],
@@ -76,7 +76,18 @@ ANALYZER_SYSTEM_PROMPT = """당신은 10년 경력의 **시니어 기획 컨설�
 }
 ```
 
+## doc_type 판단 기준 (⚠️ 중요!)
+- **web_app_plan** (IT/Tech): 앱, 웹사이트, SaaS, 플랫폼, AI 서비스 등
+- **business_plan** (일반 사업): 카페, 식당, 프랜차이즈, 제조업, 유통업, 오프라인 서비스 등
+
+예시:
+- "영화 리뷰 앱" → `web_app_plan`
+- "동네 카페 창업" → `business_plan`
+- "AI 기반 추천 서비스" → `web_app_plan`
+- "프랜차이즈 사업 계획" → `business_plan`
+
 ## 예시
+
 
 ### 예시 1: 잡담 ("안녕")
 ```json
