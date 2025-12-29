@@ -92,7 +92,68 @@ review: dict             # Reviewer 결과
 
 ---
 
-## 📁 전체 디렉토리 구조
+## �️ 실행 결과
+
+### 서비스 실행 결과 (Console)
+
+```bash
+$ streamlit run app.py
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.x.x:8501
+
+  Ready! ✨
+```
+
+### 워크플로우 실행 과정
+
+```
+[10:30:01] 🚀 워크플로우 시작
+[10:30:02] 📚 RAG 검색 중... (rag/documents/)
+[10:30:03] ✅ RAG 컨텍스트 수집 완료 (3개 문서)
+[10:30:04] 🌐 웹 검색 스킵 (RAG 충분)
+[10:30:05] 🔍 Analyzer: 요청 분석 중...
+[10:30:08] ✅ 분석 완료 - 주제: "배달 앱 기획"
+[10:30:09] 📋 Structurer: 구조 설계 중...
+[10:30:12] ✅ 구조 완료 - 8개 섹션
+[10:30:13] ✍️ Writer: 콘텐츠 작성 중...
+[10:30:25] ✅ 초안 작성 완료
+[10:30:26] 🔎 Reviewer: 품질 검토 중...
+[10:30:30] ✅ 검토 완료 - 점수: 8.5/10
+[10:30:31] ✨ Refiner: 피드백 반영 중...
+[10:30:38] ✅ 최종본 완성
+[10:30:39] 📝 Formatter: 요약 생성 중...
+[10:30:41] ✅ 완료!
+[10:30:41] ⏱️ 총 소요 시간: 40초
+```
+
+### 출력 예시
+
+| 출력물 | 설명 | 위치 |
+|--------|------|------|
+| **기획서** | 마크다운 형식의 전체 기획서 | UI 화면 / `outputs/` |
+| **요약** | 채팅용 간단 요약 메시지 | UI 채팅창 |
+| **로그** | 실행 이력 JSONL | `logs/execution_*.jsonl` |
+
+### 에러 발생 시
+
+```
+❌ 필수 환경변수가 누락되었습니다
+   → .env.local 파일 확인
+
+⚠️ 벡터스토어가 없습니다
+   → RAG 인덱스 초기화 필요
+   → python -c "from rag.vectorstore import init_vectorstore; init_vectorstore()"
+
+⚠️ Azure OpenAI 연결 실패
+   → AOAI_ENDPOINT, AOAI_API_KEY 확인
+```
+
+---
+
+## �📁 전체 디렉토리 구조
 
 ```
 plancraft/
