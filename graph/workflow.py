@@ -632,13 +632,82 @@ def option_pause_node(state: PlanCraftState) -> Command:
     # 3. 사용자 응답으로 상태 업데이트
     updated_state = handle_user_response(state, user_response)
     
-    # 4. Command로 다음 노드 지정 및 상태 업데이트
-    # - update: 상태 변경 사항
-    # - goto: 다음 실행할 노드
     return Command(
         update=updated_state,
         goto="analyze"  # 새 정보로 다시 분석
     )
+
+
+def structure_approval_node(state: PlanCraftState) -> Command:
+    """
+    [Multi-HITL] 목차(Structure) 승인 절차 노드
+    - 사용자가 목차를 확인하고 승인(Approve) 또는 거절(Reject) 결정
+    - 승인 시 Write 단계로, 거절 시 Structure 단계로 복귀
+    """
+    from graph.interrupt_utils import handle_user_response
+    
+    # 1. 목차 정보 추출 및 요약
+    structure = state.get("structure")
+    sections = []
+    if structure:
+        sections = structure.get("sections") if isinstance(structure, dict) else getattr(structure, "sections", [])
+    
+    # UI에 보여질 목차 리스트(Markdown Text)
+    toc_text = ""
+    for idx, sec in enumerate(sections, 1):
+        name = sec.get("name") if isinstance(sec, dict) else getattr(sec, "name", "")
+        toc_text += f"{idx}. {name}\n"
+        
+    if not toc_text:
+        toc_text = "(목차 정보 없음)"
+
+    # 2. 페이로드 구성 (UI 렌더링용)
+    # 기존 UI 호환성을 위해 type="option_selector" 사용
+    # question 필드에 목차를 포함시켜 보여줌
+    intro_msg = f"AI가 다음과 같이 기획서 목차를 설계했습니다.\n이대로 작성을 진행하시겠습니까?\n\n**[목차 미리보기]**\n{toc_text}"
+    
+    payload = {
+        "type": "structure_review", # UI에서 별도 처리 가능성을 위해 태그
+        "input_schema_name": "option_selector", # Generic UI 사용
+        "question": intro_msg,
+        "options": [
+            {
+                "title": "✅ 승인 (집필 시작)", 
+                "value": "approve", 
+                "description": "이 목차대로 상세 내용을 작성합니다."
+            },
+            {
+                "title": "🔄 재설계 요청", 
+                "value": "reject", 
+                "description": "목차를 다시 설계하도록 요청합니다."
+            }
+        ]
+    }
+
+    # [CRITICAL WARNING] Side-effect Separation
+    # Interrupt 전/후 로직 분리 철저
+    
+    # 3. INTERRUPT
+    user_response = interrupt(payload)
+    
+    # 4. RESUME Handler
+    # 사용자 선택값 파싱
+    selected_value = None
+    if user_response and "selected_option" in user_response:
+        selected_value = user_response["selected_option"].get("value")
+        
+    # 상태 업데이트 (선택 로그 등)
+    # handle_user_response는 state를 업데이트해서 반환함
+    updated_state = handle_user_response(state, user_response)
+    
+    # 5. 분기 처리 (Command goto)
+    if selected_value == "approve":
+        print("[Approval] 목차 승인 -> Writer 진행")
+        return Command(update=updated_state, goto="write")
+    else:
+        print("[Approval] 목차 거절 -> Structurer 재진행")
+        # TODO: 거절 시 피드백을 받아서 반영하면 더 좋음 (현재는 단순 재시도)
+        return Command(update=updated_state, goto="structure")
 
 
 # =============================================================================
@@ -667,6 +736,10 @@ def create_workflow() -> StateGraph:
     workflow.add_node("general_response", general_response_node)
     
     workflow.add_node("structure", run_structurer_node)
+    
+    # [NEW] Multi-HITL: Structure Approval 노드 추가
+    workflow.add_node("structure_approval", structure_approval_node)
+    
     workflow.add_node("write", run_writer_node)
     workflow.add_node("review", run_reviewer_node)
     workflow.add_node("refine", run_refiner_node)
@@ -676,8 +749,6 @@ def create_workflow() -> StateGraph:
     # [UPDATE] 병렬 컨텍스트 수집 노드로 진입
     workflow.set_entry_point("context_gathering")
     workflow.add_edge("context_gathering", "analyze")
-    # workflow.add_edge("retrieve", "fetch_web") # [REMOVED]
-    # workflow.add_edge("fetch_web", "analyze") # [REMOVED]
 
     # [UPDATE] 조건부 분기 개선 (명시적 노드로 라우팅)
     workflow.add_conditional_edges(
@@ -694,7 +765,14 @@ def create_workflow() -> StateGraph:
     workflow.add_edge("option_pause", END)
     workflow.add_edge("general_response", END)
 
-    workflow.add_edge("structure", "write")
+    # [UPDATE] Structure -> Approval -> (Command) -> Write 구조
+    workflow.add_edge("structure", "structure_approval")
+    # approval 노드는 내부에서 Command(goto=...)로 분기하므로,
+    # 그래프상에서는 흐름이 끊기는 것처럼 보일 수 있지만, 실제로는 런타임에 제어됨.
+    # 시각화 및 종료 처리를 위해 END로 연결
+    workflow.add_edge("structure_approval", END)
+    
+    # write 노드는 approval 노드에서 호출됨 (직접 엣지 없음)
     workflow.add_edge("write", "review")
     
     # [PHASE 1] 동적 라우팅 설정
