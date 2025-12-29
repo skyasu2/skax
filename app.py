@@ -235,23 +235,21 @@ def render_main():
                     analysis_res = final_result.get("analysis")
                     generated_plan = final_result.get("final_output", "")
                     need_more_info = final_result.get("need_more_info", False)
+                    options = final_result.get("options", [])
 
                     # [Check] 일반 잡담 여부 확인
                     is_general = False
                     if analysis_res and isinstance(analysis_res, dict):
                         is_general = analysis_res.get("is_general_query", False)
 
-                    if is_general:
-                        # A. 일반 대화 응답
-                        ans = analysis_res.get("general_answer", "작업이 완료되었습니다.")
-                        st.session_state.chat_history.append({"role": "assistant", "content": ans, "type": "text"})
-                        # 잡담인 경우 generated_plan이 남아있더라도 무시하고 UI 상태 초기화
-                        st.session_state.generated_plan = None 
+                    # [DEBUG] 플래그 값 출력
+                    print(f"[DEBUG] app.py - is_general: {is_general}, need_more_info: {need_more_info}")
+                    print(f"[DEBUG] app.py - options count: {len(options)}")
 
-                    elif need_more_info:
-                        # B. 추가 정보 요청 & 기획 제안 미리보기
+                    # [FIX] options가 있으면 무조건 기획 제안 모드로 처리 (옵션 우선!)
+                    if options and len(options) > 0 and not is_general:
+                        # B. 기획 제안 & 미리보기 표시 (옵션 버튼 있는 경우)
                         q = final_result.get("option_question", "다음과 같이 기획 방향을 제안합니다.")
-                        opts = final_result.get("options", [])
                         
                         # [UX] 제안 내용 미리보기 구성
                         preview_msg = ""
@@ -264,18 +262,23 @@ def render_main():
                             if p_purpose:
                                 preview_msg += f"**🎯 기획 의도**: {p_purpose}\n"
                             if p_features:
-                                feats = ", ".join(p_features[:4]) # 최대 4개
+                                feats = ", ".join(p_features[:4])
                                 preview_msg += f"**💡 주요 기능**: {feats} 등\n"
                             preview_msg += "\n"
 
                         msg_content = f"🤔 **{q}**\n\n{preview_msg}"
                         
                         # 옵션 설명 추가
-                        if opts:
-                            for o in opts:
-                                msg_content += f"- **{o.get('title')}**: {o.get('description')}\n"
+                        for o in options:
+                            msg_content += f"- **{o.get('title')}**: {o.get('description')}\n"
 
                         st.session_state.chat_history.append({"role": "assistant", "content": msg_content, "type": "options"})
+
+                    elif is_general:
+                        # A. 일반 대화 응답
+                        ans = analysis_res.get("general_answer", "무엇을 도와드릴까요?")
+                        st.session_state.chat_history.append({"role": "assistant", "content": ans, "type": "text"})
+                        st.session_state.generated_plan = None 
 
                     elif generated_plan:
                         # C. 기획서 완성

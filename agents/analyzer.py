@@ -98,9 +98,15 @@ def run(state: PlanCraftState) -> PlanCraftState:
         # [Rule Override 2] (Safety Net)
         # 옵션 리스트가 비어있지 않다면, 이는 LLM이 추가 질문을 의도한 것이므로 무조건 need_more_info=True여야 함.
         # 또한, 옵션을 준다는 것은 '기획 제안'이므로 일반 잡담(is_general_query)일 수 없음.
-        if analysis_dict.get("options") and len(analysis_dict["options"]) > 0:
+        opts = analysis_dict.get("options", [])
+        print(f"[DEBUG] Analyzer - options count: {len(opts)}, options: {opts[:2] if opts else 'EMPTY'}")
+        
+        if opts and len(opts) > 0:
+             print(f"[DEBUG] Rule Override 2 적용됨! need_more_info=True, is_general=False 설정")
              analysis_dict["need_more_info"] = True
              analysis_dict["is_general_query"] = False
+
+        print(f"[DEBUG] Analyzer Final - need_more_info: {analysis_dict.get('need_more_info')}, is_general: {analysis_dict.get('is_general_query')}")
 
         updates = {
             "analysis": analysis_dict,

@@ -60,6 +60,11 @@ class PlanCraftOutput(TypedDict, total=False):
     structure: Optional[dict]
     review: Optional[dict]
     draft: Optional[dict]
+    
+    # [FIX] 인터럽트/추가질문 관련 필드 (UI 렌더링용)
+    options: Optional[List[dict]]
+    option_question: Optional[str]
+    need_more_info: bool
 
 
 # =============================================================================
