@@ -155,6 +155,7 @@ class PlanCraftState(TypedDict, total=False):
     current_step: str
     step_status: Literal["RUNNING", "SUCCESS", "FAILED"]
     last_error: Optional[str]
+    error_category: Optional[str]  # LLM_ERROR, NETWORK_ERROR, VALIDATION_ERROR, STATE_ERROR, UNKNOWN_ERROR
     execution_time: Optional[str]
 
     # ========== Graceful End-of-Loop (LangGraph Best Practice) ==========

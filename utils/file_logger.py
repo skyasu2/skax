@@ -55,6 +55,10 @@ class FileLogger:
         """에러 로그 기록 (log 메소드 래퍼)"""
         self.log("ERROR", {"message": message})
 
+    def debug(self, message: str):
+        """디버그 로그 기록 (log 메소드 래퍼)"""
+        self.log("DEBUG", {"message": message})
+
     def _serialize(self, obj: Any) -> Any:
         """JSON 직렬화 불가능한 객체 처리"""
         if hasattr(obj, "model_dump"):
