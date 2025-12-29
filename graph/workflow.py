@@ -487,6 +487,7 @@ def run_refiner_node(state: PlanCraftState) -> PlanCraftState:
 def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
     """포맷팅 Agent 실행 노드"""
     from graph.state import update_state
+    import re
 
     new_state = update_state(state, current_step="format")
 
@@ -515,6 +516,29 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
             final_md += f"## {name}\n\n{content}\n\n"
 
         # =====================================================================
+        # [NEW] 마크다운 후처리 (Post-processing)
+        # =====================================================================
+        def post_process_markdown(text: str) -> str:
+            # 1. 숫자/영어와 한글 조사 사이 공백 추가 ($0.44B이며 -> $0.44B 이며)
+            # (영문/숫자)(한글) 패턴 -> Group 1 + " " + Group 2
+            text = re.sub(r'([a-zA-Z0-9%])([가-힣])', r'\1 \2', text)
+            
+            # 2. 닫는 괄호와 한글 조사 사이 공백 ()의 -> () 의
+            text = re.sub(r'(\))([가-힣])', r'\1 \2', text)
+            
+            # 3. 마크다운 테이블 앞뒤 빈 줄 확보
+            # 테이블 헤더 라인(|---|)이 보이면 그 앞앞 줄이 빈 줄인지 확인하기 어려우므로,
+            # 아예 테이블 시작(| ...) 앞에 빈 줄을 강제로 넣음 (단, 이미 빈 줄이 있으면 제외)
+            # 간단하게: \n| -> \n\n| (너무 공격적일 수 있으니 보류하거나 신중하게)
+            
+            # 4. 중복 줄바꿈 정리 (3개 이상 -> 2개)
+            text = re.sub(r'\n{3,}', '\n\n', text)
+            
+            return text
+            
+        final_md = post_process_markdown(final_md)
+
+        # =====================================================================
         # [FIX] 웹 검색 출처 추가 (중복 방지)
         # =====================================================================
         web_urls = new_state.get("web_urls") or []
@@ -538,7 +562,7 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
         new_state = update_state(new_state, final_output=final_md)
 
     return _update_step_history(
-        new_state, "format", "SUCCESS", summary="최종 포맷팅 완료"
+        new_state, "format", "SUCCESS", summary="최종 포맷팅 및 교정 완료"
     )
 
 
