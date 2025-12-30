@@ -8,8 +8,15 @@ from utils.schemas import JudgeResult
 from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.reviewer_prompt import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 
-# LLM 초기화 (Structured Output)
-reviewer_llm = get_llm(temperature=0.1).with_structured_output(JudgeResult)
+# LLM은 함수 내에서 지연 초기화 (환경 변수 로딩 타이밍 이슈 방지)
+_reviewer_llm = None
+
+def _get_reviewer_llm():
+    """Reviewer LLM 지연 초기화"""
+    global _reviewer_llm
+    if _reviewer_llm is None:
+        _reviewer_llm = get_llm(temperature=0.1).with_structured_output(JudgeResult)
+    return _reviewer_llm
 
 def run(state: PlanCraftState) -> PlanCraftState:
     """
@@ -54,7 +61,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
     
     # 3. LLM 호출
     try:
-        review_result = reviewer_llm.invoke(messages)
+        review_result = _get_reviewer_llm().invoke(messages)
         
         # 4. 상태 업데이트 (Pydantic -> Dict 일관성 보장)
         review_dict = ensure_dict(review_result)
@@ -67,11 +74,14 @@ def run(state: PlanCraftState) -> PlanCraftState:
         
     except Exception as e:
         print(f"[ERROR] Reviewer Failed: {e}")
-        # Fallback: 기본 심사 결과 (조건부 승인)
+        # Fallback: 기본 심사 결과 (REVISE로 설정하여 Refiner가 보완하도록 함)
         fallback_review = {
-            "overall_score": 70,
-            "feedback_summary": "시스템 에러로 인해 자동 심사가 건너뛰어졌습니다. 수동 검토가 필요할 수 있습니다.",
-            "verdict": "PASS",  # 흐름 끊기지 않도록 PASS 처리
-            "section_feedbacks": []
+            "overall_score": 7,  # 7점 = REVISE 범위 (5-8점)
+            "feedback_summary": "시스템 에러로 인해 자동 심사가 건너뛰어졌습니다. Refiner가 기본 검토를 수행합니다.",
+            "verdict": "REVISE",  # 점수와 일치하도록 REVISE 설정
+            "critical_issues": [],
+            "strengths": [],
+            "weaknesses": ["자동 심사 실패로 인한 기본값 적용"],
+            "action_items": ["전반적인 내용 검토 필요"]
         }
         return update_state(state, review=fallback_review, error=f"Reviewer Error: {str(e)}")

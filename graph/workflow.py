@@ -559,27 +559,33 @@ def run_refiner_node(state: PlanCraftState) -> PlanCraftState:
 
 @handle_node_error
 def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
-    """포맷팅 Agent 실행 노드"""
+    """
+    포맷팅 Agent 실행 노드
+
+    1단계: Draft → Final Output 변환 (마크다운 조합)
+    2단계: Formatter Agent 호출 (chat_summary 생성 + refine_count 리셋)
+    """
     from graph.state import update_state
-    import re
+    from agents.formatter import run as formatter_run
 
-    new_state = update_state(state, current_step="format")
+    # =========================================================================
+    # 1단계: Draft -> Final Output 변환
+    # =========================================================================
+    draft = state.get("draft")
+    structure = state.get("structure")
+    final_md = ""
 
-    # Draft -> Final Output
-    draft = new_state.get("draft")
-    structure = new_state.get("structure")
-    
     if draft:
         # Title 추출
         title = "기획서"
         if structure:
             title = structure.get("title") if isinstance(structure, dict) else getattr(structure, "title", "기획서")
-        
+
         final_md = f"# {title}\n\n"
-        
+
         # Sections 추출
         sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
-        
+
         for sec in sections:
             if isinstance(sec, dict):
                 name = sec.get("name", "")
@@ -589,23 +595,12 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
                 content = sec.content
             final_md += f"## {name}\n\n{content}\n\n"
 
-        # =====================================================================
-        # [ROLLBACK] 마크다운 후처리 제거 (Side Effect 방지)
-        # Reason: 정규식이 URL(http://...)이나 코드 블록 내의 문자열까지
-        # 변경하여 링크가 깨지거나 코드가 오동작할 위험이 있음.
-        # 프롬프트(Step 2067)에서 공백 규칙을 강화했으므로 LLM 생성을 신뢰함.
-        # =====================================================================
-        # final_md = post_process_markdown(final_md)
+        # 웹 검색 출처 추가 (중복 방지)
+        web_urls = state.get("web_urls") or []
+        web_context = state.get("web_context") or ""
 
-        # =====================================================================
-        # [FIX] 웹 검색 출처 추가 (중복 방지)
-        # =====================================================================
-        web_urls = new_state.get("web_urls") or []
-        web_context = new_state.get("web_context") or ""
-        
-        # 이미 참고 자료 섹션이 있으면 추가하지 않음
         has_reference_section = "참고 자료" in final_md or "참고자료" in final_md
-        
+
         if not has_reference_section:
             if web_urls:
                 final_md += "---\n\n## 📚 참고 자료\n\n"
@@ -614,11 +609,14 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
                     final_md += f"{i}. [{url}]({url})\n"
                 final_md += "\n"
             elif web_context and "웹 검색 결과" in web_context:
-                # URL 목록이 없지만 웹 검색은 수행된 경우
                 final_md += "---\n\n## 📚 참고 자료\n\n"
                 final_md += "> 본 기획서는 웹 검색을 통해 수집한 최신 정보를 반영하였습니다.\n\n"
 
-        new_state = update_state(new_state, final_output=final_md)
+    # =========================================================================
+    # 2단계: Formatter Agent 호출 (chat_summary 생성 + refine_count=0 리셋)
+    # =========================================================================
+    state_with_output = update_state(state, final_output=final_md, current_step="format")
+    new_state = formatter_run(state_with_output)
 
     return _update_step_history(
         new_state, "format", "SUCCESS", summary="최종 포맷팅 및 교정 완료"

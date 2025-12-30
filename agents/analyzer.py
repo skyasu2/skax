@@ -9,8 +9,15 @@ from utils.time_context import get_time_context, get_time_instruction
 from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_USER_PROMPT
 
-# LLM 초기화
-analyzer_llm = get_llm().with_structured_output(AnalysisResult)
+# LLM은 함수 내에서 지연 초기화 (환경 변수 로딩 타이밍 이슈 방지)
+_analyzer_llm = None
+
+def _get_analyzer_llm():
+    """Analyzer LLM 지연 초기화"""
+    global _analyzer_llm
+    if _analyzer_llm is None:
+        _analyzer_llm = get_llm().with_structured_output(AnalysisResult)
+    return _analyzer_llm
 
 def run(state: PlanCraftState) -> PlanCraftState:
     """
@@ -109,7 +116,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
     
     # 4. LLM 호출
     try:
-        analysis_result = analyzer_llm.invoke(messages)
+        analysis_result = _get_analyzer_llm().invoke(messages)
         
         # 5. 상태 업데이트 (Pydantic -> Dict 일관성 보장)
         analysis_dict = ensure_dict(analysis_result)

@@ -5,6 +5,7 @@ PlanCraft Agent - Refiner Agent
 from utils.llm import get_llm
 from graph.state import PlanCraftState, update_state, ensure_dict
 from utils.schemas import RefinementStrategy
+from utils.settings import settings
 from prompts.refiner_prompt import REFINER_SYSTEM_PROMPT, REFINER_USER_PROMPT
 from utils.file_logger import get_file_logger
 
@@ -38,7 +39,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
         issues = "\n".join([f"- {i}" for i in getattr(review, "critical_issues", [])])
     
     current_count = state.get("refine_count", 0)
-    MAX_RETRIES = 3 # 설정 파일 연동 가능
+    MAX_RETRIES = settings.MAX_REFINE_LOOPS  # 중앙 설정에서 관리
     
     # PASS 또는 횟수 초과 시 -> Stop Refinement
     if verdict == "PASS" or current_count >= MAX_RETRIES:

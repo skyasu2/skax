@@ -220,6 +220,7 @@ def create_initial_state(
         "draft": None,
         "review": None,
         "refined": False,
+        "restart_count": 0,  # Analyzer 복귀 횟수 (동적 라우팅용)
         "current_step": "start",
         "step_status": "RUNNING",
         "last_error": None,

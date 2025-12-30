@@ -13,8 +13,15 @@ from utils.file_logger import get_file_logger
 from prompts.writer_prompt import WRITER_SYSTEM_PROMPT, WRITER_USER_PROMPT
 from prompts.business_plan_prompt import BUSINESS_PLAN_SYSTEM_PROMPT, BUSINESS_PLAN_USER_PROMPT
 
-# LLM 초기화 (일관성 위해 temperature 낮춤)
-writer_llm = get_llm(temperature=settings.LLM_TEMPERATURE_STRICT).with_structured_output(DraftResult)
+# LLM은 함수 내에서 지연 초기화 (환경 변수 로딩 타이밍 이슈 방지)
+_writer_llm = None
+
+def _get_writer_llm():
+    """Writer LLM 지연 초기화"""
+    global _writer_llm
+    if _writer_llm is None:
+        _writer_llm = get_llm(temperature=settings.LLM_TEMPERATURE_STRICT).with_structured_output(DraftResult)
+    return _writer_llm
 
 
 def _get_prompts_by_doc_type(state: PlanCraftState) -> tuple:
@@ -202,7 +209,7 @@ Action Items (실행 지침):
     while current_try < max_retries:
         try:
             logger.info(f"[Writer] 초안 작성 시도 ({current_try + 1}/{max_retries})...")
-            draft_result = writer_llm.invoke(messages)
+            draft_result = _get_writer_llm().invoke(messages)
             
             # Pydantic -> Dict 일관성 보장
             draft_dict = ensure_dict(draft_result)
