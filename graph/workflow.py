@@ -575,6 +575,28 @@ def run_reviewer_node(state: PlanCraftState) -> PlanCraftState:
     )
 
 @handle_node_error
+def run_discussion_node(state: PlanCraftState) -> PlanCraftState:
+    """
+    에이전트 간 대화 노드 (Reviewer ↔ Writer)
+
+    Reviewer가 피드백을 제시하고 Writer가 개선 계획을 설명하며
+    합의에 도달할 때까지 대화를 진행합니다.
+    """
+    from graph.subgraphs import run_discussion_subgraph
+
+    new_state = run_discussion_subgraph(state)
+    round_count = new_state.get("discussion_round", 0)
+    consensus = new_state.get("consensus_reached", False)
+
+    return _update_step_history(
+        new_state,
+        "discussion",
+        "SUCCESS",
+        summary=f"에이전트 대화 {round_count}라운드, 합의: {'완료' if consensus else '미완료'}"
+    )
+
+
+@handle_node_error
 def run_refiner_node(state: PlanCraftState) -> PlanCraftState:
     """개선 Agent 실행 노드"""
     from agents.refiner import run
@@ -778,6 +800,7 @@ def create_workflow() -> StateGraph:
     
     workflow.add_node("write", run_writer_node)
     workflow.add_node("review", run_reviewer_node)
+    workflow.add_node("discussion", run_discussion_node)  # [NEW] 에이전트 간 대화
     workflow.add_node("refine", run_refiner_node)
     workflow.add_node("format", run_formatter_node)
 
@@ -807,15 +830,39 @@ def create_workflow() -> StateGraph:
     
     # write 노드는 structure에서 직접 연결됨
     workflow.add_edge("write", "review")
-    
-    # [PHASE 1] 동적 라우팅 설정
+
+    # [NEW] Review 후 분기: PASS면 바로 완료, 아니면 Discussion
+    def should_discuss_or_complete(state: PlanCraftState) -> str:
+        """Review 후 Discussion 필요 여부 결정"""
+        review = state.get("review", {})
+        score = review.get("overall_score", 5)
+        verdict = review.get("verdict", "REVISE")
+
+        # PASS 판정이면 Discussion 건너뛰고 바로 완료
+        if score >= 9 and verdict == "PASS":
+            logger = get_file_logger()
+            logger.info(f"[ROUTING] 품질 우수 ({score}점), Discussion 건너뛰고 완료")
+            return "complete"
+
+        return "discuss"
+
     workflow.add_conditional_edges(
         "review",
+        should_discuss_or_complete,
+        {
+            "discuss": "discussion",  # [NEW] 에이전트 간 대화
+            "complete": "format"      # 바로 완료
+        }
+    )
+
+    # [NEW] Discussion 후 분기: 합의 결과에 따라 refine/restart/complete
+    workflow.add_conditional_edges(
+        "discussion",
         should_refine_or_restart,
         {
-            "restart": "analyze",   # [NEW] Analyzer 복귀
-            "refine": "refine",     # 기존: 개선
-            "complete": "format"    # [NEW] 바로 완료
+            "restart": "analyze",   # Analyzer 복귀
+            "refine": "refine",     # 개선
+            "complete": "format"    # 완료
         }
     )
 

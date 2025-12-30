@@ -151,7 +151,14 @@ class PlanCraftState(TypedDict, total=False):
     review: Optional[dict]
     refined: bool
     restart_count: int  # [NEW] Analyzer 복귀 횟수 (동적 라우팅)
-    
+
+    # Discussion (에이전트 간 대화)
+    discussion_messages: List[dict]  # [{"role": "reviewer/writer", "content": "...", "round": 0}]
+    discussion_round: int  # 현재 대화 라운드 (0부터 시작)
+    consensus_reached: bool  # 합의 도달 여부
+    agreed_action_items: List[str]  # 합의된 개선 사항 목록
+    refinement_guideline: Optional[dict]  # Refiner가 생성한 전략 (기존)
+
     # Metadata & Operations
     current_step: str
     step_status: Literal["RUNNING", "SUCCESS", "FAILED"]
@@ -221,6 +228,12 @@ def create_initial_state(
         "review": None,
         "refined": False,
         "restart_count": 0,  # Analyzer 복귀 횟수 (동적 라우팅용)
+        # Discussion (에이전트 간 대화)
+        "discussion_messages": [],
+        "discussion_round": 0,
+        "consensus_reached": False,
+        "agreed_action_items": [],
+        "refinement_guideline": None,
         "current_step": "start",
         "step_status": "RUNNING",
         "last_error": None,

@@ -91,8 +91,28 @@ _is_quality_pass(state)          # score >= 9 및 PASS
 
 # 분기
 < 5점 (FAIL)   → Analyzer 복귀 (최대 2회)
-5-8점 (REVISE) → Refiner 라우팅 (최대 3회)
-≥ 9점 (PASS)   → Formatter 완료
+5-8점 (REVISE) → Discussion → Refiner (최대 3회)
+≥ 9점 (PASS)   → Formatter 완료 (Discussion 건너뜀)
+```
+
+### Discussion SubGraph (에이전트 간 대화)
+```
+┌─────────────────────────────────────┐
+│     Discussion SubGraph             │
+│                                     │
+│  reviewer_speak ──► writer_respond  │
+│        ▲                 │          │
+│        └──── NO ◄── check_consensus │
+│                          │ YES      │
+│                          ▼          │
+│                         END         │
+└─────────────────────────────────────┘
+
+# State 필드
+discussion_messages: List[dict]  # 대화 이력
+discussion_round: int            # 라운드 수
+consensus_reached: bool          # 합의 도달
+agreed_action_items: List[str]   # 합의된 개선 사항
 ```
 
 ### RAG vs 웹검색 역할 분리
