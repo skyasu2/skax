@@ -59,6 +59,7 @@ Best Practice 적용:
     print(result["final_output"])
 """
 
+from enum import Enum
 from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
 from utils.checkpointer import get_checkpointer  # [NEW] Factory 패턴
@@ -68,6 +69,33 @@ from utils.settings import settings
 
 # [UPDATE] 로깅 핸들러 데코레이터
 from functools import wraps
+
+
+# =============================================================================
+# 라우팅 키 상수 (Enum) - 문자열 하드코딩 방지
+# =============================================================================
+
+class RouteKey(str, Enum):
+    """
+    워크플로우 라우팅 키 상수
+
+    문자열 하드코딩 대신 Enum 사용으로 타입 안전성 및 자동완성 지원.
+    str 상속으로 add_conditional_edges에서 직접 사용 가능.
+    """
+    # Analyzer 분기
+    CONTINUE = "continue"
+    OPTION_PAUSE = "option_pause"
+    GENERAL_RESPONSE = "general_response"
+
+    # Reviewer 분기
+    RESTART = "restart"
+    REFINE = "refine"
+    COMPLETE = "complete"
+    DISCUSS = "discuss"
+    SKIP_TO_REFINE = "skip_to_refine"
+
+    # Refiner 분기
+    RETRY = "retry"
 from agents import analyzer, structurer, writer, reviewer, refiner, formatter
 from utils.config import Config
 from utils.file_logger import get_file_logger
@@ -235,24 +263,42 @@ def should_refine_or_restart(state: PlanCraftState) -> str:
     # RunnableBranch 조건 평가 (우선순위 순)
     if _is_max_restart_reached(state):
         logger.info(f"[ROUTING] 최대 복귀 횟수 도달 ({restart_count}), Refiner로 진행")
-        return "refine"
+        return RouteKey.REFINE
 
     if _is_quality_fail(state):
         logger.info(f"[ROUTING] 점수 낮음 ({score}점, {verdict}), Analyzer로 복귀")
-        return "restart"
+        return RouteKey.RESTART
 
     if _is_quality_pass(state):
         logger.info(f"[ROUTING] 품질 우수 ({score}점, {verdict}), 바로 완료")
-        return "complete"
+        return RouteKey.COMPLETE
 
     logger.info(f"[ROUTING] 개선 필요 ({score}점, {verdict}), Refiner로")
-    return "refine"
+    return RouteKey.REFINE
 
 
 
 
 # =============================================================================
 # 노드 함수 정의 (모두 PlanCraftState TypedDict 사용)
+# =============================================================================
+#
+# [Side-Effect 정책]
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │ 노드 유형          │ Side-Effect   │ 주의사항                              │
+# ├────────────────────────────────────────────────────────────────────────────┤
+# │ 일반 노드          │ LLM 호출 있음 │ 실패 시 재시도됨 (멱등성 권장)        │
+# │ interrupt 노드     │ ⚠️ 중요       │ interrupt 전에 Side-Effect 금지!      │
+# │                    │               │ Resume 시 노드 처음부터 재실행됨      │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# interrupt() 사용 노드 목록:
+# - option_pause_node: 사용자 입력 대기 (interrupt 전 Side-Effect 없음)
+#
+# 안전한 패턴:
+# 1. interrupt() 전: 순수 함수만 (payload 생성, 조건 검사)
+# 2. interrupt() 후: Side-Effect 허용 (DB 저장, API 호출, 상태 업데이트)
+#
 # =============================================================================
 
 @handle_node_error
@@ -282,7 +328,13 @@ def retrieve_context(state: PlanCraftState) -> PlanCraftState:
 
 @handle_node_error
 def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
-    """조건부 웹 정보 수집 노드"""
+    """
+    조건부 웹 정보 수집 노드
+
+    Side-Effect: 외부 웹 API 호출 (Tavily Search)
+    - 실패 시 재시도 안전함 (조회 전용, 멱등성 보장)
+    - 중복 호출 시 동일 결과 반환 (검색 결과 캐싱 없음)
+    """
     import re
     from utils.config import Config
     from tools.mcp_client import fetch_url_sync, search_sync
@@ -418,10 +470,10 @@ def should_ask_user(state: PlanCraftState) -> str:
         str: 다음 노드 이름 ("option_pause", "general_response", "continue")
     """
     if is_human_interrupt_required(state):
-        return "option_pause"
+        return RouteKey.OPTION_PAUSE
     if is_general_query(state):
-        return "general_response"
-    return "continue"
+        return RouteKey.GENERAL_RESPONSE
+    return RouteKey.CONTINUE
 
 
 def is_human_interrupt_required(state: PlanCraftState) -> bool:
@@ -498,7 +550,13 @@ def general_response_node(state: PlanCraftState) -> PlanCraftState:
 
 @handle_node_error
 def run_analyzer_node(state: PlanCraftState) -> PlanCraftState:
-    """분석 Agent 실행 노드"""
+    """
+    분석 Agent 실행 노드
+
+    Side-Effect: LLM 호출 (Azure OpenAI)
+    - 멱등성: 동일 입력에 유사한 결과 (LLM 특성상 약간의 변동 있음)
+    - 재시도 안전: 상태 변경 없이 분석 결과만 반환
+    """
     from agents.analyzer import run
     from graph.state import update_state
     
@@ -530,7 +588,13 @@ def run_analyzer_node(state: PlanCraftState) -> PlanCraftState:
 
 @handle_node_error
 def run_structurer_node(state: PlanCraftState) -> PlanCraftState:
-    """구조화 Agent 실행 노드"""
+    """
+    구조화 Agent 실행 노드
+
+    Side-Effect: LLM 호출 (Azure OpenAI)
+    - 기획서 목차/섹션 구조 설계
+    - 재시도 안전: 구조만 생성, 외부 상태 변경 없음
+    """
     from agents.structurer import run
 
     new_state = run(state)
@@ -549,7 +613,13 @@ def run_structurer_node(state: PlanCraftState) -> PlanCraftState:
 
 @handle_node_error
 def run_writer_node(state: PlanCraftState) -> PlanCraftState:
-    """작성 Agent 실행 노드"""
+    """
+    작성 Agent 실행 노드
+
+    Side-Effect: LLM 호출 (Azure OpenAI)
+    - 섹션별 상세 콘텐츠 작성 (가장 오래 걸리는 단계)
+    - 재시도 안전: 콘텐츠만 생성, 외부 상태 변경 없음
+    """
     from agents.writer import run
 
     new_state = run(state)
@@ -567,7 +637,13 @@ def run_writer_node(state: PlanCraftState) -> PlanCraftState:
 
 @handle_node_error
 def run_reviewer_node(state: PlanCraftState) -> PlanCraftState:
-    """검토 Agent 실행 노드"""
+    """
+    검토 Agent 실행 노드
+
+    Side-Effect: LLM 호출 (Azure OpenAI)
+    - 품질 평가 및 verdict 결정 (PASS/REVISE/FAIL)
+    - 재시도 안전: 평가 결과만 반환, 외부 상태 변경 없음
+    """
     from agents.reviewer import run
 
     new_state = run(state)
@@ -591,8 +667,10 @@ def run_discussion_node(state: PlanCraftState) -> PlanCraftState:
     """
     에이전트 간 대화 노드 (Reviewer ↔ Writer)
 
-    Reviewer가 피드백을 제시하고 Writer가 개선 계획을 설명하며
-    합의에 도달할 때까지 대화를 진행합니다.
+    Side-Effect: 다중 LLM 호출 (SubGraph 내부)
+    - Reviewer가 피드백을 제시하고 Writer가 개선 계획을 설명
+    - 최대 DISCUSSION_MAX_ROUNDS 라운드 진행
+    - 재시도 안전: 대화 기록만 생성, 외부 상태 변경 없음
     """
     from graph.subgraphs import run_discussion_subgraph
 
@@ -610,7 +688,13 @@ def run_discussion_node(state: PlanCraftState) -> PlanCraftState:
 
 @handle_node_error
 def run_refiner_node(state: PlanCraftState) -> PlanCraftState:
-    """개선 Agent 실행 노드"""
+    """
+    개선 Agent 실행 노드 (Strategy Planner)
+
+    Side-Effect: LLM 호출 (Azure OpenAI)
+    - Reviewer 피드백 기반 개선 전략 수립
+    - 재시도 안전: 전략만 생성, 외부 상태 변경 없음
+    """
     from agents.refiner import run
 
     new_state = run(state)
@@ -628,8 +712,15 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
     """
     포맷팅 Agent 실행 노드
 
-    1단계: Draft → Final Output 변환 (마크다운 조합)
-    2단계: Formatter Agent 호출 (chat_summary 생성 + refine_count 리셋)
+    Side-Effect: LLM 호출 (Azure OpenAI)
+
+    처리 단계:
+    1. Draft → Final Output 변환 (마크다운 조합)
+    2. 웹 출처 링크 추가 (참고 자료 섹션)
+    3. Formatter Agent 호출 (chat_summary 생성)
+    4. refine_count 리셋 (사용자 수정 기회 3회 부여)
+
+    재시도 안전: 포맷팅만 수행, 외부 상태 변경 없음
     """
     from graph.state import update_state
     from agents.formatter import run as formatter_run
@@ -849,9 +940,9 @@ def create_workflow() -> StateGraph:
         "analyze",
         should_ask_user,
         {
-            "option_pause": "option_pause",
-            "general_response": "general_response",
-            "continue": "structure"
+            RouteKey.OPTION_PAUSE: "option_pause",
+            RouteKey.GENERAL_RESPONSE: "general_response",
+            RouteKey.CONTINUE: "structure"
         }
     )
     
@@ -886,30 +977,30 @@ def create_workflow() -> StateGraph:
         # PASS 판정: 바로 완료
         if score >= 9 and verdict == "PASS":
             logger.info(f"[ROUTING] 품질 우수 ({score}점), 바로 완료")
-            return "complete"
+            return RouteKey.COMPLETE
 
         # FAIL 판정: Analyzer 복귀
         if score < 5 or verdict == "FAIL":
             logger.info(f"[ROUTING] 품질 부족 ({score}점), Analyzer 복귀")
-            return "restart"
+            return RouteKey.RESTART
 
         # 중간 점수 (7-8): Discussion 스킵하고 바로 Refine
         if score >= skip_threshold:
             logger.info(f"[ROUTING] 중간 품질 ({score}점 >= {skip_threshold}), Discussion 스킵 → Refine")
-            return "skip_to_refine"
+            return RouteKey.SKIP_TO_REFINE
 
         # 낮은 점수 (5-6): Discussion 필요
         logger.info(f"[ROUTING] 개선 필요 ({score}점), Discussion 진행")
-        return "discuss"
+        return RouteKey.DISCUSS
 
     workflow.add_conditional_edges(
         "review",
         should_discuss_or_complete,
         {
-            "discuss": "discussion",      # 5-6점: 에이전트 간 대화
-            "skip_to_refine": "refine",   # 7-8점: Discussion 스킵
-            "complete": "format",         # 9점+: 바로 완료
-            "restart": "analyze"          # 5점-: Analyzer 복귀
+            RouteKey.DISCUSS: "discussion",         # 5-6점: 에이전트 간 대화
+            RouteKey.SKIP_TO_REFINE: "refine",      # 7-8점: Discussion 스킵
+            RouteKey.COMPLETE: "format",            # 9점+: 바로 완료
+            RouteKey.RESTART: "analyze"             # 5점-: Analyzer 복귀
         }
     )
 
@@ -936,24 +1027,24 @@ def create_workflow() -> StateGraph:
         # [NEW] Graceful End-of-Loop: 남은 스텝이 부족하면 안전하게 종료
         if remaining_steps <= settings.MIN_REMAINING_STEPS:
             print(f"[WARN] 남은 스텝 부족 ({remaining_steps}), 루프 종료")
-            return "complete"
-        
+            return RouteKey.COMPLETE
+
         # 최대 루프 횟수 초과
         if refine_count >= settings.MAX_REFINE_LOOPS:
             print(f"[WARN] 최대 루프 도달 ({refine_count}), 루프 종료")
-            return "complete"
-        
+            return RouteKey.COMPLETE
+
         # 개선 필요 여부
         if refined:
-            return "retry"
-        return "complete"
+            return RouteKey.RETRY
+        return RouteKey.COMPLETE
 
     workflow.add_conditional_edges(
         "refine",
         should_refine_again,
         {
-            "retry": "structure",   # 재작성 루프
-            "complete": "format"    # 완료
+            RouteKey.RETRY: "structure",      # 재작성 루프
+            RouteKey.COMPLETE: "format"       # 완료
         }
     )
 
