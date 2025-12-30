@@ -38,3 +38,6 @@ docs/*.png
 
 # Local Mock Test (Not for Deploy)
 tests/test_mock_agents_manual.py
+
+# Claude Code local settings
+.claude/settings.local.json
