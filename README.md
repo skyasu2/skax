@@ -209,6 +209,16 @@ PYTHONPATH=$(pwd) pytest tests/test_scenarios.py -v
 
 ---
 
+## 📖 개발 문서
+
+| 문서 | 설명 |
+|------|------|
+| [CLAUDE.md](./CLAUDE.md) | 프로젝트 가이드 (Claude Code용) |
+| [docs/AGENT_IO_EXAMPLES.md](./docs/AGENT_IO_EXAMPLES.md) | 에이전트별 JSON 입출력 예시 |
+| [CHANGELOG.md](./CHANGELOG.md) | 버전별 변경사항 |
+
+---
+
 ## 📚 주요 기술 스택
 
 | 영역 | 기술 |
