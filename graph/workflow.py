@@ -630,6 +630,12 @@ def option_pause_node(state: PlanCraftState) -> Command:
 
     # [NEW] Input Validation Loop with Safety Limit
     while retry_count < MAX_RETRIES:
+        # [NEW] 재시도 시 사용자에게 에러 피드백 제공
+        if retry_count > 0:
+            payload["error"] = "⚠️ 입력값이 비어있습니다. 다시 선택해주세요."
+            # [OPTION] 질문 업데이트 (선택 사항)
+            # payload["question"] = f"[재입력 요청] {payload['question']}"
+            
         # interrupt() 호출 시 실행 중단 -> Resume 시 값 반환
         user_response = interrupt(payload)
         

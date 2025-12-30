@@ -89,6 +89,7 @@ class InterruptPayload(TypedDict):
     options: List[InterruptOption]
     input_schema_name: Optional[str]
     data: Optional[dict]
+    error: NotRequired[str]  # [NEW] 에러 메시지 (UI 표시용)
 
 
 # =============================================================================
