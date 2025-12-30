@@ -5,7 +5,7 @@ import logging
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import JudgeResult
-from graph.state import PlanCraftState, update_state
+from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.reviewer_prompt import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 
 # LLM 초기화 (Structured Output)
@@ -56,11 +56,8 @@ def run(state: PlanCraftState) -> PlanCraftState:
     try:
         review_result = reviewer_llm.invoke(messages)
         
-        # 4. 상태 업데이트
-        if hasattr(review_result, "model_dump"):
-            review_dict = review_result.model_dump()
-        else:
-            review_dict = review_result
+        # 4. 상태 업데이트 (Pydantic -> Dict 일관성 보장)
+        review_dict = ensure_dict(review_result)
             
         return update_state(
             state,

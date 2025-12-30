@@ -3,7 +3,7 @@
 PlanCraft Agent - Refiner Agent
 """
 from utils.llm import get_llm
-from graph.state import PlanCraftState, update_state
+from graph.state import PlanCraftState, update_state, ensure_dict
 from utils.schemas import RefinementStrategy
 from prompts.refiner_prompt import REFINER_SYSTEM_PROMPT, REFINER_USER_PROMPT
 from utils.file_logger import get_file_logger
@@ -76,10 +76,8 @@ def run(state: PlanCraftState) -> PlanCraftState:
     try:
         strategy_result = refiner_llm.invoke(messages)
         
-        if hasattr(strategy_result, "model_dump"):
-            strategy_data = strategy_result.model_dump()
-        else:
-            strategy_data = strategy_result
+        # Pydantic -> Dict 일관성 보장
+        strategy_data = ensure_dict(strategy_result)
             
         logger.info(f"[Refiner] 전략 수립 완료: {strategy_data.get('overall_direction')}")
         

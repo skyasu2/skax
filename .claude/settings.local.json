@@ -12,7 +12,9 @@
       "Bash(git push:*)",
       "Bash(gh auth:*)",
       "Bash(sudo apt update:*)",
-      "Bash(sudo apt install:*)"
+      "Bash(sudo apt install:*)",
+      "Bash(wslview:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: Add ensure_dict utility for consistent dict-access pattern\n\n- Add ensure_dict\\(\\) function to graph/state.py for Pydantic/dict conversion\n- Update all agents \\(analyzer, structurer, writer, reviewer, refiner\\) to use ensure_dict\n- Remove repeated hasattr/model_dump pattern across agents\n- Support Pydantic v1/v2 compatibility with fallback handling\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

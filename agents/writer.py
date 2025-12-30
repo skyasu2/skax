@@ -5,7 +5,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import DraftResult
 from utils.time_context import get_time_context, get_time_instruction
-from graph.state import PlanCraftState, update_state
+from graph.state import PlanCraftState, update_state, ensure_dict
 from utils.settings import settings
 from utils.file_logger import get_file_logger
 
@@ -204,11 +204,8 @@ Action Items (실행 지침):
             logger.info(f"[Writer] 초안 작성 시도 ({current_try + 1}/{max_retries})...")
             draft_result = writer_llm.invoke(messages)
             
-            # Pydantic -> Dict 변환
-            if hasattr(draft_result, "model_dump"):
-                draft_dict = draft_result.model_dump()
-            else:
-                draft_dict = draft_result
+            # Pydantic -> Dict 일관성 보장
+            draft_dict = ensure_dict(draft_result)
 
             # 마지막 결과 보존 (부분이라도)
             last_draft_dict = draft_dict

@@ -270,6 +270,34 @@ def safe_get(obj: Any, key: str, default: Any = None) -> Any:
     return getattr(obj, key, default)
 
 
+def ensure_dict(obj: Any) -> Dict[str, Any]:
+    """
+    Pydantic 모델 또는 dict를 항상 dict로 변환합니다.
+
+    LLM의 with_structured_output()이 Pydantic 모델을 반환할 때,
+    일관된 dict-access 방식을 유지하기 위해 사용합니다.
+
+    Args:
+        obj: dict, Pydantic 모델, 또는 None
+
+    Returns:
+        dict (obj가 None이면 빈 dict 반환)
+
+    Usage:
+        analysis_dict = ensure_dict(analysis_result)
+        structure_dict = ensure_dict(structure_result)
+    """
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    if hasattr(obj, "dict"):  # Pydantic v1 호환
+        return obj.dict()
+    return dict(obj) if hasattr(obj, "__iter__") else {"value": obj}
+
+
 def validate_state(state: Any) -> bool:
     """
     State가 dict 형태인지 검증합니다.

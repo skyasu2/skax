@@ -5,7 +5,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import StructureResult
 from utils.time_context import get_time_context
-from graph.state import PlanCraftState, update_state
+from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.structurer_prompt import STRUCTURER_SYSTEM_PROMPT, STRUCTURER_USER_PROMPT
 from utils.file_logger import get_file_logger
 
@@ -97,11 +97,8 @@ def run(state: PlanCraftState) -> PlanCraftState:
     try:
         structure_result = dynamic_llm.invoke(messages)
         
-        # 4. 상태 업데이트
-        if hasattr(structure_result, "model_dump"):
-            structure_dict = structure_result.model_dump()
-        else:
-            structure_dict = structure_result
+        # 4. 상태 업데이트 (Pydantic -> Dict 일관성 보장)
+        structure_dict = ensure_dict(structure_result)
             
         logger.info(f"[Structurer] 구조화 완료: {len(structure_dict.get('sections', []))}개 섹션")
             

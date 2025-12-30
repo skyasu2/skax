@@ -6,7 +6,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import AnalysisResult
 from utils.time_context import get_time_context, get_time_instruction
-from graph.state import PlanCraftState, update_state
+from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_USER_PROMPT
 
 # LLM 초기화
@@ -111,12 +111,8 @@ def run(state: PlanCraftState) -> PlanCraftState:
     try:
         analysis_result = analyzer_llm.invoke(messages)
         
-        # 5. 상태 업데이트
-        # Pydantic -> Dict 변환
-        if hasattr(analysis_result, "model_dump"):
-            analysis_dict = analysis_result.model_dump()
-        else:
-            analysis_dict = analysis_result
+        # 5. 상태 업데이트 (Pydantic -> Dict 일관성 보장)
+        analysis_dict = ensure_dict(analysis_result)
 
         # [Rule Override] 입력 길이가 충분히 길면(20자 이상), LLM이 확인 요청을 하더라도 강제로 진행
         # LLM이 안전 성향(Safety Bias)으로 인해 불필요한 확인을 시도하는 경우를 방지
