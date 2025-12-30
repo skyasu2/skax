@@ -82,32 +82,38 @@ User Input → [RAG + Web Search (병렬)] → Analyzer → Structurer → Write
 | 브레인스토밍 | `utils/idea_generator.py` | 8개 카테고리 아이디어 생성 |
 | UI 스타일 | `ui/styles.py` | CSS Design Tokens |
 
-### Reviewer 라우팅 (RunnableBranch 패턴)
+### Reviewer 라우팅 (스마트 분기)
 ```python
-# 조건 함수
-_is_max_restart_reached(state)  # 최대 복귀 횟수
-_is_quality_fail(state)          # score < 5 또는 FAIL
-_is_quality_pass(state)          # score >= 9 및 PASS
+# should_discuss_or_complete 함수
+# 성능 최적화를 위한 점수 기반 스마트 라우팅
 
-# 분기
-< 5점 (FAIL)   → Analyzer 복귀 (최대 2회)
-5-8점 (REVISE) → Discussion → Refiner (최대 3회)
-≥ 9점 (PASS)   → Formatter 완료 (Discussion 건너뜀)
+# 분기 로직 (settings.py 설정값 기반)
+< 5점 (FAIL)     → Analyzer 복귀 (최대 2회)
+5-6점 (REVISE)   → Discussion (1라운드) → Refiner
+7-8점 (REVISE)   → Discussion 스킵 → Refiner (최대 2회)
+≥ 9점 (PASS)     → Formatter 완료
+
+# 설정값 (utils/settings.py)
+DISCUSSION_SKIP_THRESHOLD = 7   # 이상이면 Discussion 스킵
+DISCUSSION_MAX_ROUNDS = 1       # Discussion 최대 라운드
+MAX_REFINE_LOOPS = 2            # Refine 최대 횟수
 ```
 
 ### Discussion SubGraph (에이전트 간 대화)
 ```
 ┌─────────────────────────────────────┐
 │     Discussion SubGraph             │
+│     (5-6점에서만 실행)               │
 │                                     │
 │  reviewer_speak ──► writer_respond  │
 │        ▲                 │          │
 │        └──── NO ◄── check_consensus │
 │                          │ YES      │
 │                          ▼          │
-│                         END         │
+│                       → Refiner     │
 └─────────────────────────────────────┘
 
+# 최적화: 1라운드만 실행 (2 LLM 호출)
 # State 필드
 discussion_messages: List[dict]  # 대화 이력
 discussion_round: int            # 라운드 수

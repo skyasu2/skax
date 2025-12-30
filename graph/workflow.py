@@ -866,40 +866,56 @@ def create_workflow() -> StateGraph:
     # write 노드는 structure에서 직접 연결됨
     workflow.add_edge("write", "review")
 
-    # [NEW] Review 후 분기: PASS면 바로 완료, 아니면 Discussion
+    # [UPDATE] Review 후 스마트 분기: 점수 기반 최적화 라우팅
     def should_discuss_or_complete(state: PlanCraftState) -> str:
-        """Review 후 Discussion 필요 여부 결정"""
+        """
+        Review 후 Discussion 필요 여부 결정 (성능 최적화)
+
+        라우팅 로직:
+        - score >= 9 (PASS): 바로 완료 → format
+        - score >= DISCUSSION_SKIP_THRESHOLD (7): Discussion 스킵 → refine
+        - score < 7: Discussion 필요 → discuss
+        - score < 5 (FAIL): Analyzer 복귀 → restart
+        """
+        logger = get_file_logger()
         review = state.get("review", {})
         score = review.get("overall_score", 5)
         verdict = review.get("verdict", "REVISE")
+        skip_threshold = settings.DISCUSSION_SKIP_THRESHOLD
 
-        # PASS 판정이면 Discussion 건너뛰고 바로 완료
+        # PASS 판정: 바로 완료
         if score >= 9 and verdict == "PASS":
-            logger = get_file_logger()
-            logger.info(f"[ROUTING] 품질 우수 ({score}점), Discussion 건너뛰고 완료")
+            logger.info(f"[ROUTING] 품질 우수 ({score}점), 바로 완료")
             return "complete"
 
+        # FAIL 판정: Analyzer 복귀
+        if score < 5 or verdict == "FAIL":
+            logger.info(f"[ROUTING] 품질 부족 ({score}점), Analyzer 복귀")
+            return "restart"
+
+        # 중간 점수 (7-8): Discussion 스킵하고 바로 Refine
+        if score >= skip_threshold:
+            logger.info(f"[ROUTING] 중간 품질 ({score}점 >= {skip_threshold}), Discussion 스킵 → Refine")
+            return "skip_to_refine"
+
+        # 낮은 점수 (5-6): Discussion 필요
+        logger.info(f"[ROUTING] 개선 필요 ({score}점), Discussion 진행")
         return "discuss"
 
     workflow.add_conditional_edges(
         "review",
         should_discuss_or_complete,
         {
-            "discuss": "discussion",  # [NEW] 에이전트 간 대화
-            "complete": "format"      # 바로 완료
+            "discuss": "discussion",      # 5-6점: 에이전트 간 대화
+            "skip_to_refine": "refine",   # 7-8점: Discussion 스킵
+            "complete": "format",         # 9점+: 바로 완료
+            "restart": "analyze"          # 5점-: Analyzer 복귀
         }
     )
 
-    # [NEW] Discussion 후 분기: 합의 결과에 따라 refine/restart/complete
-    workflow.add_conditional_edges(
-        "discussion",
-        should_refine_or_restart,
-        {
-            "restart": "analyze",   # Analyzer 복귀
-            "refine": "refine",     # 개선
-            "complete": "format"    # 완료
-        }
-    )
+    # [UPDATE] Discussion 후 항상 Refine으로 진행 (단순화)
+    # Discussion은 5-6점에서만 실행되므로 합의 후 항상 개선 필요
+    workflow.add_edge("discussion", "refine")
 
     # [UPDATE] Refiner 조건부 엣지 - REVISE 판정 시 재작성 루프
     def should_refine_again(state: PlanCraftState) -> str:

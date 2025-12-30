@@ -19,9 +19,10 @@ class ProjectSettings(BaseModel):
     WRITER_MIN_SECTIONS: int = Field(default=9, description="Writer 최소 생성 섹션 수")
     
     # === Workflow Settings ===
-    MAX_REFINE_LOOPS: int = Field(default=3, description="Refiner 최대 개선 루프 횟수")
+    MAX_REFINE_LOOPS: int = Field(default=2, description="Refiner 최대 개선 루프 횟수")
     MIN_REMAINING_STEPS: int = Field(default=5, description="루프 종료 안전장치 (RecursionLimit 대비)")
-    DISCUSSION_MAX_ROUNDS: int = Field(default=3, description="Reviewer-Writer 대화 최대 라운드")
+    DISCUSSION_MAX_ROUNDS: int = Field(default=1, description="Reviewer-Writer 대화 최대 라운드")
+    DISCUSSION_SKIP_THRESHOLD: int = Field(default=7, description="Discussion 건너뛰기 점수 (이상이면 스킵)")
 
     # === HITL (Human-in-the-Loop) Settings ===
     HITL_MAX_RETRIES: int = Field(default=5, description="사용자 입력 유효성 검사 최대 재시도 횟수")
