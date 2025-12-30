@@ -16,8 +16,8 @@ from typing_extensions import TypedDict, NotRequired
 # =============================================================================
 # Constants: 안전 실행 한계
 # =============================================================================
-MAX_REFINE_LOOPS = 3          # 최대 개선 루프 횟수
-MIN_REMAINING_STEPS = 5       # 최소 남은 스텝 (안전 탈출 기준)
+# NOTE: 실제 설정값은 utils.settings에서 관리합니다.
+# MAX_REFINE_LOOPS, MIN_REMAINING_STEPS 등은 settings.py를 참조하세요.
 
 # =============================================================================
 # Input Schema (External API/UI Interface)

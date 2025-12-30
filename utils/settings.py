@@ -21,6 +21,12 @@ class ProjectSettings(BaseModel):
     # === Workflow Settings ===
     MAX_REFINE_LOOPS: int = Field(default=3, description="Refiner 최대 개선 루프 횟수")
     MIN_REMAINING_STEPS: int = Field(default=5, description="루프 종료 안전장치 (RecursionLimit 대비)")
+
+    # === HITL (Human-in-the-Loop) Settings ===
+    HITL_MAX_RETRIES: int = Field(default=5, description="사용자 입력 유효성 검사 최대 재시도 횟수")
+
+    # === Analyzer Settings ===
+    ANALYZER_FAST_TRACK_LENGTH: int = Field(default=20, description="Fast Track(바로 진행) 기준 입력 길이")
     
     # === UI Settings ===
     DEFAULT_THREAD_ID: str = Field(default="default_thread", description="기본 세션 ID")

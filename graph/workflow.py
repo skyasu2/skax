@@ -620,7 +620,7 @@ def option_pause_node(state: PlanCraftState) -> Command:
     user_response = None
     
     # [NEW] Input Validation Loop - Code Reviewer's Advice
-    MAX_RETRIES = 5
+    MAX_RETRIES = settings.HITL_MAX_RETRIES
     retry_count = 0
     
     # [CRITICAL WARNING for Maintainers]
