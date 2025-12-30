@@ -15,6 +15,20 @@ analyzer_llm = get_llm().with_structured_output(AnalysisResult)
 def run(state: PlanCraftState) -> PlanCraftState:
     """
     요청 분석 에이전트 실행
+
+    사용자 입력을 분석하여 기획의 주제, 목적, 주요 기능 등을 구조화된 데이터(AnalysisResult)로 변환합니다.
+
+    Args:
+        state: user_input, file_content 등을 포함한 상태
+
+    Returns:
+        Updated state with 'analysis' field
+
+    Example:
+        >>> state = {"user_input": "AI 헬스케어 앱 기획해줘"}
+        >>> result = run(state)
+        >>> print(result["analysis"]["topic"])
+        'AI 헬스케어 앱'
     """
     # 1. 입력 데이터 준비 (Dict Access)
     user_input = state.get("user_input", "")
@@ -146,4 +160,15 @@ def run(state: PlanCraftState) -> PlanCraftState:
         
     except Exception as e:
         print(f"[ERROR] Analyzer Failed: {e}")
-        return update_state(state, error=str(e))
+        # Fallback: 기본 분석 결과 반환 (운영 안전성 확보)
+        fallback_analysis = {
+            "topic": "분석 실패 (시스템 에러)",
+            "purpose": "에러 발생으로 인한 기본값 생성",
+            "target_users": "알 수 없음",
+            "needs": [],
+            "key_features": ["기본 기능 (에러 복구 모드)"],
+            "is_general_query": False,
+            "need_more_info": False,
+            "general_answer": None
+        }
+        return update_state(state, analysis=fallback_analysis, error=f"Analyzer Error: {str(e)}")

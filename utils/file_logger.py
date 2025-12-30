@@ -55,6 +55,10 @@ class FileLogger:
         """에러 로그 기록 (log 메소드 래퍼)"""
         self.log("ERROR", {"message": message})
 
+    def warning(self, message: str):
+        """경고 로그 기록 (log 메소드 래퍼)"""
+        self.log("WARNING", {"message": message})
+
     def debug(self, message: str):
         """디버그 로그 기록 (log 메소드 래퍼)"""
         self.log("DEBUG", {"message": message})

@@ -135,6 +135,7 @@ def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> Pla
     return update_state(
         state,
         user_input=new_input,
+        selected_option=selected,  # [NEW] 선택 이력 저장 (분석용)
         need_more_info=False,
         options=[],
         option_question=None
