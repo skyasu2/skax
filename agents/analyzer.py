@@ -9,15 +9,25 @@ from utils.time_context import get_time_context, get_time_instruction
 from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_USER_PROMPT
 
-# LLM은 함수 내에서 지연 초기화 (환경 변수 로딩 타이밍 이슈 방지)
-_analyzer_llm = None
+# LLM은 함수 내에서 동적 초기화 (설정 유연성)
 
-def _get_analyzer_llm():
-    """Analyzer LLM 지연 초기화"""
-    global _analyzer_llm
-    if _analyzer_llm is None:
-        _analyzer_llm = get_llm().with_structured_output(AnalysisResult)
-    return _analyzer_llm
+def _get_analyzer_llm(temperature: float = None):
+    """
+    Analyzer LLM 생성 (동적 설정)
+    
+    Args:
+        temperature: 생성 온도 (None이면 기본값 0.7)
+    """
+    # 전역 캐싱 제거 -> 프리셋 변경에 즉시 대응
+    # with_structured_output은 호출 시마다 파이프라인을 생성하므로
+    # 너무 빈번한 호출이 부담된다면 settings 객체 내에 LRU 캐싱을 고려할 수 있음.
+    # 하지만 현재 트래픽 수준에서는 매번 생성해도 무방함.
+    
+    # settings.LLM_TEMPERATURE_CREATIVE 기본값 활용
+    from utils.settings import settings
+    temp = temperature if temperature is not None else settings.LLM_TEMPERATURE_CREATIVE
+    
+    return get_llm(temperature=temp).with_structured_output(AnalysisResult)
 
 def run(state: PlanCraftState) -> PlanCraftState:
     """
@@ -116,7 +126,21 @@ def run(state: PlanCraftState) -> PlanCraftState:
     
     # 4. LLM 호출
     try:
-        analysis_result = _get_analyzer_llm().invoke(messages)
+        # [NEW] 프리셋 기반 Temperature 적용
+        # Analyer는 창의성이 필요하므로 Creative 모드 사용 (프리셋 오버라이드 가능)
+        from utils.settings import get_preset, settings
+        
+        # 현재 활성 프리셋 가져오기
+        active_preset = state.get("generation_preset", settings.active_preset)
+        preset_config = get_preset(active_preset)
+        
+        # Analyzer는 기본적으로 창의적 작업이므로 temperature 적용
+        # (단, 프리셋이 매우 엄격(0.0)하다면 그에 따름)
+        temperature = preset_config.temperature
+        
+        # LLM 생성 및 실행
+        analyzer = _get_analyzer_llm(temperature=temperature)
+        analysis_result = analyzer.invoke(messages)
         
         # 5. 상태 업데이트 (Pydantic -> Dict 일관성 보장)
         analysis_dict = ensure_dict(analysis_result)

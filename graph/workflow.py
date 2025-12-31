@@ -353,119 +353,51 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
 
     LangSmith: run_name="📚 컨텍스트 수집", tags=["rag", "retrieval", "web", "search", "tavily"]
     """
-    import re
-    from utils.config import Config
-    from tools.mcp_client import fetch_url_sync, search_sync
-    from tools.web_search import should_search_web
+    from tools.web_search_executor import execute_web_search
     from graph.state import update_state
 
     user_input = state.get("user_input", "")
     rag_context = state.get("rag_context")
-    web_contents = []
-    web_urls = []
-    web_sources = []  # [{"title": "...", "url": "..."}] 제목+URL 저장
+    
+    # 1. 웹 검색 실행 (Executor 위임)
+    result = execute_web_search(user_input, rag_context)
+    
+    # 2. 상태 업데이트
+    existing_context = state.get("web_context")
+    existing_urls = state.get("web_urls") or []
+    existing_sources = state.get("web_sources") or []
 
-    try:
-        # 1. URL이 직접 제공된 경우
-        url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
-        urls = re.findall(url_pattern, user_input)
+    new_context_str = result["context"]
+    new_urls = result["urls"]
+    new_sources = result["sources"]
+    error = result["error"]
 
-        if urls:
-            for url in urls[:3]:
-                try:
-                    content = fetch_url_sync(url, max_length=3000)
-                    if content and not content.startswith("[웹 조회 실패"):
-                        web_contents.append(f"[URL 참조: {url}]\n{content}")
-                        web_urls.append(url)
-                except Exception as e:
-                    print(f"[WARN] URL 조회 실패 ({url}): {e}")
-        # 2. URL이 없으면 조건부 웹 검색
-        else:
-            decision = should_search_web(user_input, rag_context if rag_context else "")
-            if decision["should_search"]:
-                base_query = decision["search_query"]
-                queries = [base_query]
-                if "트렌드" in base_query:
-                    queries.append(base_query.replace("트렌드", "시장 규모 통계"))
-                else:
-                    queries.append(f"{base_query} 시장 규모 및 경쟁사")
-                
-                # [Optimization] 다중 쿼리 병렬 실행
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-                
-                def run_query(idx, q):
-                    try:
-                        return idx, q, search_sync(q)
-                    except Exception as e:
-                        return idx, q, {"success": False, "error": str(e)}
+    final_context = existing_context
+    if new_context_str:
+        final_context = f"{final_context}\n\n{new_context_str}" if final_context else new_context_str
 
-                with ThreadPoolExecutor(max_workers=3) as executor:
-                    futures = [executor.submit(run_query, i, q) for i, q in enumerate(queries)]
-                    
-                    # 순서 보장을 위해 인덱스로 정렬할 수 있도록 결과 수집
-                    results = []
-                    for future in as_completed(futures):
-                        results.append(future.result())
-                    
-                    # 인덱스 순 정렬
-                    results.sort(key=lambda x: x[0])
-                    
-                    for idx, q, search_result in results:
-                        if search_result.get("success"):
-                            formatted_result = ""
-                            if "results" in search_result and isinstance(search_result["results"], list):
-                                for res in search_result["results"][:3]:
-                                    title = res.get("title", "제목 없음")
-                                    url = res.get("url", "URL 없음")
-                                    snippet = res.get("snippet", "")[:200]
-                                    formatted_result += f"- [{title}]({url})\n  {snippet}\n"
-                                    if url and url.startswith("http"):
-                                        web_urls.append(url)
-                                        # [NEW] 제목+URL 함께 저장 (중복 제거)
-                                        if not any(s.get("url") == url for s in web_sources):
-                                            web_sources.append({"title": title, "url": url})
-                            
-                            if not formatted_result and "formatted" in search_result:
-                                formatted_result = search_result["formatted"]
-                                
-                            web_contents.append(f"[웹 검색 결과 {idx+1} - {q}]\n{formatted_result}")
-                        else:
-                            print(f"[WARN] 검색 실패 ({q}): {search_result.get('error')}")
+    final_urls = list(dict.fromkeys(existing_urls + new_urls))
 
-        # 3. 상태 업데이트
-        existing_context = state.get("web_context")
-        existing_urls = state.get("web_urls") or []
-        existing_sources = state.get("web_sources") or []
+    # web_sources 병합 (중복 URL 제거)
+    final_sources = existing_sources.copy()
+    for src in new_sources:
+        if not any(s.get("url") == src.get("url") for s in final_sources):
+            final_sources.append(src)
 
-        new_context_str = "\n\n---\n\n".join(web_contents) if web_contents else None
-
-        final_context = existing_context
-        if new_context_str:
-            final_context = f"{final_context}\n\n{new_context_str}" if final_context else new_context_str
-
-        final_urls = list(dict.fromkeys(existing_urls + web_urls))
-
-        # web_sources 병합 (중복 URL 제거)
-        final_sources = existing_sources.copy()
-        for src in web_sources:
-            if not any(s.get("url") == src.get("url") for s in final_sources):
-                final_sources.append(src)
-
+    if error:
+        new_state = update_state(
+            state,
+            web_context=None,
+            web_urls=[],
+            error=f"웹 조회 오류: {error}"
+        )
+    else:
         new_state = update_state(
             state,
             web_context=final_context,
             web_urls=final_urls,
             web_sources=final_sources,
             current_step="fetch_web"
-        )
-
-    except Exception as e:
-        print(f"[WARN] 웹 조회 단계 오류: {e}")
-        new_state = update_state(
-            state,
-            web_context=None,
-            web_urls=[],
-            error=f"웹 조회 오류: {str(e)}"
         )
 
     status = "FAILED" if new_state.get("error") else "SUCCESS"

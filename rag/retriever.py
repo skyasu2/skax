@@ -80,22 +80,9 @@ class Retriever:
         
         return docs
     
-    def get_relevant_documents_with_score(self, query: str, score_threshold: float = 0.7) -> list:
-        """
-        [Advanced] 유사도 점수 기반 필터링 검색
-        너무 관련성이 떨어지는 문서(점수 미달)는 제외합니다.
-        """
-        if not self.vectorstore:
-            return []
-            
-        # score_threshold 검색 (L2 Distance인 경우 점수가 낮을수록 유사함에 주의)
-        # FAISS의 similarity_search_with_score는 L2 distance를 반환하므로,
-        # cosine similarity를 쓰려면 vectorstore 초기화 시 distance_strategy 확인 필요.
-        # 여기서는 안전하게 similarity_search를 기본으로 하되, 
-        # 향후 vectorstore가 normalized된 경우 score 필터링을 적용할 수 있도록 확장성을 열어둡니다.
-        
-        # 현재는 MMR이 더 효과적이므로 get_relevant_documents를 호출
-        return self.get_relevant_documents(query)
+    # [REMOVED] get_relevant_documents_with_score
+    # 기존 코드에서 사용되지 않으며, 현재 MMR 검색(get_relevant_documents)이 더 효과적이므로 제거함.
+    # 추후 점수 기반 필터링이 필요할 경우 vectorstore.similarity_search_with_score 활용하여 재구현 권장.
 
 
     def get_formatted_context(self, query: str) -> str:

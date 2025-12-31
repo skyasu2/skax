@@ -128,7 +128,8 @@ def render_main():
         st.session_state.trigger_notification = False
 
     # 헤더: 타이틀 | 프리셋 선택 | 메뉴
-    col_title, col_preset, col_menu = st.columns([5, 1.5, 0.5])
+    # [FIX] 프리셋 설명이 잘리지 않도록 컬럼 비율 조정 (1.5 -> 2.5)
+    col_title, col_preset, col_menu = st.columns([4, 2.5, 0.5])
 
     with col_title:
         st.markdown("### 📋 PlanCraft Agent")
@@ -148,7 +149,8 @@ def render_main():
             "생성 모드",
             options=preset_keys,
             # index 제거: session_state.generation_preset이 자동으로 선택값 결정
-            format_func=lambda k: f"{GENERATION_PRESETS[k].icon} {GENERATION_PRESETS[k].name}",
+            # [FIX] 항목 옆에 설명을 함께 표시 (User Request)
+            format_func=lambda k: f"{GENERATION_PRESETS[k].icon} {GENERATION_PRESETS[k].name} ({GENERATION_PRESETS[k].description})",
             key="generation_preset",  # session_state key와 동일 → 자동 동기화
             label_visibility="collapsed",
             help="⚡빠른: 속도우선 | ⚖️균형: 권장 | 💎고품질: 품질우선"
