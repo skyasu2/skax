@@ -63,6 +63,74 @@ class InterruptOption(BaseModel):
     description: str = Field(default="", description="옵션 설명")
     value: Optional[str] = Field(default=None, description="옵션 값 (선택적)")
 
+    @classmethod
+    def from_any(cls, obj: Any) -> "InterruptOption":
+        """
+        다양한 형태의 입력을 InterruptOption으로 변환 (일관성 보장)
+
+        지원 형태:
+        - dict: {"title": "...", "description": "..."}
+        - InterruptOption 인스턴스
+        - duck-typing 객체 (title, description 속성 보유)
+
+        Returns:
+            InterruptOption 인스턴스
+
+        Raises:
+            ValueError: 변환 불가능한 형태
+        """
+        if isinstance(obj, cls):
+            return obj
+        if isinstance(obj, dict):
+            return cls(
+                title=obj.get("title", ""),
+                description=obj.get("description", ""),
+                value=obj.get("value")
+            )
+        if hasattr(obj, "title") and hasattr(obj, "description"):
+            # Duck typing: OptionChoice 등 호환 객체
+            return cls(
+                title=getattr(obj, "title", ""),
+                description=getattr(obj, "description", ""),
+                value=getattr(obj, "value", None)
+            )
+        raise ValueError(f"InterruptOption으로 변환 불가: {type(obj)}")
+
+    def to_dict(self) -> Dict[str, Any]:
+        """딕셔너리로 변환 (UI/직렬화용)"""
+        return self.model_dump(exclude_none=True)
+
+
+def normalize_options(options: List[Any]) -> List[InterruptOption]:
+    """
+    옵션 목록을 InterruptOption 리스트로 정규화
+
+    다양한 형태의 옵션 목록을 일관된 InterruptOption 리스트로 변환합니다.
+
+    Args:
+        options: dict, InterruptOption, 또는 duck-typing 객체의 리스트
+
+    Returns:
+        List[InterruptOption]: 정규화된 옵션 리스트
+
+    Example:
+        # 혼합된 형태도 처리 가능
+        options = normalize_options([
+            {"title": "A", "description": "설명A"},
+            InterruptOption(title="B", description="설명B"),
+            some_pydantic_option_choice,  # duck-typing
+        ])
+    """
+    normalized = []
+    for opt in options:
+        try:
+            normalized.append(InterruptOption.from_any(opt))
+        except ValueError as e:
+            print(f"[WARN] 옵션 변환 실패: {e}")
+            # 실패 시 기본 옵션으로 대체
+            normalized.append(InterruptOption(title=str(opt), description=""))
+    return normalized
+
 
 class BaseInterruptPayload(BaseModel, ABC):
     """
@@ -127,13 +195,57 @@ class FormInterruptPayload(BaseInterruptPayload):
     type: InterruptType = Field(default=InterruptType.FORM)
     input_schema_name: str = Field(description="입력 폼 스키마 이름 (Pydantic 모델명)")
     required_fields: List[str] = Field(default_factory=list, description="필수 입력 필드 목록")
+    field_types: Dict[str, str] = Field(default_factory=dict, description="필드별 타입 힌트 (검증용)")
 
     def validate_response(self, response: Dict[str, Any]) -> bool:
-        """폼 응답 검증 - 필수 필드 존재 여부"""
+        """폼 응답 검증 - 필수 필드 존재 및 타입 검증"""
+        validation_errors = self.get_validation_errors(response)
+        return len(validation_errors) == 0
+
+    def get_validation_errors(self, response: Dict[str, Any]) -> List[str]:
+        """
+        폼 응답 검증 에러 목록 반환 (UI 피드백용)
+
+        Returns:
+            검증 실패한 필드와 에러 메시지 목록
+        """
+        errors = []
+
+        # 1. 필수 필드 존재 여부 검증
         for field in self.required_fields:
-            if field not in response or not response[field]:
-                return False
-        return True
+            if field not in response:
+                errors.append(f"필수 필드 누락: {field}")
+            elif response[field] is None or response[field] == "":
+                errors.append(f"필수 필드 비어있음: {field}")
+
+        # 2. 타입 검증 (field_types 정의된 경우)
+        type_validators = {
+            "str": lambda v: isinstance(v, str),
+            "int": lambda v: isinstance(v, int) or (isinstance(v, str) and v.isdigit()),
+            "float": lambda v: isinstance(v, (int, float)) or self._is_float_str(v),
+            "bool": lambda v: isinstance(v, bool) or v in ("true", "false", "True", "False"),
+            "list": lambda v: isinstance(v, list),
+            "email": lambda v: isinstance(v, str) and "@" in v and "." in v,
+        }
+
+        for field, expected_type in self.field_types.items():
+            if field in response and response[field] is not None:
+                validator = type_validators.get(expected_type)
+                if validator and not validator(response[field]):
+                    errors.append(f"타입 불일치: {field} (기대: {expected_type})")
+
+        return errors
+
+    @staticmethod
+    def _is_float_str(v: Any) -> bool:
+        """문자열이 float로 변환 가능한지 확인"""
+        if not isinstance(v, str):
+            return False
+        try:
+            float(v)
+            return True
+        except ValueError:
+            return False
 
 
 class ConfirmInterruptPayload(BaseInterruptPayload):

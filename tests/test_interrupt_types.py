@@ -15,6 +15,7 @@ from graph.interrupt_types import (
     ConfirmInterruptPayload,
     ApprovalInterruptPayload,
     InterruptOption,
+    normalize_options,  # [NEW]
 )
 
 
@@ -347,3 +348,248 @@ class TestIntegration:
         reject_response = {"selected_option": {"value": "reject"}, "rejection_reason": "근거 부족"}
         assert payload.validate_response(reject_response)
         assert not payload.is_approved(reject_response)
+
+
+# =============================================================================
+# [NEW] InterruptOption.from_any 테스트
+# =============================================================================
+
+class TestInterruptOptionFromAny:
+    """InterruptOption.from_any 변환 테스트"""
+
+    def test_from_dict(self):
+        """딕셔너리에서 변환"""
+        opt = InterruptOption.from_any({"title": "A", "description": "설명A"})
+        assert opt.title == "A"
+        assert opt.description == "설명A"
+
+    def test_from_dict_with_value(self):
+        """value 포함 딕셔너리에서 변환"""
+        opt = InterruptOption.from_any({"title": "A", "description": "설명", "value": "opt_a"})
+        assert opt.value == "opt_a"
+
+    def test_from_interrupt_option(self):
+        """InterruptOption 인스턴스는 그대로 반환"""
+        original = InterruptOption(title="A", description="설명")
+        result = InterruptOption.from_any(original)
+        assert result is original
+
+    def test_from_duck_typing_object(self):
+        """duck-typing 객체에서 변환 (title, description 속성 보유)"""
+        class FakeOption:
+            title = "Fake"
+            description = "Duck typing"
+
+        opt = InterruptOption.from_any(FakeOption())
+        assert opt.title == "Fake"
+        assert opt.description == "Duck typing"
+
+    def test_from_invalid_raises(self):
+        """변환 불가능한 타입은 ValueError 발생"""
+        with pytest.raises(ValueError):
+            InterruptOption.from_any(12345)
+
+        with pytest.raises(ValueError):
+            InterruptOption.from_any(None)
+
+
+# =============================================================================
+# [NEW] normalize_options 테스트
+# =============================================================================
+
+class TestNormalizeOptions:
+    """옵션 정규화 유틸리티 테스트"""
+
+    def test_normalize_dict_list(self):
+        """딕셔너리 리스트 정규화"""
+        options = normalize_options([
+            {"title": "A", "description": "옵션A"},
+            {"title": "B", "description": "옵션B"},
+        ])
+        assert len(options) == 2
+        assert all(isinstance(o, InterruptOption) for o in options)
+        assert options[0].title == "A"
+
+    def test_normalize_mixed_list(self):
+        """혼합된 형태 리스트 정규화"""
+        options = normalize_options([
+            {"title": "Dict", "description": "딕셔너리"},
+            InterruptOption(title="Model", description="모델"),
+        ])
+        assert len(options) == 2
+        assert options[0].title == "Dict"
+        assert options[1].title == "Model"
+
+    def test_normalize_empty_list(self):
+        """빈 리스트 정규화"""
+        options = normalize_options([])
+        assert options == []
+
+    def test_normalize_invalid_fallback(self):
+        """변환 불가 항목은 문자열로 대체"""
+        options = normalize_options([123, "문자열"])
+        assert len(options) == 2
+        assert options[0].title == "123"
+        assert options[1].title == "문자열"
+
+
+# =============================================================================
+# [NEW] FormInterruptPayload 타입 검증 테스트
+# =============================================================================
+
+class TestFormValidationErrors:
+    """폼 타입 검증 에러 테스트"""
+
+    def test_get_validation_errors_missing_required(self):
+        """필수 필드 누락 에러"""
+        payload = FormInterruptPayload(
+            question="입력하세요",
+            input_schema_name="TestSchema",
+            required_fields=["name", "email"]
+        )
+        errors = payload.get_validation_errors({"name": "홍길동"})
+        assert len(errors) == 1
+        assert "email" in errors[0]
+
+    def test_get_validation_errors_empty_required(self):
+        """필수 필드 비어있음 에러"""
+        payload = FormInterruptPayload(
+            question="입력하세요",
+            input_schema_name="TestSchema",
+            required_fields=["name"]
+        )
+        errors = payload.get_validation_errors({"name": ""})
+        assert len(errors) == 1
+        assert "비어있음" in errors[0]
+
+    def test_get_validation_errors_type_mismatch(self):
+        """타입 불일치 에러"""
+        payload = FormInterruptPayload(
+            question="입력하세요",
+            input_schema_name="TestSchema",
+            required_fields=["age"],
+            field_types={"age": "int"}
+        )
+        errors = payload.get_validation_errors({"age": "not_a_number"})
+        assert len(errors) == 1
+        assert "타입 불일치" in errors[0]
+
+    def test_get_validation_errors_valid_types(self):
+        """유효한 타입 검증 통과"""
+        payload = FormInterruptPayload(
+            question="입력하세요",
+            input_schema_name="TestSchema",
+            required_fields=["name", "age", "email"],
+            field_types={"name": "str", "age": "int", "email": "email"}
+        )
+        errors = payload.get_validation_errors({
+            "name": "홍길동",
+            "age": 25,
+            "email": "test@example.com"
+        })
+        assert len(errors) == 0
+
+    def test_string_number_as_int(self):
+        """문자열 숫자도 int로 인정"""
+        payload = FormInterruptPayload(
+            question="입력하세요",
+            input_schema_name="TestSchema",
+            field_types={"age": "int"}
+        )
+        errors = payload.get_validation_errors({"age": "25"})
+        assert len(errors) == 0
+
+
+# =============================================================================
+# [NEW] 다중 인터럽트 시나리오 테스트
+# =============================================================================
+
+class TestMultiInterruptScenarios:
+    """다중 인터럽트 시나리오 테스트"""
+
+    def test_option_then_confirm_flow(self):
+        """옵션 선택 후 확인 인터럽트 시나리오"""
+        # 1단계: 옵션 선택
+        option_payload = InterruptFactory.create(
+            InterruptType.OPTION,
+            question="카테고리를 선택하세요",
+            options=[
+                InterruptOption(title="IT", description="IT 서비스"),
+                InterruptOption(title="F&B", description="외식 서비스"),
+            ]
+        )
+
+        option_response = {"selected_option": {"title": "IT", "description": "IT 서비스"}}
+        assert option_payload.validate_response(option_response)
+
+        # 2단계: 확인
+        confirm_payload = InterruptFactory.create(
+            InterruptType.CONFIRM,
+            question="IT 카테고리로 진행하시겠습니까?"
+        )
+
+        confirm_response = {"confirmed": True}
+        assert confirm_payload.validate_response(confirm_response)
+
+    def test_form_then_approval_flow(self):
+        """폼 입력 후 승인 인터럽트 시나리오"""
+        # 1단계: 폼 입력
+        form_payload = InterruptFactory.create(
+            InterruptType.FORM,
+            question="추가 정보를 입력하세요",
+            input_schema_name="AdditionalInfo",
+            required_fields=["target_user", "budget"]
+        )
+
+        form_response = {"target_user": "20대 직장인", "budget": "1000만원"}
+        assert form_payload.validate_response(form_response)
+
+        # 2단계: 승인
+        approval_payload = InterruptFactory.create(
+            InterruptType.APPROVAL,
+            question="이 정보로 기획서를 생성하시겠습니까?",
+            role="기획자"
+        )
+
+        approval_response = {"selected_option": {"value": "approve"}}
+        assert approval_payload.validate_response(approval_response)
+        assert approval_payload.is_approved(approval_response)
+
+    def test_approval_rejection_with_feedback(self):
+        """승인 반려 시 피드백 포함 시나리오"""
+        payload = InterruptFactory.create(
+            InterruptType.APPROVAL,
+            question="기획서를 검토해주세요",
+            role="팀장"
+        )
+
+        reject_response = {
+            "selected_option": {"value": "reject"},
+            "rejection_reason": "예산 부분 재검토 필요"
+        }
+
+        assert payload.validate_response(reject_response)
+        assert not payload.is_approved(reject_response)
+
+        # ResumeHandler로 처리
+        result = ResumeHandler.handle(InterruptType.APPROVAL, reject_response)
+        assert result["action"] == "rejected"
+        assert result["rejection_reason"] == "예산 부분 재검토 필요"
+
+    def test_complex_option_with_custom_input(self):
+        """옵션 + 직접 입력 복합 시나리오"""
+        payload = InterruptFactory.create(
+            InterruptType.OPTION,
+            question="서비스 방향을 선택하세요",
+            options=[
+                InterruptOption(title="AI 헬스케어", description="AI 기반 건강관리"),
+                InterruptOption(title="핀테크", description="금융 서비스"),
+            ],
+            allow_custom=True
+        )
+
+        # 옵션 선택
+        assert payload.validate_response({"selected_option": {"title": "AI 헬스케어"}})
+
+        # 직접 입력
+        assert payload.validate_response({"text_input": "AI 교육 플랫폼"})

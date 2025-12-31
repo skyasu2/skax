@@ -38,6 +38,7 @@ from graph.interrupt_types import (
     ConfirmInterruptPayload,
     ApprovalInterruptPayload,
     InterruptOption as TypedInterruptOption,
+    normalize_options,  # [NEW] 옵션 정규화 유틸리티
 )
 
 def _format_resume_summary(response: Dict[str, Any]) -> str:
@@ -104,30 +105,24 @@ def create_interrupt_payload(
 def create_option_interrupt(state: PlanCraftState) -> Dict[str, Any]:
     """
     PlanCraftState에서 인터럽트 페이로드를 생성합니다.
+
+    [UPDATE] normalize_options()를 사용하여 다양한 형태의 옵션을
+    일관된 형식으로 변환합니다. (dict, Pydantic, duck-typing 모두 지원)
     """
     question = state.get("option_question") or "추가 정보가 필요합니다."
     options = state.get("options", [])
     input_schema = state.get("input_schema_name")
-    
+
     interrupt_type = "form" if input_schema else "option"
-    
-    # state.options는 [OptionChoice] (Pydantic) 일 수도 있고 [dict] 일 수도 있음
-    # OptionChoice(Pydantic) 리스트로 정규화
-    normalized_options: List[OptionChoice] = []
-    
-    for opt in options:
-        if isinstance(opt, dict):
-            normalized_options.append(OptionChoice(
-                title=opt.get("title", ""),
-                description=opt.get("description", "")
-            ))
-        elif hasattr(opt, "title") and hasattr(opt, "description"):
-            # OptionChoice object via duck typing check
-            normalized_options.append(OptionChoice(
-                title=opt.title,
-                description=opt.description
-            ))
-    
+
+    # [UPDATE] normalize_options 유틸리티 사용 (일관성 보장)
+    # TypedInterruptOption → OptionChoice 변환
+    typed_options = normalize_options(options)
+    normalized_options: List[OptionChoice] = [
+        OptionChoice(title=opt.title, description=opt.description)
+        for opt in typed_options
+    ]
+
     return create_interrupt_payload(
         question=question,
         options=normalized_options,
@@ -431,4 +426,6 @@ __all__ = [
     "FormInterruptPayload",
     "ConfirmInterruptPayload",
     "ApprovalInterruptPayload",
+    # [NEW] 옵션 정규화 유틸리티
+    "normalize_options",
 ]
