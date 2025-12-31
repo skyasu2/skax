@@ -1180,31 +1180,72 @@ def run_plancraft(
         # 일반 실행
         input_data = inputs
 
-    # 실행 (인터럽트 발생 시 중단됨)
-    # invoke는 최종 state를 반환하지만, 중간에 멈추면 멈춘 시점의 state 반환
-    final_state = app.invoke(input_data, config=config)
+    # 실행 (stream 모드로 타임라인 업데이트 지원)
+    # 각 노드 완료 시 콜백의 set_step 호출
+    final_state = None
 
-    # [NEW] 인터럽트 상태 확인
+    # 노드 이름 → 타임라인 단계 매핑 (실제 실행 노드 추적)
+    NODE_TO_STEP = {
+        "retrieve_context": "context",
+        "fetch_web_context": "context",
+        "run_analyzer_node": "analyze",
+        "option_pause_node": "analyze",
+        "general_response_node": "analyze",
+        "run_structurer_node": "structure",
+        "run_writer_node": "write",
+        "run_reviewer_node": "review",
+        "run_discussion_subgraph": "discuss",  # 에이전트 토론
+        "run_refiner_node": "refine",
+        "run_formatter_node": "format",
+    }
+
+    # StreamlitStatusCallback 찾기
+    timeline_callback = None
+    if callbacks:
+        for cb in callbacks:
+            if hasattr(cb, "set_step"):
+                timeline_callback = cb
+                break
+
+    # stream 모드로 실행하여 노드별 진행상황 추적
+    for event in app.stream(input_data, config=config, stream_mode="updates"):
+        final_state = event
+
+        # 노드 이름 추출 및 타임라인 업데이트
+        if timeline_callback and isinstance(event, dict):
+            for node_name in event.keys():
+                step_key = NODE_TO_STEP.get(node_name)
+                if step_key:
+                    timeline_callback.set_step(step_key)
+
+    # 타임라인 완료 처리
+    if timeline_callback:
+        timeline_callback.finish()
+
+    # [NEW] 인터럽트 상태 및 최종 상태 확인
     snapshot = app.get_state(config)
-    
+
+    # stream 모드에서는 snapshot.values에서 전체 상태 가져오기
+    final_state = snapshot.values if snapshot.values else final_state
+
     interrupt_payload = None
     if snapshot.next and snapshot.tasks:
         # 다음 단계가 있는데 멈췄다면 인터럽트일 가능성 확인
         # (LangGraph 최신 버전은 snapshot.tasks[0].interrupts에 정보가 있음)
         if hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
             interrupt_payload = snapshot.tasks[0].interrupts[0].value
-            
+
     # 결과 반환 준비
     result = {}
-    
+
     # State 객체를 dict로 변환
     if hasattr(final_state, "model_dump"):
         result = final_state.model_dump()
     elif isinstance(final_state, dict):
-        result = final_state
+        result = dict(final_state)
 
     # 인터럽트 정보 추가
     if interrupt_payload:
         result["__interrupt__"] = interrupt_payload
-        
+
     return result
