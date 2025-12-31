@@ -48,27 +48,102 @@ CUSTOM_CSS = """
     }
 
     /* =================================================================
-       Selectbox (Dropdown) - Cursor Fix
+       Selectbox (Dropdown) - Enhanced UX
        ================================================================= */
-    /* 드롭다운 전체 영역 포인터 커서 */
+
+    /* 1. 기본 스타일 & 커서 */
     div[data-baseweb="select"] {
         cursor: pointer !important;
     }
 
-    /* 드롭다운 내부 input 영역도 포인터 커서 */
     div[data-baseweb="select"] input {
         cursor: pointer !important;
-        caret-color: transparent !important;  /* 텍스트 커서 숨김 */
+        caret-color: transparent !important;
     }
 
-    /* 드롭다운 컨트롤 영역 */
     div[data-baseweb="select"] > div {
         cursor: pointer !important;
     }
 
-    /* Streamlit selectbox 컨테이너 */
     .stSelectbox > div > div {
         cursor: pointer !important;
+    }
+
+    /* 2. 컨트롤 영역 스타일 (트리거 버튼) */
+    div[data-baseweb="select"] > div:first-child {
+        border: 1px solid var(--color-border) !important;
+        border-radius: var(--radius-sm) !important;
+        transition: all var(--transition-fast) !important;
+        background-color: #ffffff !important;
+    }
+
+    /* 3. Hover 효과 - 클릭 가능함을 명확히 표시 */
+    div[data-baseweb="select"] > div:first-child:hover {
+        border-color: var(--color-primary) !important;
+        background-color: var(--color-primary-light) !important;
+        box-shadow: 0 2px 8px var(--color-primary-shadow) !important;
+    }
+
+    /* 4. Focus 상태 - 접근성 */
+    div[data-baseweb="select"]:focus-within > div:first-child {
+        border-color: var(--color-primary) !important;
+        box-shadow: 0 0 0 2px var(--color-primary-shadow) !important;
+        outline: none !important;
+    }
+
+    /* 5. 열림 상태 - 시각적 구분 */
+    div[data-baseweb="select"][aria-expanded="true"] > div:first-child {
+        border-color: var(--color-primary) !important;
+        box-shadow: 0 0 0 2px var(--color-primary-shadow) !important;
+    }
+
+    /* 6. 드롭다운 화살표 아이콘 */
+    div[data-baseweb="select"] svg {
+        transition: transform var(--transition-fast) !important;
+        color: var(--color-text-muted) !important;
+    }
+
+    div[data-baseweb="select"]:hover svg {
+        color: var(--color-primary) !important;
+    }
+
+    /* 7. 열림 상태 화살표 회전 */
+    div[data-baseweb="select"][aria-expanded="true"] svg {
+        transform: rotate(180deg) !important;
+        color: var(--color-primary) !important;
+    }
+
+    /* 8. 드롭다운 메뉴 (옵션 리스트) */
+    ul[data-testid="stVirtualDropdown"] {
+        border: 1px solid var(--color-border) !important;
+        border-radius: var(--radius-sm) !important;
+        box-shadow: var(--shadow-md) !important;
+        background-color: #ffffff !important;
+        padding: 4px 0 !important;
+        margin-top: 4px !important;
+    }
+
+    /* 9. 옵션 아이템 스타일 */
+    ul[data-testid="stVirtualDropdown"] li {
+        padding: 8px 12px !important;
+        cursor: pointer !important;
+        transition: background-color var(--transition-fast) !important;
+    }
+
+    ul[data-testid="stVirtualDropdown"] li:hover {
+        background-color: var(--color-primary-light) !important;
+    }
+
+    /* 10. 선택된 옵션 하이라이트 */
+    ul[data-testid="stVirtualDropdown"] li[aria-selected="true"] {
+        background-color: var(--color-primary-light) !important;
+        color: var(--color-primary) !important;
+        font-weight: 500 !important;
+    }
+
+    ul[data-testid="stVirtualDropdown"] li[aria-selected="true"]::before {
+        content: "✓ ";
+        color: var(--color-primary);
     }
 
     /* =================================================================
