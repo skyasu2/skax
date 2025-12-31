@@ -593,3 +593,226 @@ class TestMultiInterruptScenarios:
 
         # 직접 입력
         assert payload.validate_response({"text_input": "AI 교육 플랫폼"})
+
+
+class TestComplexPauseChains:
+    """
+    복합 Pause Chain 테스트
+
+    Option → Form → Approval 등 연속 인터럽트 시나리오를 검증합니다.
+
+    Chain Flow Diagram:
+    ```mermaid
+    flowchart LR
+        A[Option: 서비스 유형] --> B[Form: 상세 정보]
+        B --> C[Approval: 팀장 승인]
+        C -->|approve| D[완료]
+        C -->|reject| B
+    ```
+    """
+
+    def test_option_to_form_chain(self):
+        """Option → Form 연속 인터럽트 체인"""
+        # Step 1: Option 선택
+        option_payload = InterruptFactory.create(
+            InterruptType.OPTION,
+            question="서비스 유형을 선택하세요",
+            options=[
+                InterruptOption(title="웹 앱", description="브라우저 기반"),
+                InterruptOption(title="모바일 앱", description="iOS/Android"),
+            ]
+        )
+
+        option_response = {"selected_option": {"title": "웹 앱", "description": "브라우저 기반"}}
+        assert option_payload.validate_response(option_response)
+
+        option_result = ResumeHandler.handle(InterruptType.OPTION, option_response)
+        assert option_result["action"] == "option_selected"
+        assert option_result["selected_option"]["title"] == "웹 앱"
+
+        # Step 2: Form 입력 (옵션 선택 후)
+        form_payload = InterruptFactory.create(
+            InterruptType.FORM,
+            question="프로젝트 상세 정보를 입력하세요",
+            input_schema_name="ProjectDetails",
+            required_fields=["project_name", "budget"],
+            field_types={"project_name": "str", "budget": "int"}
+        )
+
+        form_response = {"project_name": "AI 헬스케어 웹", "budget": 50000000}
+        assert form_payload.validate_response(form_response)
+
+        form_result = ResumeHandler.handle(InterruptType.FORM, form_response)
+        assert form_result["action"] == "form_submitted"
+        assert form_result["form_data"]["project_name"] == "AI 헬스케어 웹"
+
+    def test_form_to_approval_chain(self):
+        """Form → Approval 연속 인터럽트 체인"""
+        # Step 1: Form 입력
+        form_payload = InterruptFactory.create(
+            InterruptType.FORM,
+            question="기획 정보 입력",
+            input_schema_name="PlanInfo",
+            required_fields=["title", "description"]
+        )
+
+        form_response = {"title": "AI 서비스", "description": "AI 기반 헬스케어"}
+        assert form_payload.validate_response(form_response)
+
+        # Step 2: Approval 요청
+        approval_payload = InterruptFactory.create(
+            InterruptType.APPROVAL,
+            question="입력된 정보로 기획서를 생성하시겠습니까?",
+            role="팀장"
+        )
+
+        # 승인 케이스
+        approve_response = {"selected_option": {"value": "approve"}}
+        assert approval_payload.validate_response(approve_response)
+        assert approval_payload.is_approved(approve_response)
+
+        approval_result = ResumeHandler.handle(InterruptType.APPROVAL, approve_response)
+        assert approval_result["action"] == "approved"
+
+    def test_multi_approval_chain_all_approve(self):
+        """다중 승인 체인 - 모두 승인 시나리오"""
+        approvers = ["팀장", "리더", "QA"]
+
+        for i, role in enumerate(approvers):
+            payload = InterruptFactory.create(
+                InterruptType.APPROVAL,
+                question=f"{role} 승인이 필요합니다",
+                role=role
+            )
+
+            response = {"selected_option": {"value": "approve"}}
+            assert payload.validate_response(response)
+            assert payload.is_approved(response)
+
+            result = ResumeHandler.handle(InterruptType.APPROVAL, response)
+            assert result["action"] == "approved"
+
+    def test_multi_approval_chain_with_rejection(self):
+        """다중 승인 체인 - 중간 반려 시나리오"""
+        # 팀장 승인
+        team_lead_payload = InterruptFactory.create(
+            InterruptType.APPROVAL,
+            question="팀장 승인",
+            role="팀장"
+        )
+        assert team_lead_payload.is_approved({"selected_option": {"value": "approve"}})
+
+        # 리더 반려
+        leader_payload = InterruptFactory.create(
+            InterruptType.APPROVAL,
+            question="리더 승인",
+            role="리더"
+        )
+
+        reject_response = {
+            "selected_option": {"value": "reject"},
+            "rejection_reason": "기술 스택 검토 필요"
+        }
+
+        assert leader_payload.validate_response(reject_response)
+        assert not leader_payload.is_approved(reject_response)
+
+        result = ResumeHandler.handle(InterruptType.APPROVAL, reject_response)
+        assert result["action"] == "rejected"
+        assert result["rejection_reason"] == "기술 스택 검토 필요"
+
+    def test_confirm_before_approval_chain(self):
+        """Confirm → Approval 연속 체인"""
+        # Step 1: Confirm (미리보기 확인)
+        confirm_payload = InterruptFactory.create(
+            InterruptType.CONFIRM,
+            question="미리보기를 확인하셨습니까?",
+            confirm_text="예, 확인했습니다",
+            cancel_text="다시 보기"
+        )
+
+        confirm_response = {"confirmed": True}
+        assert confirm_payload.validate_response(confirm_response)
+
+        confirm_result = ResumeHandler.handle(InterruptType.CONFIRM, confirm_response)
+        assert confirm_result["action"] == "confirmed"
+
+        # Step 2: Approval (최종 승인)
+        approval_payload = InterruptFactory.create(
+            InterruptType.APPROVAL,
+            question="최종 제출하시겠습니까?",
+            role="담당자"
+        )
+
+        approve_response = {"approved": True}
+        assert approval_payload.validate_response(approve_response)
+
+        approval_result = ResumeHandler.handle(InterruptType.APPROVAL, approve_response)
+        assert approval_result["action"] == "approved"
+
+    def test_full_chain_option_form_approval(self):
+        """
+        전체 체인 테스트: Option → Form → Approval
+
+        실제 워크플로우에서 발생하는 전체 HITL 체인을 시뮬레이션합니다.
+        """
+        # ===================================================================
+        # Step 1: Option - 서비스 방향 선택
+        # ===================================================================
+        option_payload = InterruptFactory.create(
+            InterruptType.OPTION,
+            question="어떤 서비스를 기획하시겠습니까?",
+            options=[
+                InterruptOption(title="AI 헬스케어", description="건강관리 AI"),
+                InterruptOption(title="핀테크", description="금융 서비스"),
+                InterruptOption(title="에듀테크", description="교육 플랫폼"),
+            ],
+            node_ref="option_pause",
+            allow_custom=True
+        )
+
+        option_response = {
+            "selected_option": {"title": "AI 헬스케어", "description": "건강관리 AI"}
+        }
+        assert option_payload.validate_response(option_response)
+
+        # ===================================================================
+        # Step 2: Form - 상세 정보 입력
+        # ===================================================================
+        form_payload = InterruptFactory.create(
+            InterruptType.FORM,
+            question="프로젝트 상세 정보를 입력해주세요",
+            input_schema_name="ProjectDetails",
+            required_fields=["name", "budget", "timeline"],
+            field_types={"name": "str", "budget": "int", "timeline": "str"},
+            node_ref="form_pause"
+        )
+
+        form_response = {
+            "name": "AI 헬스케어 서비스",
+            "budget": 100000000,
+            "timeline": "6개월"
+        }
+        assert form_payload.validate_response(form_response)
+        assert len(form_payload.get_validation_errors(form_response)) == 0
+
+        # ===================================================================
+        # Step 3: Approval - 팀장 승인
+        # ===================================================================
+        approval_payload = InterruptFactory.create(
+            InterruptType.APPROVAL,
+            question="기획서 초안을 승인하시겠습니까?",
+            role="팀장",
+            node_ref="approval_pause"
+        )
+
+        # 추적 필드 검증
+        assert approval_payload.node_ref == "approval_pause"
+
+        approval_response = {"selected_option": {"value": "approve"}}
+        assert approval_payload.validate_response(approval_response)
+        assert approval_payload.is_approved(approval_response)
+
+        # 최종 결과
+        final_result = ResumeHandler.handle(InterruptType.APPROVAL, approval_response)
+        assert final_result["action"] == "approved"

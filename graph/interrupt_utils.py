@@ -141,10 +141,68 @@ def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> Pla
     [Best Practice] Resume 입력 내역을 step_history에 기록하여
     디버깅 및 리플레이 시 사용자 선택/입력을 추적할 수 있습니다.
 
-    [NEW] HITL 메타필드 기록:
+    HITL 메타필드 기록:
         - last_pause_type: 마지막 인터럽트 타입
         - last_resume_value: 사용자 응답값 (민감정보 제거)
         - last_human_event: 전체 HITL 이벤트 정보
+
+    Args:
+        state: 현재 PlanCraftState
+        response: 사용자 응답 (UI에서 전달)
+
+    Returns:
+        업데이트된 PlanCraftState
+
+    Response Input Schema (Option Select):
+        ```json
+        {
+            "selected_option": {
+                "title": "웹 애플리케이션",
+                "description": "브라우저 기반 서비스"
+            }
+        }
+        ```
+
+    Response Input Schema (Text Input):
+        ```json
+        {
+            "text_input": "AI 기반 헬스케어 앱을 만들고 싶습니다"
+        }
+        ```
+
+    Response Input Schema (Approval):
+        ```json
+        {
+            "approved": true,
+            "selected_option": {"title": "승인", "value": "approve"}
+        }
+        ```
+
+    step_history Record Schema (자동 기록):
+        ```json
+        {
+            "step": "human_resume",
+            "status": "USER_INPUT",
+            "summary": "옵션 선택: 웹 애플리케이션",
+            "timestamp": "2024-01-15 14:30:00",
+            "event_type": "HUMAN_RESPONSE",
+            "pause_type": "option",
+            "response_data": {"selected_option": {...}},
+            "last_interrupt_payload": {...}
+        }
+        ```
+
+    last_human_event Schema (State 메타필드):
+        ```json
+        {
+            "event_type": "HITL_RESUME",
+            "pause_type": "option",
+            "resume_value": {"selected_option": {...}},
+            "timestamp": "2024-01-15 14:30:00",
+            "node_ref": "option_pause",
+            "event_id": "evt_abc123"
+        }
+        ```
     """
     from graph.state import update_state
     import time

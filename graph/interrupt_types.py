@@ -383,15 +383,76 @@ class InterruptFactory:
         인터럽트 페이로드 생성
 
         Args:
-            interrupt_type: 인터럽트 유형
+            interrupt_type: 인터럽트 유형 (InterruptType Enum 또는 문자열)
             question: 사용자에게 보여줄 질문
             **kwargs: 타입별 추가 파라미터
+                - options: List[InterruptOption] (OPTION/APPROVAL)
+                - allow_custom: bool (OPTION)
+                - role: str (APPROVAL)
+                - required_fields: List[str] (FORM)
+                - node_ref: str (추적용 - 모든 타입)
 
         Returns:
             해당 타입의 BaseInterruptPayload 서브클래스 인스턴스
 
         Raises:
             ValueError: 지원하지 않는 인터럽트 타입
+
+        Output JSON Examples:
+
+        OPTION 타입:
+            ```json
+            {
+                "type": "option",
+                "question": "어떤 유형의 서비스를 원하시나요?",
+                "options": [
+                    {"title": "웹 앱", "description": "브라우저 기반"},
+                    {"title": "모바일 앱", "description": "iOS/Android"}
+                ],
+                "allow_custom": true,
+                "node_ref": "option_pause",
+                "event_id": "evt_abc123",
+                "timestamp": "2024-01-15T10:30:00"
+            }
+            ```
+
+        APPROVAL 타입:
+            ```json
+            {
+                "type": "approval",
+                "question": "기획서 초안을 승인하시겠습니까?",
+                "role": "팀장",
+                "options": [
+                    {"title": "✅ 승인", "value": "approve"},
+                    {"title": "🔄 반려", "value": "reject"}
+                ],
+                "rejection_feedback_enabled": true,
+                "node_ref": "approval_pause",
+                "event_id": "evt_xyz789"
+            }
+            ```
+
+        FORM 타입:
+            ```json
+            {
+                "type": "form",
+                "question": "프로젝트 상세 정보를 입력해주세요",
+                "input_schema_name": "ProjectDetails",
+                "required_fields": ["project_name", "budget"],
+                "field_types": {"budget": "int", "deadline": "str"}
+            }
+            ```
+
+        CONFIRM 타입:
+            ```json
+            {
+                "type": "confirm",
+                "question": "이대로 진행하시겠습니까?",
+                "confirm_text": "예, 진행합니다",
+                "cancel_text": "아니오",
+                "default_value": false
+            }
+            ```
         """
         # 문자열 → Enum 변환
         if isinstance(interrupt_type, str):
@@ -551,10 +612,75 @@ class ResumeHandler:
 
         Args:
             interrupt_type: 인터럽트 유형
-            response: 사용자 응답 데이터
+            response: 사용자 응답 데이터 (UI에서 전달)
 
         Returns:
-            정규화된 응답 딕셔너리
+            정규화된 응답 딕셔너리 (action 필드 포함)
+
+        Input/Output Examples:
+
+        OPTION 타입:
+            Input:
+                ```json
+                {"selected_option": {"title": "웹 앱", "description": "..."}}
+                ```
+            Output:
+                ```json
+                {
+                    "selected_option": {"title": "웹 앱", "description": "..."},
+                    "text_input": null,
+                    "action": "option_selected"
+                }
+                ```
+
+        APPROVAL 타입:
+            Input (승인):
+                ```json
+                {"selected_option": {"title": "승인", "value": "approve"}}
+                ```
+            Output:
+                ```json
+                {"approved": true, "rejection_reason": "", "action": "approved"}
+                ```
+
+            Input (반려):
+                ```json
+                {
+                    "selected_option": {"value": "reject"},
+                    "rejection_reason": "BM 섹션 보강 필요"
+                }
+                ```
+            Output:
+                ```json
+                {
+                    "approved": false,
+                    "rejection_reason": "BM 섹션 보강 필요",
+                    "action": "rejected"
+                }
+                ```
+
+        CONFIRM 타입:
+            Input:
+                ```json
+                {"confirmed": true}
+                ```
+            Output:
+                ```json
+                {"confirmed": true, "action": "confirmed"}
+                ```
+
+        FORM 타입:
+            Input:
+                ```json
+                {"project_name": "AI 헬스케어", "budget": 50000000}
+                ```
+            Output:
+                ```json
+                {
+                    "form_data": {"project_name": "AI 헬스케어", "budget": 50000000},
+                    "action": "form_submitted"
+                }
+                ```
         """
         if isinstance(interrupt_type, str):
             interrupt_type = InterruptType(interrupt_type)
