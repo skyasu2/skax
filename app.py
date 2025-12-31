@@ -149,19 +149,21 @@ def render_main():
 
         current_preset_idx = preset_keys.index(st.session_state.generation_preset)
 
-        selected_preset_label = st.selectbox(
+        # 프리셋 변경 콜백 (on_change 패턴)
+        def on_preset_change():
+            selected_label = st.session_state.preset_dropdown
+            selected_key = preset_keys[preset_labels.index(selected_label)]
+            st.session_state.generation_preset = selected_key
+
+        st.selectbox(
             "생성 모드",
             options=preset_labels,
             index=current_preset_idx,
             key="preset_dropdown",
             label_visibility="collapsed",
-            help="⚡빠른: 속도우선 | ⚖️균형: 권장 | 💎고품질: 품질우선"
+            help="⚡빠른: 속도우선 | ⚖️균형: 권장 | 💎고품질: 품질우선",
+            on_change=on_preset_change
         )
-
-        # 선택 변경 시 업데이트
-        selected_preset_key = preset_keys[preset_labels.index(selected_preset_label)]
-        if selected_preset_key != st.session_state.generation_preset:
-            st.session_state.generation_preset = selected_preset_key
 
     with col_menu:
         with st.popover("☰"):
@@ -223,6 +225,14 @@ def render_main():
         # 현재 선택된 인덱스
         current_idx = cat_keys.index(st.session_state.idea_category) if st.session_state.idea_category in cat_keys else 0
 
+        # 카테고리 변경 콜백 (on_change 패턴 - 더블클릭 문제 해결)
+        def on_category_change():
+            selected_label = st.session_state.category_dropdown
+            selected_key = cat_keys[cat_labels.index(selected_label)]
+            if selected_key != st.session_state.idea_category:
+                st.session_state.idea_category = selected_key
+                st.session_state.random_examples = get_examples_by_category(selected_key, 3)
+
         # 헤더 + 드롭다운 + 버튼을 한 줄로
         llm_remaining = max(0, 10 - st.session_state.idea_llm_count)
         col_title, col_dropdown, col_btn = st.columns([2.5, 1.5, 1])
@@ -231,19 +241,14 @@ def render_main():
             st.markdown(f"#### 🎲 AI 브레인스토밍 <small style='color:gray;'>({llm_remaining}회)</small>", unsafe_allow_html=True)
 
         with col_dropdown:
-            selected_cat_label = st.selectbox(
+            st.selectbox(
                 "카테고리",
                 options=cat_labels,
                 index=current_idx,
                 key="category_dropdown",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                on_change=on_category_change  # 선택 완료 시에만 호출
             )
-            # 선택 변경 감지
-            selected_cat_key = cat_keys[cat_labels.index(selected_cat_label)]
-            if selected_cat_key != st.session_state.idea_category:
-                st.session_state.idea_category = selected_cat_key
-                st.session_state.random_examples = get_examples_by_category(selected_cat_key, 3)
-                st.rerun()
 
         with col_btn:
             if st.button("🔄 AI 생성", key="refresh_hero_ex", use_container_width=True, help="AI가 실시간으로 새로운 아이디어를 제안합니다"):
