@@ -113,7 +113,7 @@ Config.setup_langsmith()
 # Helper: 실행 이력 기록 및 로깅 통합
 # =============================================================================
 
-def _update_step_history(state: PlanCraftState, step_name: str, status: str, summary: str = "", start_time: float = 0.0) -> PlanCraftState:
+def _update_step_history(state: PlanCraftState, step_name: str, status: str, summary: str = "", start_time: float = 0.0, event_type: str = "AI_ACTION") -> PlanCraftState:
     """Step 실행 결과를 state의 history에 추가하고 로깅합니다."""
     # (기존 코드 생략...)
     
@@ -129,7 +129,7 @@ def _update_step_history(state: PlanCraftState, step_name: str, status: str, sum
     
     # 로그 기록
     logger = get_file_logger()
-    log_msg = f"[{step_name.upper()}] {status}"
+    log_msg = f"[{step_name.upper()}] {status} ({event_type})"
     if summary:
         log_msg += f" - {summary}"
     logger.info(log_msg)
@@ -140,7 +140,8 @@ def _update_step_history(state: PlanCraftState, step_name: str, status: str, sum
         "status": status,
         "summary": summary,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "execution_time": execution_time
+        "execution_time": execution_time,
+        "event_type": event_type  # [NEW] AI / HUMAN 구분
     }
     
     # State 업데이트 (불변성 유지)
@@ -819,6 +820,15 @@ def option_pause_node(state: PlanCraftState) -> Command:
     # 1. 인터럽트 페이로드 생성 (순수 함수, 외부 호출 없음)
     payload = create_option_interrupt(state)
     payload["type"] = "option_selector"
+    
+    # [NOTE] "Pause 직전 상태 백업" 피드백 관련:
+    # LangGraph에서 node 실행 중 interrupt()가 호출되면 실행이 중단되므로,
+    # interrupt() 호출 이전에 state를 update_state(...)로 DB에 저장할 수 없습니다.
+    # (Command를 리턴해야만 저장됨).
+    # 따라서 payload 데이터 자체는 LangGraph Checkpointing 메커니즘에 의해 저장되며,
+    # Resume 시에는 이 payload를 기반으로 복원됩니다.
+    # 별도의 'last_interrupt' State 백업은 Resume 후 handle_user_response에서 수행하거나,
+    # 이전 노드(Analyzer)에서 수행해야 합니다. 현재 구조에서는 Checkpoint를 신뢰합니다.
     
     # =========================================================================
     # [INTERRUPT] 실행 중단 - 사용자 응답 대기 (무한 루프로 검증)

@@ -179,6 +179,9 @@ class PlanCraftState(TypedDict, total=False):
     confirmed: Optional[bool]
     uploaded_content: Optional[str]
     routing_decision: Optional[str]
+    
+    # [NEW] Debugging & Replay Support (리뷰어 피드백 반영)
+    last_interrupt: Optional[dict]  # 마지막 인터럽트 정보 백업 (Resume 시점 기록)
 
 
 # =============================================================================

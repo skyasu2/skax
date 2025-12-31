@@ -152,7 +152,10 @@ def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> Pla
         "status": "USER_INPUT",
         "summary": _format_resume_summary(response),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "response_data": _sanitize_response(response)  # 민감 정보 제거된 사본
+        "response_data": _sanitize_response(response),  # 민감 정보 제거된 사본
+        "event_type": "HUMAN_RESPONSE",  # [NEW] 이벤트 타입 명시
+        # [NEW] 직전 인터럽트 정보 백업 (추적용)
+        "last_interrupt_payload": state.get("last_interrupt") 
     }
 
     current_history = state.get("step_history", []) or []
