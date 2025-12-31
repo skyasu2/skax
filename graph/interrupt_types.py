@@ -365,8 +365,68 @@ class InterruptFactory:
         새로운 인터럽트 타입 등록
 
         확장 시 새로운 인터럽트 타입을 런타임에 추가할 수 있습니다.
+
+        ┌─────────────────────────────────────────────────────────────────────────┐
+        │                 인터럽트 타입 확장 가이드                                │
+        ├─────────────────────────────────────────────────────────────────────────┤
+        │ 1. InterruptType Enum에 새 타입 추가                                   │
+        │    예: FILE_UPLOAD = "file_upload"                                     │
+        │                                                                         │
+        │ 2. BaseInterruptPayload를 상속하는 Payload 클래스 생성                  │
+        │    - validate_response() 메서드 구현 필수                              │
+        │                                                                         │
+        │ 3. InterruptFactory.register()로 타입 등록                             │
+        │    예: InterruptFactory.register(                                      │
+        │            InterruptType.FILE_UPLOAD,                                  │
+        │            FileUploadInterruptPayload                                  │
+        │        )                                                               │
+        │                                                                         │
+        │ 4. ResumeHandler에 핸들러 등록 (선택적)                                │
+        │    예: ResumeHandler.register_handler(                                 │
+        │            InterruptType.FILE_UPLOAD,                                  │
+        │            handle_file_upload                                          │
+        │        )                                                               │
+        └─────────────────────────────────────────────────────────────────────────┘
+
+        Args:
+            interrupt_type: 등록할 인터럽트 타입 (InterruptType Enum)
+            payload_class: 페이로드 클래스 (BaseInterruptPayload 상속)
+
+        Raises:
+            TypeError: payload_class가 BaseInterruptPayload를 상속하지 않음
+
+        Example:
+            >>> # 파일 업로드 인터럽트 추가 예시
+            >>> class FileUploadPayload(BaseInterruptPayload):
+            ...     type: InterruptType = Field(default="file_upload")
+            ...     allowed_extensions: List[str] = Field(default=[".pdf", ".docx"])
+            ...
+            ...     def validate_response(self, response: Dict) -> bool:
+            ...         return "file_path" in response
+            ...
+            >>> InterruptFactory.register(InterruptType.FILE_UPLOAD, FileUploadPayload)
         """
+        if not issubclass(payload_class, BaseInterruptPayload):
+            raise TypeError(
+                f"payload_class는 BaseInterruptPayload를 상속해야 합니다. "
+                f"받은 타입: {payload_class}"
+            )
         cls._registry[interrupt_type] = payload_class
+
+    @classmethod
+    def get_registered_types(cls) -> List[InterruptType]:
+        """등록된 모든 인터럽트 타입 반환"""
+        return list(cls._registry.keys())
+
+    @classmethod
+    def is_registered(cls, interrupt_type: Union[InterruptType, str]) -> bool:
+        """인터럽트 타입 등록 여부 확인"""
+        if isinstance(interrupt_type, str):
+            try:
+                interrupt_type = InterruptType(interrupt_type)
+            except ValueError:
+                return False
+        return interrupt_type in cls._registry
 
 
 # =============================================================================
@@ -444,6 +504,33 @@ class ResumeHandler:
 
         handler = cls._handlers.get(interrupt_type, cls.handle_option)
         return handler.__func__(response)  # staticmethod 호출
+
+    @classmethod
+    def register_handler(
+        cls,
+        interrupt_type: InterruptType,
+        handler: callable
+    ):
+        """
+        새로운 응답 핸들러 등록
+
+        Args:
+            interrupt_type: 인터럽트 타입
+            handler: 응답 처리 함수 (Dict[str, Any]) -> Dict[str, Any]
+
+        Example:
+            >>> def handle_file_upload(response: Dict) -> Dict:
+            ...     return {
+            ...         "file_path": response.get("file_path"),
+            ...         "file_size": response.get("file_size"),
+            ...         "action": "file_uploaded"
+            ...     }
+            >>> ResumeHandler.register_handler(
+            ...     InterruptType.FILE_UPLOAD,
+            ...     handle_file_upload
+            ... )
+        """
+        cls._handlers[interrupt_type] = staticmethod(handler)
 
 
 # =============================================================================

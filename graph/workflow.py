@@ -246,13 +246,22 @@ def should_refine_or_restart(state: PlanCraftState) -> str:
 
     내부적으로 RunnableBranch 로직 사용, add_conditional_edges 호환 반환값 제공
 
-    분기 로직:
-    - score < 5 또는 FAIL → Analyzer로 복귀 (재분석)
-    - score 5~8 또는 REVISE → Refiner (개선)
-    - score ≥ 9 또는 PASS → Formatter (완료)
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                         판정표 (Decision Table)                         │
+    ├──────────────┬──────────────┬─────────────────┬────────────────────────┤
+    │ 조건         │ 점수 범위    │ 반환값          │ 다음 노드              │
+    ├──────────────┼──────────────┼─────────────────┼────────────────────────┤
+    │ 최대 복귀    │ restart >= 2 │ RouteKey.REFINE │ refine (무한루프 방지) │
+    │ 품질 실패    │ score < 5    │ RouteKey.RESTART│ analyze (재분석)       │
+    │ 품질 통과    │ score >= 9   │ RouteKey.COMPLETE│ format (완료)         │
+    │ 개선 필요    │ 5 <= s < 9   │ RouteKey.REFINE │ refine (개선)          │
+    └──────────────┴──────────────┴─────────────────┴────────────────────────┘
 
-    안전장치:
-    - restart_count >= 2 → 무한 복귀 방지
+    Args:
+        state: 현재 워크플로우 상태 (review 필드 필요)
+
+    Returns:
+        RouteKey: 다음 노드를 결정하는 라우팅 키
     """
     logger = get_file_logger()
     review = state.get("review", {})
@@ -460,14 +469,19 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
 def should_ask_user(state: PlanCraftState) -> str:
     """
     Analyze 노드 이후 조건부 라우터.
-    
-    분기 조건:
-        - "option_pause": 사용자에게 추가 정보를 요청해야 할 때 (need_more_info=True)
-        - "general_response": 잡담/일반 질의일 때 (is_general_query=True)
-        - "continue": 기획서 생성 파이프라인으로 진행할 때
-    
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                     판정표 (Decision Table)                             │
+    ├────────────────────────┬───────────────────────┬────────────────────────┤
+    │ 조건                   │ 반환값                │ 다음 노드              │
+    ├────────────────────────┼───────────────────────┼────────────────────────┤
+    │ need_more_info == True │ RouteKey.OPTION_PAUSE │ option_pause (HITL)    │
+    │ is_general_query       │ RouteKey.GENERAL_RESP │ general_response       │
+    │ (기본)                 │ RouteKey.CONTINUE     │ structure (기획서 생성)│
+    └────────────────────────┴───────────────────────┴────────────────────────┘
+
     Returns:
-        str: 다음 노드 이름 ("option_pause", "general_response", "continue")
+        RouteKey: 다음 노드를 결정하는 라우팅 키
     """
     if is_human_interrupt_required(state):
         return RouteKey.OPTION_PAUSE
@@ -962,11 +976,19 @@ def create_workflow() -> StateGraph:
         """
         Review 후 Discussion 필요 여부 결정 (성능 최적화)
 
-        라우팅 로직:
-        - score >= 9 (PASS): 바로 완료 → format
-        - score >= DISCUSSION_SKIP_THRESHOLD (7): Discussion 스킵 → refine
-        - score < 7: Discussion 필요 → discuss
-        - score < 5 (FAIL): Analyzer 복귀 → restart
+        ┌─────────────────────────────────────────────────────────────────────────┐
+        │                     판정표 (Decision Table)                             │
+        ├──────────────┬──────────────┬──────────────────┬───────────────────────┤
+        │ 조건         │ 점수 범위    │ 반환값           │ 다음 노드             │
+        ├──────────────┼──────────────┼──────────────────┼───────────────────────┤
+        │ 품질 통과    │ score >= 9   │ RouteKey.COMPLETE│ format (즉시 완료)    │
+        │ 품질 실패    │ score < 5    │ RouteKey.RESTART │ analyze (재분석)      │
+        │ 중간 품질    │ 7 <= s < 9   │ RouteKey.SKIP    │ refine (토론 스킵)    │
+        │ 낮은 품질    │ 5 <= s < 7   │ RouteKey.DISCUSS │ discussion (토론 필요)│
+        └──────────────┴──────────────┴──────────────────┴───────────────────────┘
+
+        Note:
+            DISCUSSION_SKIP_THRESHOLD (기본값: 7) 이상이면 Discussion 없이 Refine
         """
         logger = get_file_logger()
         review = state.get("review", {})
@@ -1013,12 +1035,19 @@ def create_workflow() -> StateGraph:
         """
         Refiner 후 다음 단계 결정 (Graceful End-of-Loop 패턴 적용)
 
-        안전 탈출 조건 (OR 연산):
-        1. refined=False: 개선 불필요 (PASS 판정)
-        2. refine_count >= MAX_REFINE_LOOPS: 최대 루프 도달
-        3. remaining_steps <= MIN_REMAINING_STEPS: 남은 스텝 부족
-        
-        위 조건 중 하나라도 충족하면 format으로 진행하여 완료합니다.
+        ┌─────────────────────────────────────────────────────────────────────────┐
+        │                     판정표 (Decision Table)                             │
+        ├────────────────────────┬─────────────────┬──────────────────────────────┤
+        │ 조건                   │ 반환값          │ 설명                         │
+        ├────────────────────────┼─────────────────┼──────────────────────────────┤
+        │ remaining_steps <= 5   │ RouteKey.COMPLETE│ 스텝 부족 → 안전 종료       │
+        │ refine_count >= MAX    │ RouteKey.COMPLETE│ 최대 루프 도달 → 종료       │
+        │ refined == True        │ RouteKey.RETRY  │ 개선 필요 → structure 재실행│
+        │ refined == False       │ RouteKey.COMPLETE│ 개선 완료 → format          │
+        └────────────────────────┴─────────────────┴──────────────────────────────┘
+
+        Note:
+            Graceful End-of-Loop: 무한 루프 방지를 위한 다중 안전장치 적용
         """
         refined = state.get("refined", False)
         refine_count = state.get("refine_count", 0)
@@ -1137,22 +1166,31 @@ app = compile_workflow()
 # =============================================================================
 
 def run_plancraft(
-    user_input: str, 
-    file_content: str = None, 
-    refine_count: int = 0, 
+    user_input: str,
+    file_content: str = None,
+    refine_count: int = 0,
     previous_plan: str = None,
     callbacks: list = None,
     thread_id: str = "default_thread",
-    resume_command: dict = None  # [NEW] 재개를 위한 커맨드 데이터
+    resume_command: dict = None,  # [NEW] 재개를 위한 커맨드 데이터
+    generation_preset: str = None  # [NEW] 생성 모드 프리셋 (fast/balanced/quality)
 ) -> dict:
     """
     PlanCraft 워크플로우 실행 엔트리포인트
-    
+
     Args:
+        user_input: 사용자 입력 텍스트
+        file_content: 업로드된 파일 내용 (선택)
+        refine_count: 현재 개선 횟수
+        previous_plan: 이전 기획서 (개선 모드)
+        callbacks: LangChain 콜백 리스트
+        thread_id: 세션 ID
         resume_command: 인터럽트 후 재개를 위한 데이터 (Command resume)
+        generation_preset: 생성 모드 프리셋 ("fast", "balanced", "quality")
     """
     from graph.state import create_initial_state
     from langgraph.types import Command
+    from utils.settings import DEFAULT_PRESET
 
     # [UPDATE] Input Schema 분리에 따른 입력 구성
     inputs = None
@@ -1163,7 +1201,8 @@ def run_plancraft(
             "file_content": file_content,
             "refine_count": refine_count,
             "previous_plan": previous_plan,
-            "thread_id": thread_id
+            "thread_id": thread_id,
+            "generation_preset": generation_preset or DEFAULT_PRESET,  # [NEW]
         }
 
     # 워크플로우 실행설정

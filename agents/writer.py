@@ -199,12 +199,37 @@ Action Items (실행 지침):
 
     
     
+    # =========================================================================
     # 3. LLM 호출 및 Self-Correction (Reflection Loop)
-    max_retries = settings.WRITER_MAX_RETRIES
+    # =========================================================================
+    #
+    # Self-Reflection 패턴 (AlphaCodium 영감):
+    # - 각 생성 결과를 자체 검증하여 품질 미달 시 재시도
+    # - 프리셋에 따라 재시도 횟수 동적 조정
+    #
+    # ┌─────────────────────────────────────────────────────────────────────────┐
+    # │                     Self-Reflection 검증 항목                           │
+    # ├──────────────────────────┬──────────────────────────────────────────────┤
+    # │ 검증 항목                │ 기준                                         │
+    # ├──────────────────────────┼──────────────────────────────────────────────┤
+    # │ 섹션 개수                │ >= WRITER_MIN_SECTIONS (기본 9개)            │
+    # │ 섹션별 최소 길이         │ >= 100자 (너무 짧으면 부실)                  │
+    # │ 마크다운 테이블 포함     │ 일정/KPI 섹션에 테이블 권장                  │
+    # └──────────────────────────┴──────────────────────────────────────────────┘
+    #
+    # =========================================================================
+
+    # 프리셋에서 재시도 횟수 가져오기 (동적)
+    from utils.settings import get_preset
+    active_preset = state.get("generation_preset", settings.active_preset)
+    preset = get_preset(active_preset)
+    max_retries = preset.writer_max_retries
+
     current_try = 0
     final_draft_dict = None
     last_draft_dict = None  # 마지막으로 생성된 결과 (부분이라도 보존)
     last_error = None
+    validation_issues = []  # 검증 실패 이유 추적
 
     while current_try < max_retries:
         try:
@@ -218,33 +243,65 @@ Action Items (실행 지침):
             last_draft_dict = draft_dict
 
             # -----------------------------------------------------------------
-            # [Reflection] Self-Check: 섹션 개수 검증
+            # [Reflection] Self-Check: 다중 품질 검증
             # -----------------------------------------------------------------
             sections = draft_dict.get("sections", [])
             section_count = len(sections)
-            
+            validation_issues = []
+
             # 필수 섹션 수 (최소 9개, 권장 10개)
-            MIN_SECTIONS = settings.WRITER_MIN_SECTIONS 
-            
+            MIN_SECTIONS = settings.WRITER_MIN_SECTIONS
+            MIN_CONTENT_LENGTH = 100  # 섹션당 최소 글자수
+
+            # 검증 1: 섹션 개수
             if section_count < MIN_SECTIONS:
-                logger.warning(f"[Writer Reflection] ⚠️ 섹션 개수 부족 ({section_count}/{MIN_SECTIONS}). 재작성합니다.")
-                
+                validation_issues.append(f"섹션 개수 부족 ({section_count}/{MIN_SECTIONS}개)")
+
+            # 검증 2: 섹션별 최소 길이 (부실 섹션 검출)
+            short_sections = []
+            for sec in sections:
+                sec_name = sec.get("name", "") if isinstance(sec, dict) else getattr(sec, "name", "")
+                sec_content = sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+                if len(sec_content) < MIN_CONTENT_LENGTH:
+                    short_sections.append(sec_name)
+
+            if short_sections and len(short_sections) >= 3:
+                validation_issues.append(f"부실 섹션 다수 ({', '.join(short_sections[:3])}...)")
+
+            # 검증 3: 마크다운 테이블 권장 (일정/로드맵 섹션)
+            has_table = False
+            for sec in sections:
+                sec_content = sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+                if "|" in sec_content and "---" in sec_content:
+                    has_table = True
+                    break
+
+            # 테이블 없으면 경고만 (재시도는 안함)
+            if not has_table:
+                logger.info("[Writer Reflection] ℹ️ 마크다운 테이블 없음 (권장 사항)")
+
+            # 검증 실패 시 재시도
+            if validation_issues:
+                logger.warning(f"[Writer Reflection] ⚠️ 검증 실패: {', '.join(validation_issues)}. 재작성합니다.")
+
                 # 피드백 메시지 추가하여 다시 시도
                 feedback = f"""
-[System Critical Alert]: 
-- 현재 생성된 섹션: {section_count}개 (부족!)
+[System Critical Alert]:
+- 검증 실패 항목: {', '.join(validation_issues)}
+- 현재 생성된 섹션: {section_count}개
 - 최소 필수 섹션: {MIN_SECTIONS}개
 - 필수 섹션 목록: 1.요약, 2.문제정의, 3.타겟/시장, 4.핵심기능, 5.비즈니스모델, 6.기술스택, 7.일정, 8.리스크, 9.KPI, 10.팀
-- 반드시 모든 섹션을 빠짐없이 작성하세요!
+- 각 섹션은 최소 {MIN_CONTENT_LENGTH}자 이상 작성하세요!
+- 일정/KPI 섹션에는 마크다운 테이블을 포함하세요!
 """
                 messages.append({"role": "user", "content": feedback})
                 current_try += 1
-                last_error = f"섹션 개수 부족 ({section_count}개)"
+                last_error = f"검증 실패: {', '.join(validation_issues)}"
                 continue
-            
+
             # 통과 시 루프 탈출
             final_draft_dict = draft_dict
-            logger.info("[Writer Reflection] ✅ Self-Check 통과.")
+            logger.info(f"[Writer Reflection] ✅ Self-Check 통과 (섹션 {section_count}개, 테이블: {'있음' if has_table else '없음'}).")
             break
 
         except Exception as e:

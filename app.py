@@ -164,6 +164,41 @@ def render_main():
                     st.error("Cloud: Disconnected ❌")
                 st.caption("Pipeline: Analyzer → Structurer → Writer")
 
+                st.divider()
+
+                # 생성 모드 프리셋 선택
+                from utils.settings import GENERATION_PRESETS, DEFAULT_PRESET
+
+                # 현재 선택된 프리셋
+                if "generation_preset" not in st.session_state:
+                    st.session_state.generation_preset = DEFAULT_PRESET
+
+                preset_options = {
+                    key: f"{p.icon} {p.name}"
+                    for key, p in GENERATION_PRESETS.items()
+                }
+                preset_keys = list(preset_options.keys())
+                preset_labels = list(preset_options.values())
+
+                current_preset_idx = preset_keys.index(st.session_state.generation_preset)
+
+                selected_label = st.selectbox(
+                    "생성 모드",
+                    options=preset_labels,
+                    index=current_preset_idx,
+                    key="preset_dropdown",
+                    help="생성 품질과 속도를 조절합니다"
+                )
+
+                # 선택 변경 시 업데이트
+                selected_key = preset_keys[preset_labels.index(selected_label)]
+                if selected_key != st.session_state.generation_preset:
+                    st.session_state.generation_preset = selected_key
+
+                # 선택된 프리셋 설명 표시
+                current_preset = GENERATION_PRESETS[st.session_state.generation_preset]
+                st.caption(f"📝 {current_preset.description}")
+
     st.divider()
 
     # =========================================================================
@@ -408,13 +443,14 @@ def render_main():
                     previous_plan = st.session_state.generated_plan
                     
                     final_result = run_plancraft(
-                        user_input=pending_text, 
+                        user_input=pending_text,
                         file_content=file_content,
                         refine_count=current_refine_count,
                         previous_plan=previous_plan,
                         callbacks=[streamlit_callback],
                         thread_id=st.session_state.thread_id,
-                        resume_command=resume_cmd
+                        resume_command=resume_cmd,
+                        generation_preset=st.session_state.get("generation_preset", "balanced")
                     )
                     
                     status.update(label="✅ 처리 완료!", state="complete", expanded=False)

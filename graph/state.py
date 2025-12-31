@@ -26,7 +26,7 @@ from typing_extensions import TypedDict, NotRequired
 class PlanCraftInput(TypedDict, total=False):
     """
     외부에서 유입되는 입력 데이터 스키마
-    
+
     API/UI/테스트에서만 사용하며, 최소한의 필수 입력만 정의합니다.
     """
     user_input: str  # Required
@@ -35,6 +35,7 @@ class PlanCraftInput(TypedDict, total=False):
     retry_count: int
     previous_plan: Optional[str]
     thread_id: str
+    generation_preset: str  # [NEW] 생성 모드 프리셋 (fast/balanced/quality)
 
 
 # =============================================================================
@@ -116,6 +117,7 @@ class PlanCraftState(TypedDict, total=False):
     retry_count: int
     previous_plan: Optional[str]
     thread_id: str
+    generation_preset: str  # [NEW] 생성 모드 프리셋 (fast/balanced/quality)
     
     # ========== From PlanCraftOutput ==========
     final_output: Optional[str]
@@ -187,15 +189,16 @@ def create_initial_state(
     user_input: str,
     file_content: str = None,
     previous_plan: str = None,
-    thread_id: str = "default_thread"
+    thread_id: str = "default_thread",
+    generation_preset: str = "balanced"
 ) -> PlanCraftState:
     """
     초기 상태를 생성합니다.
-    
+
     TypedDict 기반으로 변경되어 Pydantic 의존성이 없습니다.
     """
     from datetime import datetime
-    
+
     return {
         # Input fields
         "user_input": user_input,
@@ -204,6 +207,7 @@ def create_initial_state(
         "retry_count": 0,
         "previous_plan": previous_plan,
         "thread_id": thread_id,
+        "generation_preset": generation_preset,
         
         # Output fields
         "final_output": None,
