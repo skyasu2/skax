@@ -298,6 +298,11 @@ def make_approval_pause_node(
     
     팀장/리더/QA 등 역할별 승인 워크플로우를 쉽게 구현할 수 있습니다.
     사용자의 승인/반려 응답에 따라 다른 노드로 분기합니다.
+
+    | 승인 여부 | User Response (Value) | 이동 경로 | 비고 |
+    |---|---|---|---|
+    | 승인 | `approve` or `approved=True` | `goto_approved` | 다음 단계 진행 |
+    | 반려 | `reject` | `goto_rejected` | 상태에 `rejection_reason` 기록 |
     
     Args:
         role: 승인자 역할 (예: "팀장", "리더", "QA")

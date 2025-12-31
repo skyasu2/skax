@@ -160,6 +160,18 @@ class OptionInterruptPayload(BaseInterruptPayload):
     옵션 선택 인터럽트 페이로드
 
     사용자에게 옵션 목록을 제시하고 선택을 받습니다.
+
+    JSON Example:
+        {
+            "type": "option",
+            "question": "다음 단계 진행 방향을 선택하세요",
+            "options": [
+                {"title": "기획서 작성", "description": "AI가 초안을 작성합니다", "value": "write"},
+                {"title": "추가 분석", "description": "자료를 더 수집합니다", "value": "analyze"}
+            ],
+            "allow_multiple": false,
+            "allow_custom": true
+        }
     """
     type: InterruptType = Field(default=InterruptType.OPTION)
     options: List[InterruptOption] = Field(default_factory=list, description="선택 가능한 옵션들")
@@ -190,6 +202,15 @@ class FormInterruptPayload(BaseInterruptPayload):
     동적 폼 입력 인터럽트 페이로드
 
     Pydantic 스키마 기반으로 동적 폼을 생성합니다.
+
+    JSON Example:
+        {
+            "type": "form",
+            "question": "상세 정보를 입력해주세요",
+            "input_schema_name": "UserInfo",
+            "required_fields": ["email", "age"],
+            "field_types": {"email": "email", "age": "int"}
+        }
     """
     type: InterruptType = Field(default=InterruptType.FORM)
     input_schema_name: str = Field(description="입력 폼 스키마 이름 (Pydantic 모델명)")
@@ -252,6 +273,15 @@ class ConfirmInterruptPayload(BaseInterruptPayload):
     확인(예/아니오) 인터럽트 페이로드
 
     단순 예/아니오 선택을 받습니다.
+
+    JSON Example:
+        {
+            "type": "confirm",
+            "question": "정말 삭제하시겠습니까?",
+            "confirm_text": "네, 삭제합니다",
+            "cancel_text": "취소",
+            "default_value": false
+        }
     """
     type: InterruptType = Field(default=InterruptType.CONFIRM)
     confirm_text: str = Field(default="예", description="확인 버튼 텍스트")
@@ -269,6 +299,18 @@ class ApprovalInterruptPayload(BaseInterruptPayload):
     역할 기반 승인 인터럽트 페이로드
 
     팀장/리더/QA 등 역할별 승인 워크플로우에 사용됩니다.
+
+    JSON Example:
+        {
+            "type": "approval",
+            "question": "기획서 초안 승인 요청",
+            "role": "팀장",
+            "options": [
+                {"title": "✅ 승인", "value": "approve"},
+                {"title": "🔄 반려", "value": "reject"}
+            ],
+            "rejection_feedback_enabled": true
+        }
     """
     type: InterruptType = Field(default=InterruptType.APPROVAL)
     role: str = Field(description="승인자 역할 (예: 팀장, 리더, QA)")
