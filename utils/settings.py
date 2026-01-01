@@ -29,6 +29,9 @@ class GenerationPreset(BaseModel):
     # [NEW] 방안 D: 핵심 검증 보장
     min_sections: int = Field(default=9, description="최소 생성 섹션 수")
     structurer_max_retries: int = Field(default=2, description="Structurer 검증 재시도 (고정)")
+    # [NEW] 시각적 요소 설정 (다이어그램, 그래프)
+    include_diagrams: int = Field(default=0, description="포함할 Mermaid 다이어그램 개수")
+    include_charts: int = Field(default=0, description="포함할 Markdown 그래프/차트 개수")
 
 
 # 프리셋 정의
@@ -42,8 +45,10 @@ GENERATION_PRESETS = {
         max_restart_count=1,
         writer_max_retries=1,
         discussion_enabled=False,
-        min_sections=7,  # [NEW] 속도 우선: 7개 섹션
+        min_sections=7,  # 속도 우선: 7개 섹션
         structurer_max_retries=2,  # 구조 검증은 고정
+        include_diagrams=0,  # 빠른 모드: 시각 자료 없음
+        include_charts=0,
     ),
     "balanced": GenerationPreset(
         name="균형",
@@ -54,8 +59,10 @@ GENERATION_PRESETS = {
         max_restart_count=2,
         writer_max_retries=2,
         discussion_enabled=True,
-        min_sections=9,  # [NEW] 균형: 9개 섹션
+        min_sections=9,  # 균형: 9개 섹션
         structurer_max_retries=2,  # 구조 검증은 고정
+        include_diagrams=1,  # 균형 모드: 다이어그램 1개
+        include_charts=1,    # 그래프 1개
     ),
     "quality": GenerationPreset(
         name="고품질",
@@ -66,8 +73,10 @@ GENERATION_PRESETS = {
         max_restart_count=2,
         writer_max_retries=3,
         discussion_enabled=True,
-        min_sections=10,  # [NEW] 고품질: 10개 섹션
+        min_sections=10,  # 고품질: 10개 섹션
         structurer_max_retries=2,  # 구조 검증은 고정
+        include_diagrams=1,  # 고품질 모드: 다이어그램 1개
+        include_charts=2,    # 그래프 2개 (추가 1개)
     ),
 }
 

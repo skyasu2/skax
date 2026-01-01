@@ -9,6 +9,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tools.mcp_client import fetch_url_sync, search_sync
 from tools.web_search import should_search_web
+from tools.search_client import _is_blocked_domain  # [NEW] 도메인 필터링
+
 
 def execute_web_search(user_input: str, rag_context: str = "") -> dict:
     """
@@ -38,6 +40,11 @@ def execute_web_search(user_input: str, rag_context: str = "") -> dict:
 
         if urls:
             for url in urls[:3]:
+                # [NEW] 차단 도메인 체크
+                if _is_blocked_domain(url):
+                    print(f"[INFO] 관련 없는 URL 제외: {url}")
+                    continue
+                    
                 try:
                     content = fetch_url_sync(url, max_length=3000)
                     if content and not content.startswith("[웹 조회 실패"):
@@ -81,9 +88,15 @@ def execute_web_search(user_input: str, rag_context: str = "") -> dict:
                             if search_result.get("success"):
                                 formatted_result = ""
                                 if "results" in search_result and isinstance(search_result["results"], list):
-                                    for res in search_result["results"][:3]:
+                                    for res in search_result["results"][:5]:  # 필터링 고려하여 더 확인
                                         title = res.get("title", "제목 없음")
                                         url = res.get("url", "URL 없음")
+                                        
+                                        # [NEW] 차단 도메인 체크
+                                        if _is_blocked_domain(url):
+                                            print(f"[INFO] 관련 없는 검색 결과 제외: {url}")
+                                            continue
+                                        
                                         snippet = res.get("snippet", "")[:200]
                                         formatted_result += f"- [{title}]({url})\n  {snippet}\n"
                                         if url and url.startswith("http"):
@@ -117,3 +130,4 @@ def execute_web_search(user_input: str, rag_context: str = "") -> dict:
         "sources": web_sources,
         "error": error
     }
+

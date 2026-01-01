@@ -213,9 +213,52 @@ def render_human_interaction(current_state):
     if not current_state:
         return
 
-    # [NEW] 에러 메시지 표시 (HITL 재시도 시 피드백)
-    if current_state.get("error"):
-        st.error(current_state["error"])
+    # =========================================================================
+    # [NEW] 에러 메시지 표시 개선 (HITL 재시도 시 명확한 피드백)
+    # =========================================================================
+    error_msg = current_state.get("error")
+    retry_count = current_state.get("retry_count", 0)
+    
+    if error_msg:
+        # 에러 유형에 따른 아이콘 및 안내 메시지
+        error_icon = "⚠️"
+        error_hint = "다시 시도해 주세요."
+        
+        if "필수" in str(error_msg) or "누락" in str(error_msg):
+            error_icon = "📋"
+            error_hint = "필수 항목을 모두 입력해 주세요."
+        elif "형식" in str(error_msg) or "유효" in str(error_msg):
+            error_icon = "📝"
+            error_hint = "올바른 형식으로 입력해 주세요."
+        elif "선택" in str(error_msg):
+            error_icon = "👆"
+            error_hint = "아래 옵션 중 하나를 선택해 주세요."
+        
+        # 재시도 횟수 표시 (최대 횟수 경고)
+        MAX_RETRIES = 5
+        retry_info = ""
+        if retry_count > 0:
+            remaining = MAX_RETRIES - retry_count
+            if remaining <= 2:
+                retry_info = f" 🔄 (남은 시도: {remaining}회)"
+            else:
+                retry_info = f" (시도 {retry_count}/{MAX_RETRIES})"
+        
+        # 에러 메시지 박스 렌더링
+        st.markdown(f"""
+        <div style="
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-left: 4px solid #fd7e14;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+        ">
+            <strong>{error_icon} 입력 오류{retry_info}</strong>
+            <p style="margin: 8px 0 0 0; color: #856404;">{error_msg}</p>
+            <small style="color: #6c757d;">💡 {error_hint}</small>
+        </div>
+        """, unsafe_allow_html=True)
 
     # 1. Schema-driven Form (Priority)
     # PlanCraftState에 저장된 스키마 클래스명(Str)을 이용해 동적으로 폼 생성

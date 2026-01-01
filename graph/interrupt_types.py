@@ -546,6 +546,188 @@ class InterruptFactory:
                 return False
         return interrupt_type in cls._registry
 
+    # =========================================================================
+    # 편의 생성자 메서드 (Convenience Factory Methods)
+    # =========================================================================
+    # 자주 사용되는 패턴을 위한 간편 메서드들
+    
+    @classmethod
+    def option(
+        cls,
+        question: str,
+        options: List[Union[Dict[str, str], InterruptOption]],
+        allow_custom: bool = True,
+        node_ref: str = None,
+        metadata: Dict[str, Any] = None
+    ) -> OptionInterruptPayload:
+        """
+        옵션 선택 인터럽트 간편 생성
+        
+        Args:
+            question: 질문 텍스트
+            options: 옵션 목록 (dict 또는 InterruptOption)
+            allow_custom: 직접 입력 허용 여부 (기본 True)
+            node_ref: 노드 참조명 (디버깅용)
+            metadata: 추가 메타데이터
+            
+        Returns:
+            OptionInterruptPayload
+            
+        Example:
+            >>> payload = InterruptFactory.option(
+            ...     question="어떤 유형을 선택하시겠습니까?",
+            ...     options=[
+            ...         {"title": "웹 앱", "description": "브라우저 기반"},
+            ...         {"title": "모바일 앱", "description": "iOS/Android"}
+            ...     ]
+            ... )
+        """
+        normalized_options = normalize_options(options)
+        import uuid
+        import datetime
+        
+        return OptionInterruptPayload(
+            question=question,
+            options=normalized_options,
+            allow_custom=allow_custom,
+            node_ref=node_ref or "option_pause",
+            event_id=f"evt_{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.datetime.now().isoformat(),
+            data=metadata or {}
+        )
+    
+    @classmethod
+    def form(
+        cls,
+        question: str,
+        schema_name: str,
+        required_fields: List[str] = None,
+        field_types: Dict[str, str] = None,
+        node_ref: str = None
+    ) -> FormInterruptPayload:
+        """
+        폼 입력 인터럽트 간편 생성
+        
+        Args:
+            question: 질문 텍스트
+            schema_name: Pydantic 스키마 이름
+            required_fields: 필수 필드 목록
+            field_types: 필드별 타입 힌트 (str, int, email 등)
+            node_ref: 노드 참조명
+            
+        Returns:
+            FormInterruptPayload
+            
+        Example:
+            >>> payload = InterruptFactory.form(
+            ...     question="프로젝트 정보를 입력하세요",
+            ...     schema_name="ProjectInfo",
+            ...     required_fields=["name", "budget"]
+            ... )
+        """
+        import uuid
+        import datetime
+        
+        return FormInterruptPayload(
+            question=question,
+            input_schema_name=schema_name,
+            required_fields=required_fields or [],
+            field_types=field_types or {},
+            node_ref=node_ref or "form_pause",
+            event_id=f"evt_{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.datetime.now().isoformat()
+        )
+    
+    @classmethod
+    def confirm(
+        cls,
+        question: str,
+        confirm_text: str = "예",
+        cancel_text: str = "아니오",
+        default_value: bool = False,
+        node_ref: str = None
+    ) -> ConfirmInterruptPayload:
+        """
+        확인(예/아니오) 인터럽트 간편 생성
+        
+        Args:
+            question: 확인 질문
+            confirm_text: 확인 버튼 텍스트
+            cancel_text: 취소 버튼 텍스트
+            default_value: 기본값 (False = 아니오 선택됨)
+            node_ref: 노드 참조명
+            
+        Returns:
+            ConfirmInterruptPayload
+            
+        Example:
+            >>> payload = InterruptFactory.confirm(
+            ...     question="이 구조로 진행하시겠습니까?",
+            ...     confirm_text="네, 진행합니다",
+            ...     cancel_text="다시 생성"
+            ... )
+        """
+        import uuid
+        import datetime
+        
+        return ConfirmInterruptPayload(
+            question=question,
+            confirm_text=confirm_text,
+            cancel_text=cancel_text,
+            default_value=default_value,
+            node_ref=node_ref or "confirm_pause",
+            event_id=f"evt_{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.datetime.now().isoformat()
+        )
+    
+    @classmethod
+    def approval(
+        cls,
+        question: str,
+        role: str,
+        approve_text: str = "✅ 승인",
+        reject_text: str = "🔄 반려",
+        rejection_feedback_enabled: bool = True,
+        node_ref: str = None
+    ) -> ApprovalInterruptPayload:
+        """
+        역할 기반 승인 인터럽트 간편 생성
+        
+        Args:
+            question: 승인 요청 질문
+            role: 승인자 역할 (팀장, 리더, QA 등)
+            approve_text: 승인 버튼 텍스트
+            reject_text: 반려 버튼 텍스트
+            rejection_feedback_enabled: 반려 시 피드백 입력 활성화
+            node_ref: 노드 참조명
+            
+        Returns:
+            ApprovalInterruptPayload
+            
+        Example:
+            >>> payload = InterruptFactory.approval(
+            ...     question="기획서를 최종 승인하시겠습니까?",
+            ...     role="팀장",
+            ...     approve_text="승인 완료",
+            ...     reject_text="수정 요청"
+            ... )
+        """
+        import uuid
+        import datetime
+        
+        return ApprovalInterruptPayload(
+            question=question,
+            role=role,
+            options=[
+                InterruptOption(title=approve_text, value="approve", description="진행합니다"),
+                InterruptOption(title=reject_text, value="reject", description="수정이 필요합니다")
+            ],
+            rejection_feedback_enabled=rejection_feedback_enabled,
+            node_ref=node_ref or f"{role.lower()}_approval",
+            event_id=f"evt_{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.datetime.now().isoformat()
+        )
+
 
 # =============================================================================
 # Resume Handler - 응답 처리 유틸리티

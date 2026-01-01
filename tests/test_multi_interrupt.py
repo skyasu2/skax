@@ -1,0 +1,457 @@
+"""
+Multi-Interrupt Scenario Tests
+
+멀티 인터럽트 시나리오를 테스트합니다:
+- 옵션 선택 → 폼 입력 → 승인 연쇄 HITL
+- 각 인터럽트 타입별 응답 처리
+- 에러 상황 처리 및 재시도
+
+테스트 실행:
+    pytest tests/test_multi_interrupt.py -v
+"""
+
+import pytest
+import json
+from typing import Dict, Any
+from unittest.mock import Mock, patch, MagicMock
+
+# Import interrupt types and utilities
+from graph.interrupt_types import (
+    InterruptType,
+    InterruptFactory,
+    InterruptOption,
+    OptionInterruptPayload,
+    FormInterruptPayload,
+    ConfirmInterruptPayload,
+    ApprovalInterruptPayload,
+    ResumeHandler,
+    normalize_options,
+)
+from graph.interrupt_utils import (
+    create_interrupt_payload,
+    create_option_interrupt,
+    handle_user_response,
+    make_pause_node,
+    make_approval_pause_node,
+)
+from graph.state import create_initial_state, update_state
+
+
+class TestInterruptFactory:
+    """InterruptFactory 클래스 테스트"""
+
+    def test_option_factory_method(self):
+        """option() 편의 메서드 테스트"""
+        payload = InterruptFactory.option(
+            question="어떤 유형을 선택하시겠습니까?",
+            options=[
+                {"title": "웹 앱", "description": "브라우저 기반"},
+                {"title": "모바일 앱", "description": "iOS/Android"}
+            ]
+        )
+        
+        assert isinstance(payload, OptionInterruptPayload)
+        assert payload.question == "어떤 유형을 선택하시겠습니까?"
+        assert len(payload.options) == 2
+        assert payload.options[0].title == "웹 앱"
+        assert payload.allow_custom is True
+        assert payload.node_ref == "option_pause"
+        assert payload.event_id.startswith("evt_")
+
+    def test_form_factory_method(self):
+        """form() 편의 메서드 테스트"""
+        payload = InterruptFactory.form(
+            question="프로젝트 정보를 입력하세요",
+            schema_name="ProjectInfo",
+            required_fields=["name", "budget"],
+            field_types={"budget": "int"}
+        )
+        
+        assert isinstance(payload, FormInterruptPayload)
+        assert payload.question == "프로젝트 정보를 입력하세요"
+        assert payload.input_schema_name == "ProjectInfo"
+        assert "name" in payload.required_fields
+        assert payload.field_types.get("budget") == "int"
+
+    def test_confirm_factory_method(self):
+        """confirm() 편의 메서드 테스트"""
+        payload = InterruptFactory.confirm(
+            question="이 구조로 진행하시겠습니까?",
+            confirm_text="네, 진행합니다",
+            cancel_text="다시 생성"
+        )
+        
+        assert isinstance(payload, ConfirmInterruptPayload)
+        assert payload.confirm_text == "네, 진행합니다"
+        assert payload.cancel_text == "다시 생성"
+        assert payload.default_value is False
+
+    def test_approval_factory_method(self):
+        """approval() 편의 메서드 테스트"""
+        payload = InterruptFactory.approval(
+            question="기획서를 최종 승인하시겠습니까?",
+            role="팀장"
+        )
+        
+        assert isinstance(payload, ApprovalInterruptPayload)
+        assert payload.role == "팀장"
+        assert len(payload.options) == 2
+        assert payload.options[0].value == "approve"
+        assert payload.rejection_feedback_enabled is True
+
+    def test_to_dict_serializable(self):
+        """to_dict() 결과가 JSON 직렬화 가능한지 테스트"""
+        payload = InterruptFactory.option(
+            question="테스트 질문",
+            options=[{"title": "옵션1", "description": "설명1"}]
+        )
+        
+        payload_dict = payload.to_dict()
+        
+        # JSON 직렬화 가능해야 함
+        json_str = json.dumps(payload_dict, ensure_ascii=False)
+        assert json_str is not None
+        
+        # 파싱 후 동일한 값 확인
+        parsed = json.loads(json_str)
+        assert parsed["question"] == "테스트 질문"
+        assert parsed["type"] == "option"
+
+
+class TestNormalizeOptions:
+    """옵션 정규화 함수 테스트"""
+
+    def test_normalize_dict_options(self):
+        """딕셔너리 옵션 정규화"""
+        options = [
+            {"title": "A", "description": "설명A"},
+            {"title": "B", "description": "설명B"}
+        ]
+        
+        normalized = normalize_options(options)
+        
+        assert len(normalized) == 2
+        assert all(isinstance(opt, InterruptOption) for opt in normalized)
+        assert normalized[0].title == "A"
+
+    def test_normalize_mixed_options(self):
+        """혼합 형태 옵션 정규화 (dict + InterruptOption)"""
+        options = [
+            {"title": "A", "description": "설명A"},
+            InterruptOption(title="B", description="설명B")
+        ]
+        
+        normalized = normalize_options(options)
+        
+        assert len(normalized) == 2
+        assert normalized[1].title == "B"
+
+    def test_normalize_duck_typing(self):
+        """Duck typing 객체 정규화"""
+        class MockOption:
+            def __init__(self, title, description):
+                self.title = title
+                self.description = description
+        
+        options = [MockOption("Custom", "Custom Desc")]
+        normalized = normalize_options(options)
+        
+        assert len(normalized) == 1
+        assert normalized[0].title == "Custom"
+
+
+class TestResumeHandler:
+    """응답 처리 핸들러 테스트"""
+
+    def test_handle_option_response(self):
+        """옵션 선택 응답 처리"""
+        response = {"selected_option": {"title": "웹 앱", "description": "브라우저 기반"}}
+        
+        result = ResumeHandler.handle(InterruptType.OPTION, response)
+        
+        assert result["action"] == "option_selected"
+        assert result["selected_option"]["title"] == "웹 앱"
+
+    def test_handle_approval_approved(self):
+        """승인 응답 처리"""
+        response = {"selected_option": {"title": "승인", "value": "approve"}}
+        
+        result = ResumeHandler.handle(InterruptType.APPROVAL, response)
+        
+        assert result["action"] == "approved"
+        assert result["approved"] is True
+
+    def test_handle_approval_rejected(self):
+        """반려 응답 처리 (피드백 포함)"""
+        response = {
+            "selected_option": {"value": "reject"},
+            "rejection_reason": "BM 섹션 보강 필요"
+        }
+        
+        result = ResumeHandler.handle(InterruptType.APPROVAL, response)
+        
+        assert result["action"] == "rejected"
+        assert result["approved"] is False
+        assert result["rejection_reason"] == "BM 섹션 보강 필요"
+
+    def test_handle_confirm(self):
+        """확인 응답 처리"""
+        response = {"confirmed": True}
+        
+        result = ResumeHandler.handle(InterruptType.CONFIRM, response)
+        
+        assert result["action"] == "confirmed"
+        assert result["confirmed"] is True
+
+    def test_handle_form(self):
+        """폼 응답 처리"""
+        response = {"project_name": "AI 헬스케어", "budget": 50000000}
+        
+        result = ResumeHandler.handle(InterruptType.FORM, response)
+        
+        assert result["action"] == "form_submitted"
+        assert result["form_data"]["project_name"] == "AI 헬스케어"
+
+
+class TestValidationResponses:
+    """응답 유효성 검증 테스트"""
+
+    def test_option_validate_selected(self):
+        """옵션 선택 응답 검증 - 성공"""
+        payload = InterruptFactory.option(
+            question="테스트",
+            options=[{"title": "A", "description": ""}]
+        )
+        
+        response = {"selected_option": {"title": "A"}}
+        assert payload.validate_response(response) is True
+
+    def test_option_validate_custom_input(self):
+        """옵션 직접 입력 응답 검증 - 성공"""
+        payload = InterruptFactory.option(
+            question="테스트",
+            options=[{"title": "A", "description": ""}],
+            allow_custom=True
+        )
+        
+        response = {"text_input": "직접 입력한 내용"}
+        assert payload.validate_response(response) is True
+
+    def test_form_validate_missing_required(self):
+        """폼 필수 필드 누락 검증 - 실패"""
+        payload = InterruptFactory.form(
+            question="테스트",
+            schema_name="Test",
+            required_fields=["name", "email"]
+        )
+        
+        response = {"name": "테스트"}  # email 누락
+        assert payload.validate_response(response) is False
+        
+        errors = payload.get_validation_errors(response)
+        assert any("email" in err for err in errors)
+
+    def test_form_validate_type_mismatch(self):
+        """폼 타입 불일치 검증 - 실패"""
+        payload = InterruptFactory.form(
+            question="테스트",
+            schema_name="Test",
+            required_fields=["budget"],
+            field_types={"budget": "int"}
+        )
+        
+        response = {"budget": "not_a_number"}
+        errors = payload.get_validation_errors(response)
+        
+        assert any("타입 불일치" in err for err in errors)
+
+
+class TestMultiInterruptScenario:
+    """멀티 인터럽트 시나리오 통합 테스트"""
+
+    def test_option_then_form_scenario(self):
+        """
+        시나리오: 옵션 선택 → 폼 입력
+        
+        1. 사용자가 "상세 정보 입력" 옵션 선택
+        2. 폼 입력 인터럽트 발생
+        3. 폼 데이터 제출
+        """
+        # Step 1: 옵션 인터럽트
+        option_payload = InterruptFactory.option(
+            question="어떻게 진행하시겠습니까?",
+            options=[
+                {"title": "바로 생성", "description": "기본값으로 진행"},
+                {"title": "상세 정보 입력", "description": "추가 정보 입력"}
+            ]
+        )
+        
+        # Step 2: 사용자 옵션 선택
+        option_response = {"selected_option": {"title": "상세 정보 입력"}}
+        assert option_payload.validate_response(option_response)
+        
+        # Step 3: 폼 인터럽트 발생
+        form_payload = InterruptFactory.form(
+            question="프로젝트 상세 정보를 입력하세요",
+            schema_name="ProjectDetails",
+            required_fields=["project_name", "budget"]
+        )
+        
+        # Step 4: 폼 데이터 제출
+        form_response = {"project_name": "AI 플랫폼", "budget": 100000000}
+        assert form_payload.validate_response(form_response)
+        
+        # Step 5: 핸들러로 처리
+        result = ResumeHandler.handle(InterruptType.FORM, form_response)
+        assert result["form_data"]["project_name"] == "AI 플랫폼"
+
+    def test_option_form_approval_chain(self):
+        """
+        시나리오: 옵션 선택 → 폼 입력 → 승인 요청
+        
+        전체 HITL 체인 테스트
+        """
+        # Phase 1: 옵션 선택
+        opt_payload = InterruptFactory.option(
+            question="시작 방식을 선택하세요",
+            options=[{"title": "새 프로젝트", "description": "처음부터 생성"}]
+        )
+        opt_response = {"selected_option": {"title": "새 프로젝트"}}
+        assert opt_payload.validate_response(opt_response)
+        
+        # Phase 2: 폼 입력
+        form_payload = InterruptFactory.form(
+            question="프로젝트 정보",
+            schema_name="ProjectInfo",
+            required_fields=["name"]
+        )
+        form_response = {"name": "테스트 프로젝트"}
+        assert form_payload.validate_response(form_response)
+        
+        # Phase 3: 승인 요청
+        approval_payload = InterruptFactory.approval(
+            question="기획서를 승인하시겠습니까?",
+            role="팀장"
+        )
+        
+        # Case A: 승인
+        approve_response = {"selected_option": {"value": "approve"}}
+        assert approval_payload.validate_response(approve_response)
+        assert approval_payload.is_approved(approve_response) is True
+        
+        # Case B: 반려
+        reject_response = {"selected_option": {"value": "reject"}, "rejection_reason": "내용 보강 필요"}
+        assert approval_payload.validate_response(reject_response)
+        assert approval_payload.is_approved(reject_response) is False
+
+    def test_retry_on_validation_failure(self):
+        """
+        시나리오: 유효성 검증 실패 → 재시도
+        """
+        max_retries = 3
+        retry_count = 0
+        
+        payload = InterruptFactory.form(
+            question="이메일을 입력하세요",
+            schema_name="EmailForm",
+            required_fields=["email"],
+            field_types={"email": "email"}
+        )
+        
+        # 잘못된 입력들
+        invalid_inputs = [
+            {"email": ""},           # 빈 값
+            {"email": "invalid"},    # @ 없음
+            {"email": "test@valid.com"}  # 올바른 형식
+        ]
+        
+        for response in invalid_inputs:
+            retry_count += 1
+            if payload.validate_response(response):
+                break
+            if retry_count >= max_retries:
+                raise AssertionError("최대 재시도 횟수 초과")
+        
+        assert retry_count == 3  # 세 번째에서 성공
+
+
+class TestHandleUserResponseIntegration:
+    """handle_user_response 통합 테스트"""
+
+    def test_option_response_updates_state(self):
+        """옵션 응답이 상태를 올바르게 업데이트하는지"""
+        state = create_initial_state("테스트 입력")
+        state = update_state(state, need_more_info=True, options=[
+            {"title": "옵션A", "description": "설명A"}
+        ])
+        
+        response = {"selected_option": {"title": "옵션A", "description": "설명A"}}
+        new_state = handle_user_response(state, response)
+        
+        assert new_state.get("need_more_info") is False
+        assert "[선택: 옵션A" in new_state.get("user_input", "")
+        assert new_state.get("selected_option") is not None
+
+    def test_text_input_response_updates_state(self):
+        """직접 입력 응답이 상태를 올바르게 업데이트하는지"""
+        state = create_initial_state("원래 입력")
+        state = update_state(state, need_more_info=True)
+        
+        response = {"text_input": "사용자가 직접 입력한 내용"}
+        new_state = handle_user_response(state, response)
+        
+        assert "[직접 입력: 사용자가 직접 입력한 내용]" in new_state.get("user_input", "")
+
+    def test_step_history_records_resume(self):
+        """Resume 이벤트가 step_history에 기록되는지"""
+        state = create_initial_state("테스트")
+        state = update_state(state, 
+            last_interrupt={"type": "option", "question": "테스트 질문"}
+        )
+        
+        response = {"selected_option": {"title": "선택됨"}}
+        new_state = handle_user_response(state, response)
+        
+        history = new_state.get("step_history", [])
+        resume_events = [h for h in history if h.get("step") == "human_resume"]
+        
+        assert len(resume_events) >= 1
+        assert resume_events[-1]["event_type"] == "HUMAN_RESPONSE"
+
+
+class TestErrorHandling:
+    """에러 처리 테스트"""
+
+    def test_invalid_interrupt_type(self):
+        """지원하지 않는 인터럽트 타입"""
+        with pytest.raises(ValueError):
+            InterruptFactory.create("invalid_type", question="테스트")
+
+    def test_empty_options_fallback(self):
+        """빈 옵션 목록 → 기본 옵션 생성"""
+        payload = InterruptFactory.option(
+            question="테스트",
+            options=[]
+        )
+        
+        # 빈 옵션이면 기본 옵션이 추가되어야 함
+        assert len(payload.options) >= 1
+        assert payload.options[0].title == "계속 진행"
+
+    def test_payload_with_error_field(self):
+        """에러 메시지가 포함된 페이로드"""
+        payload = InterruptFactory.option(
+            question="다시 선택하세요",
+            options=[{"title": "옵션1", "description": ""}],
+            metadata={"error": "잘못된 입력입니다. 다시 시도하세요."}
+        )
+        
+        payload_dict = payload.to_dict()
+        assert "error" in payload_dict.get("data", {})
+
+
+# =============================================================================
+# 실행
+# =============================================================================
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
