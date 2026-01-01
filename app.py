@@ -151,8 +151,8 @@ def render_main():
         st.selectbox(
             "생성 모드",
             options=preset_keys,
-            index=default_index,  # [FIX] 명시적 기본값 설정 (balanced = 권장)
-            # [FIX] 항목 옆에 설명을 함께 표시 (User Request)
+            # [FIX] index 파라미터 제거 (session_state와 충돌 방지)
+            # st.session_state.generation_preset 값이 자동으로 선택됨
             format_func=lambda k: f"{GENERATION_PRESETS[k].icon} {GENERATION_PRESETS[k].name} ({GENERATION_PRESETS[k].description})",
             key="generation_preset",  # session_state key와 동일 → 자동 동기화
             label_visibility="collapsed",
