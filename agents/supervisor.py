@@ -23,7 +23,7 @@ PlanCraft - LangGraph 네이티브 Supervisor (개선된 버전)
     Writer Context
 """
 
-from typing import Dict, Any, List, Optional, Literal
+from typing import Dict, Any, List, Optional, Literal, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -276,14 +276,21 @@ class NativeSupervisor:
 
     def _execute_plan(self, plan, results: Dict, context: Dict):
         """
-        실행 계획에 따라 단계별 병렬 실행
+        실행 계획에 따라 단계별 병렬 실행 (동적 Replan 지원)
 
-        [REFACTOR] Exception 카테고리화 적용:
-        - LLM_ERROR, NETWORK_ERROR, VALIDATION_ERROR 등으로 분류
-        - 에러 타입에 따른 재시도 전략 적용 가능
+        [REFACTOR] 동적 Replan 패턴 적용:
+        - 에이전트 실패 시 재시도 또는 대체 전략 수립
+        - 복구 가능한 에러(LLM_ERROR, NETWORK_ERROR)는 1회 재시도
+        - 치명적 에러(VALIDATION_ERROR)는 Fallback 데이터 사용
+
+        Exception 카테고리화:
+        - LLM_ERROR, NETWORK_ERROR: 재시도 가능
+        - VALIDATION_ERROR, UNKNOWN: 재시도 불가, Fallback 사용
         """
-        # [NEW] 에러 카테고리화 함수 import
         from utils.error_handler import categorize_error
+
+        # 실패한 에이전트 추적 (Replan용)
+        failed_agents = []
 
         for step in plan.steps:
             logger.info(f"--- 단계 {step.step_id}: {step.description} ---")
@@ -319,12 +326,121 @@ class NativeSupervisor:
                         # 카테고리별 로깅
                         logger.error(f"  ❌ [{error_category}] {agent_id}: {error_msg}")
 
-                        # 에러 결과 저장 (카테고리 포함)
+                        # [NEW] 동적 Replan: 복구 가능한 에러는 재시도
+                        if error_category in ["LLM_ERROR", "NETWORK_ERROR"]:
+                            retry_result = self._retry_agent(agent_id, context, results)
+                            if retry_result:
+                                results[self._get_result_key(agent_id)] = retry_result
+                                logger.info(f"  🔄 [Retried] {agent_id} 재시도 성공")
+                                continue
+
+                        # 재시도 실패 또는 복구 불가 에러
+                        failed_agents.append(agent_id)
+
+                        # [NEW] Fallback 데이터 사용
+                        fallback = self._get_fallback_result(agent_id, context)
                         results[self._get_result_key(agent_id)] = {
                             "error": error_msg,
                             "error_category": error_category,
                             "agent_id": agent_id,
+                            "fallback_used": True,
+                            **fallback
                         }
+                        logger.warning(f"  ⚠️ [Fallback] {agent_id} Fallback 데이터 사용")
+
+        # [NEW] 동적 Replan: 실패한 에이전트가 있으면 의존 에이전트 체크
+        if failed_agents:
+            self._handle_failed_dependencies(failed_agents, plan, results, context)
+
+    def _retry_agent(self, agent_id: str, context: Dict, results: Dict, max_retries: int = 1) -> Optional[Dict]:
+        """
+        실패한 에이전트 재시도 (동적 Replan 패턴)
+
+        Args:
+            agent_id: 재시도할 에이전트 ID
+            context: 실행 컨텍스트
+            results: 현재까지의 결과
+            max_retries: 최대 재시도 횟수
+
+        Returns:
+            성공 시 결과 Dict, 실패 시 None
+        """
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"  🔄 [Retry {attempt + 1}/{max_retries}] {agent_id}...")
+                agent_context = self._prepare_agent_context(agent_id, context, results)
+                result = self.agents[agent_id].run(**agent_context)
+                return result
+            except Exception as e:
+                logger.warning(f"  ⚠️ [Retry Failed] {agent_id}: {e}")
+        return None
+
+    def _get_fallback_result(self, agent_id: str, context: Dict) -> Dict:
+        """
+        에이전트 실패 시 Fallback 결과 생성
+
+        각 에이전트별로 최소한의 유효한 데이터 구조 반환
+        """
+        service = context.get("service_overview", "서비스")[:50]
+
+        fallback_map = {
+            "market": {
+                "tam": {"value": "분석 불가", "description": f"{service} 관련 시장"},
+                "sam": {"value": "분석 불가", "description": "접근 가능 시장"},
+                "som": {"value": "분석 불가", "description": "획득 가능 시장"},
+                "competitors": [],
+                "trends": ["시장 분석 데이터 수집 실패"]
+            },
+            "bm": {
+                "revenue_model": "수익 모델 분석 필요",
+                "pricing": {"strategy": "가격 전략 분석 필요"},
+                "moat": "경쟁 우위 분석 필요"
+            },
+            "financial": {
+                "initial_investment": "초기 투자 분석 필요",
+                "monthly_pl": "손익 분석 필요",
+                "bep": "손익분기점 분석 필요"
+            },
+            "risk": {
+                "risks": [{"category": "분석 실패", "description": "리스크 분석 데이터 수집 실패"}],
+                "mitigation": "추가 분석 필요"
+            },
+            "tech": {
+                "recommended_stack": ["기술 스택 분석 필요"],
+                "architecture_desc": "아키텍처 분석 필요"
+            },
+            "content": {
+                "brand_concept": "브랜딩 분석 필요",
+                "acquisition_strategy": "유입 전략 분석 필요"
+            }
+        }
+
+        return fallback_map.get(agent_id, {"note": "분석 실패"})
+
+    def _handle_failed_dependencies(self, failed_agents: List[str], plan, results: Dict, context: Dict):
+        """
+        실패한 에이전트의 의존 에이전트 처리 (동적 Replan)
+
+        의존성 그래프를 확인하여 실패한 에이전트에 의존하는 후속 에이전트가 있으면
+        해당 에이전트도 Fallback 처리하거나 경고 로깅
+        """
+        from agents.agent_config import get_dependency_graph
+
+        dep_graph = get_dependency_graph()
+
+        for agent_id, deps in dep_graph.items():
+            # 실패한 에이전트에 의존하는 경우
+            failed_deps = [d for d in deps if d in failed_agents]
+            if failed_deps:
+                result_key = self._get_result_key(agent_id)
+                # 이미 결과가 있으면 스킵
+                if result_key in results and "error" not in results.get(result_key, {}):
+                    continue
+
+                logger.warning(f"  ⚠️ [Dependency] {agent_id}의 의존 에이전트 {failed_deps} 실패")
+                # 결과에 의존성 실패 정보 추가
+                if result_key in results:
+                    results[result_key]["dependency_failed"] = failed_deps
 
     def _prepare_agent_context(self, agent_id: str, base_context: Dict, current_results: Dict) -> Dict:
         """각 에이전트에 필요한 입력 파라미터 구성"""

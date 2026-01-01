@@ -60,12 +60,35 @@ Best Practice 적용:
 """
 
 from enum import Enum
+from typing import Literal, Union
 from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
 from utils.checkpointer import get_checkpointer  # [NEW] Factory 패턴
 from langchain_core.runnables import RunnableBranch  # [NEW] 분기 패턴
 from graph.state import PlanCraftState
 from utils.settings import settings
+
+
+# =============================================================================
+# Command[Literal[...]] 타입 정의 (LangGraph Best Practice)
+# =============================================================================
+# 노드 함수의 반환 타입을 명시하여:
+# 1. 정적 타입 검사로 라우팅 오류 조기 발견
+# 2. IDE 자동완성 및 타입 힌트 지원
+# 3. 워크플로우 문서화 자동화
+# =============================================================================
+
+# Analyzer 분기 후 가능한 목적지
+AnalyzerRoutes = Literal["option_pause", "general_response", "structure"]
+
+# Reviewer 분기 후 가능한 목적지
+ReviewerRoutes = Literal["discussion", "refine", "format", "analyze"]
+
+# Refiner 분기 후 가능한 목적지
+RefinerRoutes = Literal["structure", "format"]
+
+# option_pause_node의 Command 반환 타입
+OptionPauseCommand = Command[Literal["analyze"]]
 
 # [UPDATE] 로깅 핸들러 데코레이터
 from functools import wraps
@@ -242,9 +265,11 @@ def create_reviewer_routing_branch() -> RunnableBranch:
     )
 
 
-def should_refine_or_restart(state: PlanCraftState) -> str:
+def should_refine_or_restart(state: PlanCraftState) -> ReviewerRoutes:
     """
     Reviewer 결과에 따라 다음 단계 결정 (Multi-Agent 동적 라우팅)
+
+    Return Type: ReviewerRoutes = Literal["discussion", "refine", "format", "analyze"]
 
     내부적으로 RunnableBranch 로직 사용, add_conditional_edges 호환 반환값 제공
 
@@ -263,7 +288,7 @@ def should_refine_or_restart(state: PlanCraftState) -> str:
         state: 현재 워크플로우 상태 (review 필드 필요)
 
     Returns:
-        RouteKey: 다음 노드를 결정하는 라우팅 키
+        ReviewerRoutes: 다음 노드를 결정하는 라우팅 키 (Literal 타입)
     """
     logger = get_file_logger()
     review = state.get("review", {})
@@ -408,9 +433,11 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
     return _update_step_history(new_state, "fetch_web", status, summary, new_state.get("error"))
 
 
-def should_ask_user(state: PlanCraftState) -> str:
+def should_ask_user(state: PlanCraftState) -> AnalyzerRoutes:
     """
     Analyze 노드 이후 조건부 라우터.
+
+    Return Type: AnalyzerRoutes = Literal["option_pause", "general_response", "structure"]
 
     ┌─────────────────────────────────────────────────────────────────────────┐
     │                     판정표 (Decision Table)                             │
@@ -423,7 +450,7 @@ def should_ask_user(state: PlanCraftState) -> str:
     └────────────────────────┴───────────────────────┴────────────────────────┘
 
     Returns:
-        RouteKey: 다음 노드를 결정하는 라우팅 키
+        AnalyzerRoutes: 다음 노드를 결정하는 라우팅 키 (Literal 타입)
     """
     if is_human_interrupt_required(state):
         return RouteKey.OPTION_PAUSE
@@ -797,9 +824,12 @@ except ImportError:
             self.goto = goto
 
 
-def option_pause_node(state: PlanCraftState) -> Command:
+def option_pause_node(state: PlanCraftState) -> Command[Literal["analyze"]]:
     """
     휴먼 인터럽트 처리 노드 (LangGraph 공식 Best Practice 적용)
+
+    Return Type: Command[Literal["analyze"]]
+    - 사용자 응답 후 항상 analyze 노드로 이동
 
     ⚠️ CRITICAL: Resume 시 이 노드는 처음부터 다시 실행됩니다!
     - interrupt() 호출 이전의 모든 코드가 Resume 시 재실행됨
@@ -987,9 +1017,11 @@ def create_workflow() -> StateGraph:
     workflow.add_edge("write", "review")
 
     # [UPDATE] Review 후 스마트 분기: 점수 기반 최적화 라우팅
-    def should_discuss_or_complete(state: PlanCraftState) -> str:
+    def should_discuss_or_complete(state: PlanCraftState) -> ReviewerRoutes:
         """
         Review 후 Discussion 필요 여부 결정 (성능 최적화)
+
+        Return Type: ReviewerRoutes = Literal["discussion", "refine", "format", "analyze"]
 
         ┌─────────────────────────────────────────────────────────────────────────┐
         │                     판정표 (Decision Table)                             │
@@ -1046,9 +1078,11 @@ def create_workflow() -> StateGraph:
     workflow.add_edge("discussion", "refine")
 
     # [UPDATE] Refiner 조건부 엣지 - REVISE 판정 시 재작성 루프
-    def should_refine_again(state: PlanCraftState) -> str:
+    def should_refine_again(state: PlanCraftState) -> RefinerRoutes:
         """
         Refiner 후 다음 단계 결정 (Graceful End-of-Loop 패턴 적용)
+
+        Return Type: RefinerRoutes = Literal["structure", "format"]
 
         ┌─────────────────────────────────────────────────────────────────────────┐
         │                     판정표 (Decision Table)                             │
@@ -1063,19 +1097,27 @@ def create_workflow() -> StateGraph:
 
         Note:
             Graceful End-of-Loop: 무한 루프 방지를 위한 다중 안전장치 적용
+            [REFACTOR] 품질 프리셋 기반 max_refine_loops 동적 적용
         """
+        from utils.settings import get_preset
+
         refined = state.get("refined", False)
         refine_count = state.get("refine_count", 0)
         remaining_steps = state.get("remaining_steps", 100)  # 기본값 충분히 크게
-        
+
+        # [REFACTOR] 품질 프리셋 기반 MAX_REFINE_LOOPS 동적 적용
+        preset_key = state.get("generation_preset", "balanced")
+        preset = get_preset(preset_key)
+        max_refine_loops = preset.max_refine_loops
+
         # [NEW] Graceful End-of-Loop: 남은 스텝이 부족하면 안전하게 종료
         if remaining_steps <= settings.MIN_REMAINING_STEPS:
             print(f"[WARN] 남은 스텝 부족 ({remaining_steps}), 루프 종료")
             return RouteKey.COMPLETE
 
-        # 최대 루프 횟수 초과
-        if refine_count >= settings.MAX_REFINE_LOOPS:
-            print(f"[WARN] 최대 루프 도달 ({refine_count}), 루프 종료")
+        # 최대 루프 횟수 초과 (프리셋 기반)
+        if refine_count >= max_refine_loops:
+            print(f"[WARN] 최대 루프 도달 ({refine_count}/{max_refine_loops}, Preset: {preset_key}), 루프 종료")
             return RouteKey.COMPLETE
 
         # 개선 필요 여부

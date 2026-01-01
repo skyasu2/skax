@@ -512,6 +512,115 @@ def create_agent(agent_id: str, llm=None) -> Optional[Any]:
 
 
 # =============================================================================
+# Tool-based Agent Wrapper (LangGraph Best Practice)
+# =============================================================================
+#
+# create_react_agent와 함께 사용 가능한 Tool 래핑 패턴
+# Supervisor가 에이전트를 Tool로 호출하여 더 유연한 오케스트레이션 가능
+#
+# 사용 예시:
+#     tools = [create_agent_tool("market"), create_agent_tool("bm")]
+#     supervisor = create_react_agent(llm, tools, system_prompt)
+# =============================================================================
+
+def create_agent_tool(agent_id: str, llm=None):
+    """
+    에이전트를 LangChain Tool로 래핑
+
+    LangGraph create_react_agent 패턴에서 사용 가능한 Tool 생성.
+    Supervisor가 동적으로 에이전트를 호출할 때 사용.
+
+    Args:
+        agent_id: 에이전트 ID
+        llm: LLM 인스턴스 (선택)
+
+    Returns:
+        langchain_core.tools.StructuredTool: 에이전트를 래핑한 Tool
+
+    Example:
+        >>> from langgraph.prebuilt import create_react_agent
+        >>> tools = [create_agent_tool("market"), create_agent_tool("bm")]
+        >>> agent = create_react_agent(llm, tools)
+        >>> agent.invoke({"messages": [HumanMessage(content="...")]})
+    """
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel, Field as PydanticField
+
+    spec = AGENT_REGISTRY.get(agent_id)
+    if not spec:
+        raise ValueError(f"Unknown agent_id: {agent_id}")
+
+    # 에이전트 인스턴스 생성 (캐싱)
+    agent = create_agent(agent_id, llm=llm)
+    if agent is None:
+        raise RuntimeError(f"Failed to create agent: {agent_id}")
+
+    # 동적 입력 스키마 생성
+    class AgentInput(BaseModel):
+        """에이전트 실행 입력"""
+        service_overview: str = PydanticField(description="서비스 개요")
+        target_market: str = PydanticField(default="", description="타겟 시장 (선택)")
+        target_users: str = PydanticField(default="", description="타겟 사용자 (선택)")
+
+    def run_agent(service_overview: str, target_market: str = "", target_users: str = "") -> str:
+        """에이전트 실행 및 마크다운 변환"""
+        try:
+            # 에이전트별 필요한 파라미터 전달
+            kwargs = {"service_overview": service_overview}
+
+            if agent_id == "market":
+                kwargs["target_market"] = target_market
+            elif agent_id in ["bm", "content", "tech"]:
+                kwargs["target_users"] = target_users
+
+            result = agent.run(**kwargs)
+
+            # 마크다운 형식으로 변환
+            if hasattr(agent, "format_as_markdown"):
+                return agent.format_as_markdown(result)
+            return str(result)
+
+        except Exception as e:
+            return f"[ERROR] {agent_id} 실행 실패: {e}"
+
+    return StructuredTool.from_function(
+        func=run_agent,
+        name=f"analyze_{agent_id}",
+        description=f"{spec.icon} {spec.name}: {spec.description}",
+        args_schema=AgentInput,
+    )
+
+
+def create_all_agent_tools(llm=None) -> List:
+    """
+    모든 등록된 에이전트를 Tool 목록으로 생성
+
+    create_react_agent에서 사용할 Tool 목록 반환.
+
+    Returns:
+        List[StructuredTool]: 에이전트 Tool 목록
+
+    Example:
+        >>> from langgraph.prebuilt import create_react_agent
+        >>> tools = create_all_agent_tools(llm)
+        >>> supervisor = create_react_agent(llm, tools, supervisor_prompt)
+    """
+    tools = []
+    for agent_id in AGENT_REGISTRY.keys():
+        try:
+            tool = create_agent_tool(agent_id, llm=llm)
+            tools.append(tool)
+        except Exception as e:
+            # 로깅만 하고 계속 진행
+            try:
+                from utils.file_logger import get_file_logger
+                get_file_logger().warning(f"[ToolFactory] {agent_id} Tool 생성 스킵: {e}")
+            except ImportError:
+                pass
+    return tools
+
+
+# =============================================================================
 # 승인 정책 유틸리티
 # =============================================================================
 

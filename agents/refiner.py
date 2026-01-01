@@ -1,11 +1,20 @@
 
 """
 PlanCraft Agent - Refiner Agent
+
+[REFACTOR] 품질 프리셋 기반 MAX_RETRIES 동적 적용
+- 기존: settings.MAX_REFINE_LOOPS (전역 고정값)
+- 변경: preset.max_refine_loops (사용자 선택 품질 모드 반영)
+
+프리셋별 max_refine_loops:
+- fast: 1회 (속도 우선)
+- balanced: 2회 (권장)
+- quality: 3회 (품질 우선)
 """
 from utils.llm import get_llm
 from graph.state import PlanCraftState, update_state, ensure_dict
 from utils.schemas import RefinementStrategy
-from utils.settings import settings
+from utils.settings import settings, get_preset  # [NEW] get_preset 추가
 from prompts.refiner_prompt import REFINER_SYSTEM_PROMPT, REFINER_USER_PROMPT
 from utils.file_logger import get_file_logger
 
@@ -39,11 +48,17 @@ def run(state: PlanCraftState) -> PlanCraftState:
         issues = "\n".join([f"- {i}" for i in getattr(review, "critical_issues", [])])
     
     current_count = state.get("refine_count", 0)
-    MAX_RETRIES = settings.MAX_REFINE_LOOPS  # 중앙 설정에서 관리
+
+    # [REFACTOR] 품질 프리셋 기반 MAX_RETRIES 동적 적용
+    # 사용자가 선택한 품질 모드에 따라 개선 횟수 조정
+    # - fast: 1회, balanced: 2회, quality: 3회
+    preset_key = state.get("generation_preset", "balanced")
+    preset = get_preset(preset_key)
+    MAX_RETRIES = preset.max_refine_loops  # [FIX] 프리셋 기반 동적 적용
     
     # PASS 또는 횟수 초과 시 -> Stop Refinement
     if verdict == "PASS" or current_count >= MAX_RETRIES:
-        logger.info(f"[Refiner] 개선 종료 (Verdict: {verdict}, Round: {current_count})")
+        logger.info(f"[Refiner] 개선 종료 (Verdict: {verdict}, Round: {current_count}/{MAX_RETRIES}, Preset: {preset_key})")
         return update_state(
             state,
             current_step="refine",
