@@ -46,6 +46,36 @@ class ApprovalMode(str, Enum):
 
 
 # =============================================================================
+# DAG 관련 예외 정의
+# =============================================================================
+
+class CyclicDependencyError(Exception):
+    """
+    DAG에서 순환 의존성이 감지되었을 때 발생하는 예외
+
+    Attributes:
+        cycle_agents: 순환에 포함된 에이전트 목록
+        message: 상세 에러 메시지
+
+    Example:
+        >>> raise CyclicDependencyError(["market", "bm", "market"])
+        CyclicDependencyError: 순환 의존성 감지: market → bm → market
+    """
+    def __init__(self, cycle_agents: List[str], message: str = None):
+        self.cycle_agents = cycle_agents
+        if message is None:
+            cycle_str = " → ".join(cycle_agents)
+            message = f"순환 의존성 감지: {cycle_str}"
+        self.message = message
+        super().__init__(self.message)
+
+
+class DAGResolutionError(Exception):
+    """DAG 해석 중 발생하는 일반 예외"""
+    pass
+
+
+# =============================================================================
 # 에이전트 스펙 정의
 # =============================================================================
 
@@ -265,6 +295,72 @@ def _get_dependency_reason(from_agent: str, to_agent: str) -> str:
     return dependency_reasons.get((from_agent, to_agent), "참조")
 
 
+def _detect_cycle_path(
+    remaining: set,
+    graph: Dict[str, List[str]]
+) -> List[str]:
+    """
+    DFS를 사용하여 순환 경로를 탐지합니다.
+
+    Args:
+        remaining: 아직 처리되지 않은 에이전트 집합
+        graph: 의존성 그래프 (agent -> [dependencies])
+
+    Returns:
+        List[str]: 순환 경로 (예: ["A", "B", "C", "A"])
+                   순환이 없으면 빈 리스트 반환
+
+    Algorithm:
+        - 3-color DFS (WHITE: 미방문, GRAY: 처리중, BLACK: 완료)
+        - GRAY 노드를 다시 만나면 순환 존재
+
+    Example:
+        >>> graph = {"A": ["B"], "B": ["C"], "C": ["A"]}
+        >>> _detect_cycle_path({"A", "B", "C"}, graph)
+        ["A", "B", "C", "A"]
+    """
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {node: WHITE for node in remaining}
+    parent = {node: None for node in remaining}
+    cycle_path = []
+
+    def dfs(node: str) -> bool:
+        """Returns True if cycle detected"""
+        color[node] = GRAY
+
+        for neighbor in graph.get(node, []):
+            if neighbor not in remaining:
+                continue
+
+            if color[neighbor] == GRAY:
+                # 순환 발견! 경로 재구성
+                cycle_path.append(neighbor)
+                current = node
+                while current != neighbor:
+                    cycle_path.append(current)
+                    current = parent.get(current)
+                    if current is None:
+                        break
+                cycle_path.append(neighbor)
+                cycle_path.reverse()
+                return True
+
+            if color[neighbor] == WHITE:
+                parent[neighbor] = node
+                if dfs(neighbor):
+                    return True
+
+        color[node] = BLACK
+        return False
+
+    for node in remaining:
+        if color[node] == WHITE:
+            if dfs(node):
+                return cycle_path
+
+    return cycle_path
+
+
 def resolve_execution_plan_dag(required_agents: List[str], reasoning: str = "") -> ExecutionPlan:
     """
     DAG 기반 병렬 실행 계획 생성 (Topological Sort with Grouping)
@@ -319,9 +415,34 @@ def resolve_execution_plan_dag(required_agents: List[str], reasoning: str = "") 
                 layer.append(agent)
         
         if not layer:
-            # 순환 의존성 발생 시 비상 탈출 (남은거 순차 처리)
-            layer = list(remaining)
-            # break or handle error
+            # =====================================================================
+            # 순환 의존성 감지 - 명시적 처리
+            # =====================================================================
+            # Kahn's Algorithm에서 layer가 비어있으면 순환 의존성 존재
+
+            # 1. 순환 경로 탐지 (DFS)
+            cycle_path = _detect_cycle_path(remaining, subset_graph)
+
+            # 2. 로깅 (운영 환경에서 모니터링 가능)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"[DAG] 순환 의존성 감지! "
+                f"영향 에이전트: {list(remaining)}, "
+                f"순환 경로: {cycle_path}"
+            )
+
+            # 3. Fallback 처리: 순환 그룹을 우선순위 기반 순차 실행
+            # (프로덕션에서는 CyclicDependencyError 발생 권장)
+            # raise CyclicDependencyError(cycle_path)
+
+            # Fallback: 우선순위 순으로 강제 실행 (데이터 손실 최소화)
+            priority_fallback = ["market", "tech", "bm", "content", "financial", "risk"]
+            layer = sorted(
+                list(remaining),
+                key=lambda x: priority_fallback.index(x) if x in priority_fallback else 99
+            )
+            logger.warning(f"[DAG] Fallback 적용: {layer} 순차 실행")
         
         # 이름순/우선순위 정렬 (결정적 순서 보장)
         priority_list = ["market", "tech", "bm", "content", "financial", "risk"]
