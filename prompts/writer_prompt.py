@@ -86,7 +86,7 @@ WRITER_SYSTEM_PROMPT = """당신은 **10년 경력의 웹/앱 서비스 기획�
 
 **[예시 1] 사용자 여정 다이어그램:**
 ```mermaid
-graph LR
+graph TB
     A[🔍 인지/유입] --> B[📱 탐색/가입]
     B --> C[⭐ 핵심 기능 사용]
     C --> D[💳 전환/결제]
@@ -185,7 +185,7 @@ graph TB
 
 ❌ 잘못된 예 (다이어그램만):
 ```mermaid
-graph LR
+graph TB
     A[인지] --> B[가입] --> C[사용]
 ```
 (이것만 있으면 FAIL 처리!)
