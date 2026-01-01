@@ -35,21 +35,10 @@ class GenerationPreset(BaseModel):
 
 
 # 프리셋 정의
+# [FIX] balanced를 첫 번째로 배치하여 Streamlit selectbox 기본값 보장
+# - Streamlit의 key 파라미터 사용 시 session_state 타이밍 이슈로 첫 번째 옵션이 선택될 수 있음
+# - 딕셔너리 순서: balanced(권장) → fast → quality
 GENERATION_PRESETS = {
-    "fast": GenerationPreset(
-        name="빠른 생성",
-        icon="⚡",
-        description="속도 우선, 빠른 결과물 생성",
-        temperature=0.3,
-        max_refine_loops=1,
-        max_restart_count=1,
-        writer_max_retries=1,
-        discussion_enabled=False,
-        min_sections=7,  # 속도 우선: 7개 섹션
-        structurer_max_retries=2,  # 구조 검증은 고정
-        include_diagrams=0,  # 빠른 모드: 시각 자료 없음
-        include_charts=0,
-    ),
     "balanced": GenerationPreset(
         name="균형",
         icon="⚖️",
@@ -63,6 +52,20 @@ GENERATION_PRESETS = {
         structurer_max_retries=2,  # 구조 검증은 고정
         include_diagrams=1,  # 균형 모드: 다이어그램 1개
         include_charts=1,    # 그래프 1개
+    ),
+    "fast": GenerationPreset(
+        name="빠른 생성",
+        icon="⚡",
+        description="속도 우선, 빠른 결과물 생성",
+        temperature=0.3,
+        max_refine_loops=1,
+        max_restart_count=1,
+        writer_max_retries=1,
+        discussion_enabled=False,
+        min_sections=7,  # 속도 우선: 7개 섹션
+        structurer_max_retries=2,  # 구조 검증은 고정
+        include_diagrams=0,  # 빠른 모드: 시각 자료 없음
+        include_charts=0,
     ),
     "quality": GenerationPreset(
         name="고품질",
