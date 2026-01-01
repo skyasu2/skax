@@ -523,3 +523,66 @@ def run_discussion_subgraph(state: PlanCraftState) -> PlanCraftState:
         step_history=current_history + [discussion_summary],
         current_step="discussion"
     )
+
+
+# =============================================================================
+# Multi-HITL 확장 패턴 (Future-proof Design)
+# =============================================================================
+#
+# 다중 Human-in-the-Loop 시나리오를 위한 확장 가이드
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │                    Multi-HITL Subgraph 아키텍처                          │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │                                                                         │
+# │  [Context Subgraph]                                                     │
+# │       │                                                                 │
+# │       ▼                                                                 │
+# │  ┌─────────┐    ┌─────────────┐    ┌─────────┐                         │
+# │  │ Analyze │───▶│ HITL: 방향  │───▶│Structure│                         │
+# │  └─────────┘    │   선택      │    └─────────┘                         │
+# │                 └─────────────┘         │                              │
+# │                                         ▼                              │
+# │                 ┌─────────────┐    ┌─────────┐                         │
+# │                 │ HITL: 구조  │◀───│  Write  │                         │
+# │                 │   승인      │    └─────────┘                         │
+# │                 └─────────────┘                                        │
+# │                       │                                                │
+# │                       ▼                                                │
+# │  [QA Subgraph with Optional Human Approval]                            │
+# │                                                                         │
+# └─────────────────────────────────────────────────────────────────────────┘
+#
+# 사용 예시: 각 단계별 Human Approval이 필요한 경우
+#
+# def create_approval_pause_node(stage_name: str):
+#     """
+#     재사용 가능한 Approval Pause Node Factory
+#
+#     ⚠️ CRITICAL: interrupt() 전에는 Side-Effect 금지!
+#     """
+#     def approval_pause(state: PlanCraftState) -> Command:
+#         from langgraph.types import interrupt, Command
+#
+#         # 1. 승인 요청 페이로드 생성 (순수 함수)
+#         payload = {
+#             "type": "approval",
+#             "stage": stage_name,
+#             "question": f"{stage_name} 단계 결과를 승인하시겠습니까?",
+#             "data": state.get(stage_name.lower(), {}),
+#         }
+#
+#         # 2. interrupt() 호출 (이 시점에서 실행 중단)
+#         user_response = interrupt(payload)
+#
+#         # 3. Resume 후 실행되는 코드 (Side-Effect 허용)
+#         if user_response.get("approved"):
+#             return Command(goto="next_stage")
+#         else:
+#             return Command(goto="revision_stage")
+#
+#     return approval_pause
+#
+# 위 패턴으로 각 Subgraph에 Approval Node를 추가할 수 있습니다.
+# 자세한 구현은 graph/workflow.py의 option_pause_node()를 참조하세요.
+#

@@ -114,7 +114,100 @@ stateDiagram-v2
     Formatter --> [*]
 ```
 
-### 2.4 Agent Interface Protocol (Standard Contract)
+### 2.4 DAG-based Multi-Agent Execution (Supervisor Pattern)
+
+6개의 Specialist Agent가 의존성 기반으로 병렬/순차 실행되는 흐름입니다.
+
+```mermaid
+graph TB
+    subgraph "Step 1: 독립 실행"
+        M[🔍 Market Agent]
+        T[🏗️ Tech Agent]
+    end
+
+    subgraph "Step 2: 의존 실행"
+        BM[💰 BM Agent]
+        C[📣 Content Agent]
+    end
+
+    subgraph "Step 3: 최종 분석"
+        F[📈 Financial Agent]
+        R[⚠️ Risk Agent]
+    end
+
+    M -->|시장 데이터| BM
+    M -->|타겟 정보| C
+    T -.->|독립| BM
+
+    BM -->|수익 모델| F
+    BM -->|BM 정보| R
+
+    F --> I[📝 통합 컨텍스트]
+    R --> I
+    M --> I
+    BM --> I
+    T --> I
+    C --> I
+
+    I --> W[✍️ Writer]
+
+    style M fill:#e3f2fd
+    style T fill:#e3f2fd
+    style BM fill:#fff3e0
+    style C fill:#fff3e0
+    style F fill:#fce4ec
+    style R fill:#fce4ec
+    style W fill:#e8f5e9
+```
+
+### 2.5 Subgraph Architecture (Modular Design)
+
+재사용 가능한 Subgraph 단위로 워크플로우를 분리하여 유지보수성을 극대화합니다.
+
+```mermaid
+graph LR
+    subgraph "Context Subgraph"
+        RAG[RAG Retrieve]
+        WEB[Web Fetch]
+        RAG --> WEB
+    end
+
+    subgraph "Generation Subgraph"
+        AN[Analyzer]
+        ST[Structurer]
+        WR[Writer]
+        AN --> ST --> WR
+    end
+
+    subgraph "QA Subgraph"
+        RV[Reviewer]
+        RF[Refiner]
+        FM[Formatter]
+        RV --> RF --> FM
+    end
+
+    subgraph "Discussion Subgraph"
+        RS[Reviewer Speak]
+        WS[Writer Respond]
+        CC[Check Consensus]
+        RS --> WS --> CC
+        CC -->|Continue| RS
+    end
+
+    WEB --> AN
+    WR --> RV
+
+    style RAG fill:#bbdefb
+    style WEB fill:#bbdefb
+    style AN fill:#c8e6c9
+    style ST fill:#c8e6c9
+    style WR fill:#c8e6c9
+    style RV fill:#ffccbc
+    style RF fill:#ffccbc
+    style FM fill:#ffccbc
+```
+
+### 2.6 Agent Interface Protocol (Standard Contract)
 
 모든 Specialist Agent는 아래의 공통 인터페이스 규약을 준수해야 합니다. 이를 통해 미래의 Agent 추가 및 Tool 확장이 용이해집니다.
 
