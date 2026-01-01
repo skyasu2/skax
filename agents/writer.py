@@ -165,6 +165,7 @@ Action Items (실행 지침):
             target_market = analysis_dict.get("target_market", "일반 시장")
             target_users = analysis_dict.get("target_user", "일반 사용자")
             tech_stack = analysis_dict.get("tech_stack", "React Native + Node.js + PostgreSQL")
+            user_constraints = analysis_dict.get("user_constraints", [])  # [NEW]
             
             # 웹 검색 결과를 리스트 형태로 변환
             web_search_list = []
@@ -182,7 +183,8 @@ Action Items (실행 지침):
                 target_users=target_users,
                 tech_stack=tech_stack,
                 development_scope="MVP 3개월",
-                web_search_results=web_search_list
+                web_search_results=web_search_list,
+                user_constraints=user_constraints  # [NEW]
             )
             
             # 통합된 마크다운 컨텍스트 추출

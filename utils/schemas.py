@@ -67,6 +67,7 @@ class AnalysisResult(BaseModel):
     purpose: str = Field(description="기획의 목적")
     target_users: str = Field(description="예상 타겟 사용자")
     key_features: List[str] = Field(default_factory=list, description="파악된 주요 기능들")
+    user_constraints: List[str] = Field(default_factory=list, description="사용자가 명시한 제약조건/요구사항")
     assumptions: List[str] = Field(default_factory=list, description="합리적인 가정들")
     missing_info: List[str] = Field(default_factory=list, description="누락된 정보 목록")
     options: List[OptionChoice] = Field(default_factory=list, description="선택 가능한 옵션들")

@@ -203,19 +203,21 @@ class NativeSupervisor:
         development_scope: str = "MVP 3개월",
         web_search_results: List[Dict[str, Any]] = None,
         purpose: str = "기획서 작성",
-        force_all: bool = False
+        force_all: bool = False,
+        user_constraints: List[str] = None  # [NEW]
     ) -> Dict[str, Any]:
         """
         전문 에이전트 실행 (Plan-and-Execute DAG)
         """
         logger.info("=" * 60)
         logger.info("[NativeSupervisor] 전문 에이전트 오케스트레이션 시작 (DAG)")
-        logger.info(f"  서비스: {service_overview[:50]}...")
-        logger.info("=" * 60)
+        # ... (로그 생략) ...
         
         results = {}
         
         # 1. 동적 라우팅 -> Execution Plan 생성
+        # ... (라우팅 로직 그대로) ...
+        
         if force_all:
             required = ["market", "bm", "financial", "risk"]
             reasoning = "강제 전체 분석"
@@ -229,8 +231,7 @@ class NativeSupervisor:
         execution_plan = resolve_execution_plan_dag(required, reasoning)
         
         results["_plan"] = execution_plan
-        logger.info(f"[NativeSupervisor] 실행 계획 수립: {len(execution_plan.steps)}단계")
-        logger.info(f"  근거: {reasoning}")
+        # ... (로그 생략) ...
         
         # 2. 단계별 병렬 실행
         self._execute_plan(execution_plan, results, {
@@ -239,7 +240,8 @@ class NativeSupervisor:
             "target_users": target_users,
             "tech_stack": tech_stack,
             "development_scope": development_scope,
-            "web_search_results": web_search_results
+            "web_search_results": web_search_results,
+            "user_constraints": user_constraints or []  # [NEW] 전달
         })
         
         # 3. 결과 통합
