@@ -48,7 +48,7 @@ logger = FileLogger()
 
 class RoutingDecision(BaseModel):
     """Supervisor 라우팅 결정"""
-    required_analyses: List[Literal["market", "bm", "financial", "risk"]] = Field(
+    required_analyses: List[Literal["market", "bm", "financial", "risk", "tech", "content"]] = Field(
         description="필요한 분석 유형 목록"
     )
     reasoning: str = Field(
@@ -77,35 +77,30 @@ class NativeSupervisor:
 
 ## 사용 가능한 분석 유형
 
-1. **market**: 시장 규모 분석 (TAM/SAM/SOM, 경쟁사)
-   - 필요 시점: 시장 규모 언급, 경쟁사 분석 요청, 트렌드 분석 필요
-
-2. **bm**: 비즈니스 모델 분석 (수익 모델, 가격 전략)
-   - 필요 시점: 수익화 방법, 가격 정책, B2B/B2C 구분 필요
-
-3. **financial**: 재무 계획 (투자비, BEP, 손익)
-   - 필요 시점: 비용 추정, 매출 예측, 손익분기점 계산 필요
-
-4. **risk**: 리스크 분석 (8가지 카테고리)
-   - 필요 시점: 위험 요소 식별, 대응 전략 수립 필요
-
-## 의존성 규칙
-
-- `bm`은 `market` 결과를 참조할 수 있음 (경쟁사 정보)
-- `financial`은 `bm` 결과를 참조함 (수익 모델)
-- `risk`는 `bm` 결과를 참조함 (비즈니스 리스크)
+1. **market**: 시장 분석 (TAM/SAM/SOM, 경쟁사) -- 필수
+2. **bm**: 비즈니스 모델 (수익화, 가격 전략) -- 필수
+3. **tech**: 기술 아키텍처 (스택, 로드맵)
+   - 필요 시점: 앱/웹 개발, 플랫폼 구축, 특정 기술(AI, 블록체인 등) 언급 시
+4. **content**: 콘텐츠/브랜딩 전략 (마케팅, 홍보)
+   - 필요 시점: 커뮤니티, SNS, 플랫폼 활성화, 마케팅 전략 필요 시
+5. **financial**: 재무 계획 (비용/매출 예측)
+   - 필요 시점: 사업성 검토, 투자 유치, 구체적 예산 산정 필요 시
+6. **risk**: 리스크 분석 (규제, 기술 난관)
+   - 필요 시점: 법적 이슈 가능성, 기술적 불확실성이 높을 때
 
 ## 판단 기준
 
-1. **최소 분석 원칙**: 필요한 것만 선택 (불필요한 분석 배제)
-2. **의존성 고려**: 선행 분석이 필요하면 함께 선택
-3. **완전성**: 기획서에 필수인 항목은 반드시 포함
+1. **Market/BM은 기본**: 대부분의 기획서에 `market`, `bm`은 필수입니다.
+2. **목적별 추가**:
+   - **IT 개발**: + `tech`
+   - **플랫폼/서비스**: + `content`
+   - **사업계획서**: + `financial`, `risk`
+3. **의존성**: `tech`는 독립적이지만, `content`는 `market`(타겟)이 필요합니다.
 
-## 기본 규칙
-
-- 기획서 작성이 목적이면: 보통 4개 모두 필요
-- 간단한 아이디어 검증이면: market + bm만 필요
-- 투자 유치용이면: 4개 모두 + financial 강조
+## 출력 예시
+- 일반 앱 기획: ["market", "bm", "tech"]
+- 커뮤니티 기획: ["market", "bm", "content"]
+- 투자용 사업계획: ["market", "bm", "financial", "risk", "tech"]
 """
 
     def __init__(self, llm=None):
@@ -127,9 +122,43 @@ class NativeSupervisor:
         
         logger.info(f"[NativeSupervisor] 초기화 완료 (에이전트 {len(self.agents)}개)")
     
+class LambdaAgent:
+    """함수 기반 에이전트를 클래스처럼 래핑"""
+    def __init__(self, run_func):
+        self.run_func = run_func
+        
+    def run(self, **kwargs):
+        return self.run_func(kwargs)
+    
+    def format_as_markdown(self, result: Dict[str, Any]) -> str:
+        """간단한 JSON to Markdown 변환"""
+        if "error" in result:
+            return f"Error: {result['error']}"
+            
+        md = ""
+        for k, v in result.items():
+            title = k.replace('_', ' ').title()
+            md += f"#### {title}\n"
+            if isinstance(v, dict):
+                for sub_k, sub_v in v.items():
+                    md += f"- **{sub_k}**: {sub_v}\n"
+            elif isinstance(v, list):
+                for item in v:
+                    md += f"- {item}\n"
+            else:
+                md += f"{v}\n"
+            md += "\n"
+        return md
+
+
+class NativeSupervisor:
+    # ... (ROUTER_SYSTEM_PROMPT는 이미 수정됨) ...
+    
+    # ... (__init__ 생략) ...
+
     def _init_agents(self):
         """Config 기반 에이전트 초기화"""
-        # 에이전트 클래스 매핑
+        # 1. 클래스 기반 에이전트 매핑
         agent_classes = {
             "market": "agents.specialists.market_agent.MarketAgent",
             "bm": "agents.specialists.bm_agent.BMAgent",
@@ -137,18 +166,35 @@ class NativeSupervisor:
             "risk": "agents.specialists.risk_agent.RiskAgent",
         }
         
-        for agent_id, spec in self.agent_registry.items():
-            if agent_id in agent_classes:
-                try:
-                    # 동적 임포트
-                    module_path, class_name = agent_classes[agent_id].rsplit(".", 1)
-                    import importlib
-                    module = importlib.import_module(module_path)
-                    agent_class = getattr(module, class_name)
-                    self.agents[agent_id] = agent_class(llm=self.llm)
-                    logger.info(f"  - {spec.icon} {spec.name} 초기화 완료")
-                except Exception as e:
-                    logger.error(f"  - {agent_id} 초기화 실패: {e}")
+        # 2. 함수 기반 에이전트 매핑 [NEW]
+        function_agents = {
+            "tech": "agents.specialists.tech_architect.run_tech_architect",
+            "content": "agents.specialists.content_strategist.run_content_strategist"
+        }
+        
+        import importlib
+
+        # 클래스 에이전트 로드
+        for agent_id, class_path in agent_classes.items():
+            try:
+                module_path, class_name = class_path.rsplit(".", 1)
+                module = importlib.import_module(module_path)
+                agent_class = getattr(module, class_name)
+                self.agents[agent_id] = agent_class(llm=self.llm)
+                logger.info(f"  - [Class] {agent_id} 초기화 완료")
+            except Exception as e:
+                logger.error(f"  - [Class] {agent_id} 초기화 실패: {e}")
+
+        # 함수 에이전트 로드
+        for agent_id, func_path in function_agents.items():
+            try:
+                module_path, func_name = func_path.rsplit(".", 1)
+                module = importlib.import_module(module_path)
+                run_func = getattr(module, func_name)
+                self.agents[agent_id] = LambdaAgent(run_func)
+                logger.info(f"  - [Func] {agent_id} 초기화 완료")
+            except Exception as e:
+                logger.error(f"  - [Func] {agent_id} 초기화 실패: {e}")
 
     
     def decide_required_agents(
@@ -308,6 +354,14 @@ class NativeSupervisor:
             # bm 결과 참조
             ctx["business_model"] = current_results.get("business_model", {})
             
+        elif agent_id == "tech":
+            ctx["target_users"] = base_context.get("target_users", "")
+            ctx["user_constraints"] = base_context.get("user_constraints", [])
+            
+        elif agent_id == "content":
+            ctx["target_users"] = base_context.get("target_users", "")
+            ctx["market_analysis"] = current_results.get("market_analysis", {})
+            
         return ctx
 
     def _get_result_key(self, agent_id: str) -> str:
@@ -316,45 +370,52 @@ class NativeSupervisor:
             "market": "market_analysis",
             "bm": "business_model",
             "financial": "financial_plan",
-            "risk": "risk_analysis"
+            "risk": "risk_analysis",
+            "tech": "tech_architecture",    # [NEW]
+            "content": "content_strategy"   # [NEW]
         }
         return mapping.get(agent_id, f"{agent_id}_result")
         
-        # 4. 결과 통합
-        results["integrated_context"] = self._integrate_results(results)
-        
-        logger.info("[NativeSupervisor] 오케스트레이션 완료")
-        return results
-    
-    def _resolve_dependencies(self, required: List[str]) -> List[str]:
-        """의존성 기반 실행 순서 결정 (Config 기반)"""
-        from agents.agent_config import resolve_execution_order
-        return resolve_execution_order(required)
-    
     def _integrate_results(self, results: Dict[str, Any]) -> str:
         """전문 에이전트 결과를 마크다운으로 통합"""
         integrated = "## 전문 에이전트 분석 결과\n\n"
         
         routing = results.get("_routing", {})
         if routing:
-            integrated += f"**분석 범위**: {', '.join(routing.get('required_analyses', []))}\n"
-            integrated += f"**결정 근거**: {routing.get('reasoning', '')}\n\n"
+            pass # routing info 로깅 (생략)
         
+        # 1. Market
         if results.get("market_analysis"):
             integrated += "### 📊 시장 분석 (Market Agent)\n\n"
             integrated += self.agents["market"].format_as_markdown(results["market_analysis"])
             integrated += "\n"
         
+        # 2. BM
         if results.get("business_model"):
             integrated += "### 💰 비즈니스 모델 (BM Agent)\n\n"
             integrated += self.agents["bm"].format_as_markdown(results["business_model"])
             integrated += "\n"
+            
+        # 3. Tech [NEW]
+        if results.get("tech_architecture"):
+            integrated += "### 🏗️ 기술 아키텍처 (Tech Architect)\n\n"
+            # 람다 에이전트의 format 메서드 사용
+            integrated += self.agents["tech"].format_as_markdown(results["tech_architecture"])
+            integrated += "\n"
+
+        # 4. Content [NEW]
+        if results.get("content_strategy"):
+            integrated += "### 📣 콘텐츠 전략 (Content Strategist)\n\n"
+            integrated += self.agents["content"].format_as_markdown(results["content_strategy"])
+            integrated += "\n"
         
+        # 5. Financial
         if results.get("financial_plan"):
             integrated += "### 📈 재무 계획 (Financial Agent)\n\n"
             integrated += self.agents["financial"].format_as_markdown(results["financial_plan"])
             integrated += "\n"
         
+        # 6. Risk
         if results.get("risk_analysis"):
             integrated += "### ⚠️ 리스크 분석 (Risk Agent)\n\n"
             integrated += self.agents["risk"].format_as_markdown(results["risk_analysis"])

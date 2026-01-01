@@ -131,6 +131,34 @@ AGENT_REGISTRY: Dict[str, AgentSpec] = {
         routing_keywords=["리스크", "위험", "대응", "문제", "장애", "규제"],
         timeout_seconds=60,
     ),
+    
+    # [NEW] 기술 아키텍트
+    "tech": AgentSpec(
+        id="tech",
+        name="기술 설계",
+        icon="🏗️",
+        description="기술 스택 선정, 시스템 아키텍처 설계, 개발 로드맵 수립",
+        execution_mode=ExecutionMode.CONDITIONAL,
+        approval_mode=ApprovalMode.AUTO,
+        depends_on=[], # 독립적으로 수행 가능
+        provides=["recommended_stack", "architecture_desc", "roadmap"],
+        routing_keywords=["기술", "아키텍처", "개발", "스택", "인프라", "클라우드", "앱", "웹"],
+        timeout_seconds=60,
+    ),
+
+    # [NEW] 콘텐츠 전략가
+    "content": AgentSpec(
+        id="content",
+        name="콘텐츠 전략",
+        icon="📣",
+        description="브랜딩 컨셉, 핵심 메시지, 초기 사용자 유입 전략 수립",
+        execution_mode=ExecutionMode.CONDITIONAL,
+        approval_mode=ApprovalMode.AUTO,
+        depends_on=["market"], # 시장 분석(타겟) 필요
+        provides=["brand_concept", "acquisition_strategy"],
+        routing_keywords=["마케팅", "브랜딩", "콘텐츠", "홍보", "유입", "운영"],
+        timeout_seconds=60,
+    ),
 }
 
 
@@ -228,7 +256,7 @@ def resolve_execution_plan_dag(required_agents: List[str], reasoning: str = "") 
             # break or handle error
         
         # 이름순/우선순위 정렬 (결정적 순서 보장)
-        priority = ["market", "bm", "financial", "risk"]
+        priority = ["market", "tech", "bm", "content", "financial", "risk"]
         layer.sort(key=lambda x: priority.index(x) if x in priority else 99)
         
         layers.append(layer)
