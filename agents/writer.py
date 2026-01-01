@@ -63,7 +63,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
     previous_plan_context = ""
     refine_count = state.get("refine_count", 0)
     previous_plan = state.get("previous_plan")
-    
+
+    # [FIX] 프리셋 조기 로드 - previous_plan_context에서 min_sections 사용
+    from utils.settings import get_preset
+    active_preset = state.get("generation_preset", settings.active_preset)
+    preset = get_preset(active_preset)
+
     # 2. Review Context (Refine 모드일 때 필수)
     review_data = state.get("review")
     review_feedback_msg = ""
@@ -88,7 +93,27 @@ Action Items (실행 지침):
 """
     
     if refine_count > 0 and previous_plan:
-        previous_plan_context = f"\n<previous_version>\n{previous_plan}\n</previous_version>\n\n위 이전 버전과 심사 피드백을 참고하여 내용을 획기적으로 개선하세요.\n"
+        # [FIX] 명시적 전체 재작성 지시 추가 - LLM이 부분 출력하는 문제 방지
+        previous_plan_context = f"""
+<previous_version>
+{previous_plan}
+</previous_version>
+
+=====================================================================
+🚨🚨🚨 [CRITICAL INSTRUCTION] 전체 재작성 필수! 🚨🚨🚨
+=====================================================================
+위 이전 버전과 심사 피드백을 참고하여 **획기적으로 개선**하세요.
+
+⚠️ 절대 주의:
+- 반드시 **모든 {preset.min_sections}개 섹션을 완전하게 새로 작성**하세요!
+- ❌ 수정된 부분만 출력하면 안됩니다!
+- ❌ 이전 버전을 그대로 복사하면 안됩니다!
+- ✅ 각 섹션의 content를 처음부터 끝까지 완전하게 작성하세요!
+- ✅ structure에서 제공된 모든 섹션에 대해 빠짐없이 작성하세요!
+
+검증: 출력 JSON의 sections 배열에 반드시 {preset.min_sections}개 이상의 섹션이 포함되어야 합니다.
+=====================================================================
+"""
 
     # [NEW] doc_type에 따라 프롬프트 선택
     system_prompt, user_prompt_template = _get_prompts_by_doc_type(state)
@@ -209,11 +234,7 @@ Action Items (실행 지침):
 
 
 
-    # [NEW] 시각화 지침 생성 (프리셋 기반)
-    from utils.settings import get_preset
-    active_preset = state.get("generation_preset", settings.active_preset)
-    preset = get_preset(active_preset)
-    
+    # [NEW] 시각화 지침 생성 (프리셋 기반) - preset은 상단에서 이미 로드됨
     visual_instruction = ""
     if preset.include_diagrams > 0 or preset.include_charts > 0:
         visual_instruction = "\n\n📊 **시각적 요소 필수 요구사항 (Visual Elements Required)**:\n"
@@ -362,10 +383,7 @@ Action Items (실행 지침):
     #
     # =========================================================================
 
-    # 프리셋에서 재시도 횟수 가져오기 (동적)
-    from utils.settings import get_preset
-    active_preset = state.get("generation_preset", settings.active_preset)
-    preset = get_preset(active_preset)
+    # 프리셋에서 재시도 횟수 가져오기 (동적) - preset은 상단에서 이미 로드됨
     max_retries = preset.writer_max_retries
 
     current_try = 0
