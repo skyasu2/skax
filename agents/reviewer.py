@@ -46,7 +46,14 @@ def run(state: PlanCraftState) -> PlanCraftState:
     
     rag_context = state.get("rag_context", "")
     web_context = state.get("web_context", "")
+    
+    # [NEW] 전문 에이전트 분석 결과를 컨텍스트에 추가 (교차 검증용)
+    specialist_analysis = state.get("specialist_analysis", {})
+    specialist_context = specialist_analysis.get("integrated_context", "") if isinstance(specialist_analysis, dict) else ""
+    
     context = f"{rag_context}\n{web_context}"
+    if specialist_context:
+        context += f"\n\n=== [전문 에이전트 분석 결과 (Fact Check 기준)] ===\n{specialist_context}"
     
     # 2. 프롬프트 구성
     # REVIEWER_USER_PROMPT는 {draft}, {context}를 요구함
