@@ -450,6 +450,8 @@ WRITER_USER_PROMPT = """다음 구조와 참고 자료를 바탕으로 기획서
 
 **작성 가이드 (RAG - 논리/형식):**
 {context}
+
+{visual_instruction}
 ---
 
 ## 작성 지시
@@ -488,8 +490,6 @@ WRITER_USER_PROMPT = """다음 구조와 참고 자료를 바탕으로 기획서
    
 9. **마크다운 포맷팅**:
    - **## Title** 형태(H2)를 사용하세요. (# H1 사용 금지)
-
-{visual_instruction}
 
 10. **JSON Output**:
    - 위 내용을 바탕으로 `sections` 리스트를 담은 JSON 하나만 출력하세요.
