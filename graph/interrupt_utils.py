@@ -480,18 +480,24 @@ def make_pause_node(
 ):
     """
     범용 Pause Node 팩토리 함수.
-    
+
     다양한 HITL 유형의 pause node를 한 줄로 생성할 수 있습니다.
-    
+
+    ⚠️ INTERRUPT SAFETY WARNING:
+    Resume 시 생성된 노드 전체가 처음부터 재실행됩니다!
+    - interrupt() 호출 전: Side-Effect 금지 (DB 저장, API 호출, 알림 발송)
+    - interrupt() 호출 후: 안전하게 상태 변경 가능
+    - 참조: LangGraph human-in-the-loop.txt, interrupt function.txt
+
     Args:
         question: 사용자에게 표시할 질문
         goto_node: 사용자 응답 후 이동할 노드 이름
         interrupt_type: 인터럽트 유형 ("option", "form", "confirm")
         options: 옵션 목록 (interrupt_type="option"일 때)
-    
+
     Returns:
         Callable: LangGraph 노드 함수
-    
+
     Example:
         workflow.add_node("confirm_structure", make_pause_node(
             question="이 구조로 진행할까요?",
@@ -529,6 +535,13 @@ def make_approval_pause_node(
 
     팀장/리더/QA 등 역할별 승인 워크플로우를 쉽게 구현할 수 있습니다.
     사용자의 승인/반려 응답에 따라 다른 노드로 분기합니다.
+
+    ⚠️ INTERRUPT SAFETY WARNING:
+    Resume 시 생성된 노드 전체가 처음부터 재실행됩니다!
+    - interrupt() 호출 전: Side-Effect 금지 (DB 저장, API 호출, 알림 발송)
+    - interrupt() 호출 후: 안전하게 상태 변경 가능
+    - 서브그래프 내 사용 시 부모 노드도 재실행될 수 있음에 주의
+    - 참조: LangGraph human-in-the-loop.txt, interrupt function.txt
 
     Approval Flow Diagram:
     ```mermaid
