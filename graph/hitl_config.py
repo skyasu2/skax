@@ -238,72 +238,116 @@ def create_approval_payload(
 
 
 # =============================================================================
-# Interrupt Factory (확장 패턴)
+# Interrupt 룰 추상화 (Payload 생성 + 응답 처리)
+# =============================================================================
+
+@dataclass
+class InterruptDefinition:
+    """인터럽트 정의 (생성 및 처리 로직 캡슐화)"""
+    type_name: str
+    description: str
+    
+    def create_payload(self, question: str, node_ref: str, **kwargs) -> Dict[str, Any]:
+        """페이로드 생성 (오버라이드 가능)"""
+        return create_base_payload(
+            self.type_name, question, node_ref, **kwargs
+        )
+        
+    def handle_response(self, state: Dict, response: Any, **kwargs) -> Dict:
+        """응답 처리 및 상태 업데이트 (오버라이드 필수)"""
+        raise NotImplementedError("handle_response must be implemented")
+
+
+# === 구체적인 인터럽트 구현들 ===
+
+class OptionInterrupt(InterruptDefinition):
+    def create_payload(self, question: str, node_ref: str, **kwargs) -> Dict[str, Any]:
+        return create_base_payload(
+            InterruptType.OPTION, question, node_ref,
+            options=kwargs.get("options", []),
+            **kwargs
+        )
+    
+    def handle_response(self, state: Dict, response: Any, **kwargs) -> Dict:
+        # 옵션 선택 결과 처리 (예: user_choice 저장)
+        # 실제 로직은 각 노드에서 수행하겠지만, 공통 처리는 여기서 가능
+        return {"last_choice": response}
+
+
+class FormInterrupt(InterruptDefinition):
+    def create_payload(self, question: str, node_ref: str, **kwargs) -> Dict[str, Any]:
+        return create_base_payload(
+            InterruptType.FORM, question, node_ref,
+            input_schema_name=kwargs.get("input_schema_name"),
+            **kwargs
+        )
+
+    def handle_response(self, state: Dict, response: Any, **kwargs) -> Dict:
+        # 폼 데이터 검증 및 병합 로직
+        return {"form_data": response}
+
+
+class ApprovalInterrupt(InterruptDefinition):
+    def create_payload(self, question: str, node_ref: str, **kwargs) -> Dict[str, Any]:
+        return create_base_payload(
+            InterruptType.APPROVAL, question, node_ref,
+            data=kwargs.get("approval_data", {}),
+            options=[
+                {"title": "승인", "description": "승인하고 다음 단계로 진행"},
+                {"title": "반려", "description": "수정을 요청"},
+            ],
+            **kwargs
+        )
+
+    def handle_response(self, state: Dict, response: Any, **kwargs) -> Dict:
+        # 승인 여부 플래그 업데이트
+        is_approved = response.get("status") == "approved"
+        return {"approved": is_approved, "feedback": response.get("feedback")}
+
+
+# =============================================================================
+# Interrupt Factory (개선됨)
 # =============================================================================
 
 class InterruptFactory:
     """
-    Interrupt 페이로드 팩토리 (확장 가능)
+    Interrupt Factory (Rule-based)
     
-    커스텀 인터럽트 타입 등록 패턴:
-    ```python
-    def custom_handler(question, node_ref, **kwargs):
-        return create_base_payload(
-            InterruptType.CUSTOM,
-            question, node_ref,
-            custom_field=kwargs.get("custom_value"),
-            **kwargs
-        )
-    
-    InterruptFactory.register("file_upload", custom_handler)
-    ```
+    사용법:
+        handler = InterruptFactory.get_handler("option")
+        payload = handler.create_payload(...)
+        updates = handler.handle_response(state, response)
     """
     
-    _handlers: Dict[str, Callable] = {}
+    _registry: Dict[str, InterruptDefinition] = {}
     
     @classmethod
-    def register(cls, type_name: str, handler: Callable) -> None:
-        """
-        새 인터럽트 타입 핸들러 등록
-        
-        Args:
-            type_name: 타입 이름 (예: "file_upload")
-            handler: 페이로드 생성 함수
-        """
-        cls._handlers[type_name] = handler
+    def register(cls, definition: InterruptDefinition) -> None:
+        """인터럽트 정의 등록"""
+        cls._registry[definition.type_name] = definition
     
+    @classmethod
+    def get_handler(cls, type_name: str) -> InterruptDefinition:
+        """핸들러 조회"""
+        handler = cls._registry.get(type_name)
+        if not handler:
+            # 기본 핸들러 (Custom)
+            return InterruptDefinition(type_name, "Custom Interrupt")
+        return handler
+
     @classmethod
     def create(cls, type_name: str, **kwargs) -> Dict[str, Any]:
-        """
-        등록된 핸들러로 페이로드 생성
-        
-        Args:
-            type_name: 타입 이름
-            **kwargs: 핸들러에 전달할 인자
-        """
-        if type_name not in cls._handlers:
-            # 기본 핸들러 사용
-            return create_base_payload(
-                InterruptType.CUSTOM,
-                kwargs.get("question", ""),
-                kwargs.get("node_ref", "unknown"),
-                **kwargs
-            )
-        return cls._handlers[type_name](**kwargs)
-    
-    @classmethod
-    def list_types(cls) -> List[str]:
-        """등록된 타입 목록"""
-        builtin = [t.value for t in InterruptType]
-        custom = list(cls._handlers.keys())
-        return builtin + custom
+        """간편 페이로드 생성"""
+        handler = cls.get_handler(type_name)
+        return handler.create_payload(**kwargs)
 
 
 # 기본 핸들러 등록
-InterruptFactory.register("option", create_option_payload)
-InterruptFactory.register("form", create_form_payload)
-InterruptFactory.register("confirm", create_confirm_payload)
-InterruptFactory.register("approval", create_approval_payload)
+InterruptFactory.register(OptionInterrupt(InterruptType.OPTION, "선택지 인터럽트"))
+InterruptFactory.register(FormInterrupt(InterruptType.FORM, "폼 입력 인터럽트"))
+InterruptFactory.register(ApprovalInterrupt(InterruptType.APPROVAL, "승인 요청 인터럽트"))
+InterruptFactory.register(OptionInterrupt(InterruptType.CONFIRM, "확인 인터럽트")) # Option 재사용
+
 
 
 # =============================================================================
