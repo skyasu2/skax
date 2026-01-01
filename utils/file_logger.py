@@ -6,26 +6,58 @@ from typing import Any
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
 
 class FileLogger:
+    MAX_LOG_FILES = 10  # 최대 로그 파일 개수
+
     def __init__(self):
         if not os.path.exists(LOG_DIR):
             os.makedirs(LOG_DIR)
         else:
-            # [수정] 기존 로그 파일 삭제 (Clean Start)
-            # 실행 시마다 이전 로그를 정리하여 디스크 공간을 확보하고 혼란을 방지합니다.
-            import shutil
-            for filename in os.listdir(LOG_DIR):
-                file_path = os.path.join(LOG_DIR, filename)
-                try:
-                    if os.path.isfile(file_path) or os.path.islink(file_path):
-                        os.unlink(file_path)
-                    elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)
-                except Exception as e:
-                    print(f"Failed to delete {file_path}. Reason: {e}")
-        
+            # [FIX] 로그 파일 개수 제한 (Rolling Window)
+            # 최대 MAX_LOG_FILES개만 유지하고 오래된 것부터 삭제
+            self._cleanup_old_logs()
+
         # 실행 시마다 새로운 로그 파일 생성 (시간별)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_file = os.path.join(LOG_DIR, f"execution_{timestamp}.jsonl")
+
+    def _cleanup_old_logs(self):
+        """
+        로그 파일이 MAX_LOG_FILES개를 초과하지 않도록 오래된 파일 삭제
+
+        동작:
+        1. logs/ 디렉토리의 .jsonl 파일 목록 조회
+        2. 수정 시간 기준 정렬 (오래된 것 먼저)
+        3. MAX_LOG_FILES - 1개를 초과하면 오래된 것부터 삭제
+           (새 파일 생성 후 MAX_LOG_FILES개가 되도록)
+        """
+        try:
+            log_files = [
+                f for f in os.listdir(LOG_DIR)
+                if f.endswith(".jsonl") and os.path.isfile(os.path.join(LOG_DIR, f))
+            ]
+
+            if len(log_files) < self.MAX_LOG_FILES:
+                return  # 정리 불필요
+
+            # 수정 시간 기준 정렬 (오래된 것 먼저)
+            log_files_with_time = [
+                (f, os.path.getmtime(os.path.join(LOG_DIR, f)))
+                for f in log_files
+            ]
+            log_files_with_time.sort(key=lambda x: x[1])  # 오래된 것 먼저
+
+            # 새 파일 생성 후 MAX_LOG_FILES개가 되도록, MAX_LOG_FILES - 1개만 유지
+            files_to_delete = len(log_files) - (self.MAX_LOG_FILES - 1)
+
+            for i in range(files_to_delete):
+                file_to_delete = os.path.join(LOG_DIR, log_files_with_time[i][0])
+                try:
+                    os.unlink(file_to_delete)
+                except Exception as e:
+                    print(f"[FileLogger] Failed to delete {file_to_delete}: {e}")
+
+        except Exception as e:
+            print(f"[FileLogger] Log cleanup failed: {e}")
         
     def log(self, step: str, data: Any):
         """
