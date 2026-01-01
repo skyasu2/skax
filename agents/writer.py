@@ -174,8 +174,8 @@ Action Items (실행 지침):
                     if line.strip():
                         web_search_list.append({"title": "", "content": line[:500]})
             
-            # Supervisor 실행 (병렬 모드)
-            supervisor = PlanSupervisor(parallel=True)
+            # Supervisor 실행
+            supervisor = PlanSupervisor()
             specialist_results = supervisor.run(
                 service_overview=user_input,
                 target_market=target_market,
