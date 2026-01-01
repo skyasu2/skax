@@ -11,9 +11,20 @@ PlanCraft - Multi-Agent 설정 모듈
         print(f"{agent.name}: {agent.description}")
 """
 
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Optional, Callable, Type, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
+
+# =============================================================================
+# Type Checking용 Forward Reference (순환 import 방지)
+# =============================================================================
+if TYPE_CHECKING:
+    from agents.specialists.market_agent import MarketAgent
+    from agents.specialists.bm_agent import BMAgent
+    from agents.specialists.financial_agent import FinancialAgent
+    from agents.specialists.risk_agent import RiskAgent
+    from agents.specialists.tech_architect import TechArchitectAgent
+    from agents.specialists.content_strategist import ContentStrategistAgent
 
 
 # =============================================================================
@@ -40,33 +51,53 @@ class ApprovalMode(str, Enum):
 
 @dataclass
 class AgentSpec:
-    """에이전트 명세"""
+    """
+    에이전트 명세
+
+    [리뷰 반영] result_key와 class_path 필드를 추가하여:
+    1. Supervisor의 _get_result_key() 하드코딩 제거
+    2. 문자열 기반 동적 import 대신 Factory Registry 패턴 지원
+    """
     id: str                     # 고유 ID (market, bm, financial, risk)
     name: str                   # UI 표시명
     icon: str                   # 이모지 아이콘
     description: str            # 설명
-    
+
+    # [NEW] 결과 저장 키 (Supervisor에서 results[result_key]로 저장)
+    result_key: str = ""        # 예: "market_analysis", "business_model"
+
+    # [NEW] 클래스 경로 (Factory Registry용)
+    class_path: str = ""        # 예: "agents.specialists.market_agent.MarketAgent"
+
     # 실행 정책
     execution_mode: ExecutionMode = ExecutionMode.CONDITIONAL
     approval_mode: ApprovalMode = ApprovalMode.AUTO
-    
+
     # 의존성
     depends_on: List[str] = field(default_factory=list)
     provides: List[str] = field(default_factory=list)  # 다른 에이전트에게 제공하는 데이터
-    
+
     # 라우팅 키워드 (LLM 라우팅 시 참조)
     routing_keywords: List[str] = field(default_factory=list)
-    
+
     # 추가 메타데이터
     timeout_seconds: int = 60
     retry_count: int = 2
-    
+
+    def __post_init__(self):
+        """result_key 기본값 자동 설정"""
+        if not self.result_key:
+            # id 기반 자동 생성: market -> market_analysis
+            self.result_key = f"{self.id}_analysis" if self.id != "bm" else "business_model"
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "icon": self.icon,
             "description": self.description,
+            "result_key": self.result_key,
+            "class_path": self.class_path,
             "execution_mode": self.execution_mode.value,
             "approval_mode": self.approval_mode.value,
             "depends_on": self.depends_on,
@@ -85,6 +116,8 @@ AGENT_REGISTRY: Dict[str, AgentSpec] = {
         name="시장 분석",
         icon="📊",
         description="TAM/SAM/SOM 3단계 시장 규모 분석, 경쟁사 실명 분석, 트렌드 파악",
+        result_key="market_analysis",  # [NEW]
+        class_path="agents.specialists.market_agent.MarketAgent",  # [NEW]
         execution_mode=ExecutionMode.CONDITIONAL,
         approval_mode=ApprovalMode.AUTO,
         depends_on=[],
@@ -92,12 +125,14 @@ AGENT_REGISTRY: Dict[str, AgentSpec] = {
         routing_keywords=["시장", "규모", "경쟁사", "트렌드", "TAM", "SAM", "SOM", "분석"],
         timeout_seconds=90,
     ),
-    
+
     "bm": AgentSpec(
         id="bm",
         name="비즈니스 모델",
         icon="💰",
         description="수익 모델 다각화, 가격 전략 수립, B2B/B2C 계층 설계",
+        result_key="business_model",  # [NEW]
+        class_path="agents.specialists.bm_agent.BMAgent",  # [NEW]
         execution_mode=ExecutionMode.CONDITIONAL,
         approval_mode=ApprovalMode.AUTO,
         depends_on=["market"],  # 시장 분석 후 BM 수립 (순서 보장)
@@ -105,12 +140,14 @@ AGENT_REGISTRY: Dict[str, AgentSpec] = {
         routing_keywords=["수익", "가격", "BM", "비즈니스", "모델", "구독", "광고", "B2B", "B2C"],
         timeout_seconds=60,
     ),
-    
+
     "financial": AgentSpec(
         id="financial",
         name="재무 계획",
         icon="📈",
         description="초기 투자비 산출, 월별 손익 시뮬레이션, BEP 계산, 3시나리오 분석",
+        result_key="financial_plan",  # [NEW]
+        class_path="agents.specialists.financial_agent.FinancialAgent",  # [NEW]
         execution_mode=ExecutionMode.CONDITIONAL,
         approval_mode=ApprovalMode.AUTO,
         depends_on=["bm"],  # BM 결과 필수
@@ -118,12 +155,14 @@ AGENT_REGISTRY: Dict[str, AgentSpec] = {
         routing_keywords=["재무", "투자", "비용", "매출", "BEP", "손익", "예산", "자금"],
         timeout_seconds=90,
     ),
-    
+
     "risk": AgentSpec(
         id="risk",
         name="리스크 분석",
         icon="⚠️",
         description="8가지 리스크 카테고리 분석, 위험 점수 정량화, 대응 전략 수립",
+        result_key="risk_analysis",  # [NEW]
+        class_path="agents.specialists.risk_agent.RiskAgent",  # [NEW]
         execution_mode=ExecutionMode.CONDITIONAL,
         approval_mode=ApprovalMode.AUTO,
         depends_on=["bm"],  # BM 결과 참조
@@ -131,30 +170,32 @@ AGENT_REGISTRY: Dict[str, AgentSpec] = {
         routing_keywords=["리스크", "위험", "대응", "문제", "장애", "규제"],
         timeout_seconds=60,
     ),
-    
-    # [NEW] 기술 아키텍트
+
     "tech": AgentSpec(
         id="tech",
         name="기술 설계",
         icon="🏗️",
         description="기술 스택 선정, 시스템 아키텍처 설계, 개발 로드맵 수립",
+        result_key="tech_architecture",  # [NEW]
+        class_path="agents.specialists.tech_architect.TechArchitectAgent",  # [NEW]
         execution_mode=ExecutionMode.CONDITIONAL,
         approval_mode=ApprovalMode.AUTO,
-        depends_on=[], # 독립적으로 수행 가능
+        depends_on=[],  # 독립적으로 수행 가능
         provides=["recommended_stack", "architecture_desc", "roadmap"],
         routing_keywords=["기술", "아키텍처", "개발", "스택", "인프라", "클라우드", "앱", "웹"],
         timeout_seconds=60,
     ),
 
-    # [NEW] 콘텐츠 전략가
     "content": AgentSpec(
         id="content",
         name="콘텐츠 전략",
         icon="📣",
         description="브랜딩 컨셉, 핵심 메시지, 초기 사용자 유입 전략 수립",
+        result_key="content_strategy",  # [NEW]
+        class_path="agents.specialists.content_strategist.ContentStrategistAgent",  # [NEW]
         execution_mode=ExecutionMode.CONDITIONAL,
         approval_mode=ApprovalMode.AUTO,
-        depends_on=["market"], # 시장 분석(타겟) 필요
+        depends_on=["market"],  # 시장 분석(타겟) 필요
         provides=["brand_concept", "acquisition_strategy"],
         routing_keywords=["마케팅", "브랜딩", "콘텐츠", "홍보", "유입", "운영"],
         timeout_seconds=60,
@@ -373,6 +414,101 @@ def unregister_agent(agent_id: str) -> bool:
 def get_agent_spec(agent_id: str) -> Optional[AgentSpec]:
     """에이전트 스펙 조회"""
     return AGENT_REGISTRY.get(agent_id)
+
+
+def get_result_key(agent_id: str) -> str:
+    """
+    [NEW] 에이전트 ID → 결과 키 매핑 (Registry 기반)
+
+    Supervisor의 하드코딩된 _get_result_key()를 대체합니다.
+
+    Returns:
+        str: 결과 저장 키 (예: "market_analysis", "business_model")
+    """
+    spec = AGENT_REGISTRY.get(agent_id)
+    if spec:
+        return spec.result_key
+    return f"{agent_id}_result"  # Fallback
+
+
+# =============================================================================
+# Agent Factory Registry (클래스 기반 동적 생성)
+# =============================================================================
+
+# [캐시] 동적 import 결과 저장 (성능 최적화)
+_AGENT_CLASS_CACHE: Dict[str, Type] = {}
+
+
+def get_agent_class(agent_id: str) -> Optional[Type]:
+    """
+    [NEW] Factory Pattern: 에이전트 ID → 클래스 객체 반환
+
+    문자열 기반 동적 import를 캡슐화하여:
+    1. Supervisor에서 하드코딩된 class_path 제거
+    2. 타입 안정성 및 IDE 자동완성 지원
+    3. 캐싱을 통한 반복 import 방지
+
+    Returns:
+        Type: 에이전트 클래스 (예: MarketAgent, BMAgent)
+        None: 등록되지 않은 에이전트
+
+    Example:
+        >>> AgentClass = get_agent_class("market")
+        >>> agent = AgentClass(llm=my_llm)
+        >>> result = agent.run(service_overview="...")
+    """
+    # 캐시 확인
+    if agent_id in _AGENT_CLASS_CACHE:
+        return _AGENT_CLASS_CACHE[agent_id]
+
+    spec = AGENT_REGISTRY.get(agent_id)
+    if not spec or not spec.class_path:
+        return None
+
+    try:
+        import importlib
+        module_path, class_name = spec.class_path.rsplit(".", 1)
+        module = importlib.import_module(module_path)
+        agent_class = getattr(module, class_name)
+
+        # 캐시에 저장
+        _AGENT_CLASS_CACHE[agent_id] = agent_class
+        return agent_class
+
+    except (ImportError, AttributeError) as e:
+        # Import 실패 시 로깅 (순환 import 방지를 위해 여기서만 import)
+        try:
+            from utils.file_logger import get_file_logger
+            get_file_logger().error(f"[AgentFactory] {agent_id} 로드 실패: {e}")
+        except ImportError:
+            pass
+        return None
+
+
+def create_agent(agent_id: str, llm=None) -> Optional[Any]:
+    """
+    [NEW] Factory Pattern: 에이전트 인스턴스 생성
+
+    Args:
+        agent_id: 에이전트 ID (market, bm, financial, risk, tech, content)
+        llm: LLM 인스턴스 (None이면 기본 LLM 사용)
+
+    Returns:
+        에이전트 인스턴스 또는 None
+    """
+    agent_class = get_agent_class(agent_id)
+    if agent_class is None:
+        return None
+
+    try:
+        return agent_class(llm=llm)
+    except Exception as e:
+        try:
+            from utils.file_logger import get_file_logger
+            get_file_logger().error(f"[AgentFactory] {agent_id} 인스턴스 생성 실패: {e}")
+        except ImportError:
+            pass
+        return None
 
 
 # =============================================================================

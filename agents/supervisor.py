@@ -142,43 +142,42 @@ class NativeSupervisor:
     def __init__(self, llm=None):
         self.llm = llm or get_llm(temperature=0.3)
         self.router_llm = self.llm.with_structured_output(RoutingDecision)
-        
-        # [NEW] Config 기반 에이전트 로드
+
+        # [REFACTOR] Config 기반 에이전트 로드 (Factory Registry 활용)
         from agents.agent_config import (
             AGENT_REGISTRY,
             get_routing_prompt,
-            resolve_execution_order,
+            get_result_key,
+            create_agent,
         )
         self.agent_registry = AGENT_REGISTRY
         self.routing_prompt = get_routing_prompt()
-        
+        self._get_result_key = get_result_key  # [NEW] Registry 기반 함수 사용
+        self._create_agent = create_agent      # [NEW] Factory 함수 사용
+
         # 전문 에이전트 동적 초기화
         self.agents = {}
         self._init_agents()
-        
+
         logger.info(f"[NativeSupervisor] 초기화 완료 (에이전트 {len(self.agents)}개)")
-    
+
     def _init_agents(self):
-        """Config 기반 에이전트 초기화 (모두 클래스 기반으로 통일)"""
-        # [REFACTOR] 모든 에이전트를 클래스 기반으로 통일
-        agent_classes = {
-            "market": "agents.specialists.market_agent.MarketAgent",
-            "bm": "agents.specialists.bm_agent.BMAgent",
-            "financial": "agents.specialists.financial_agent.FinancialAgent",
-            "risk": "agents.specialists.risk_agent.RiskAgent",
-            "tech": "agents.specialists.tech_architect.TechArchitectAgent",
-            "content": "agents.specialists.content_strategist.ContentStrategistAgent",
-        }
+        """
+        [REFACTOR] Factory Registry 기반 에이전트 초기화
 
-        import importlib
-
-        for agent_id, class_path in agent_classes.items():
+        개선사항:
+        1. 하드코딩된 class_path 제거 → AGENT_REGISTRY.class_path 사용
+        2. 동적 import 로직 캡슐화 → create_agent() 함수 사용
+        3. 새 에이전트 추가 시 AGENT_REGISTRY만 수정하면 됨
+        """
+        for agent_id in self.agent_registry.keys():
             try:
-                module_path, class_name = class_path.rsplit(".", 1)
-                module = importlib.import_module(module_path)
-                agent_class = getattr(module, class_name)
-                self.agents[agent_id] = agent_class(llm=self.llm)
-                logger.info(f"  - {agent_id} 초기화 완료")
+                agent = self._create_agent(agent_id, llm=self.llm)
+                if agent:
+                    self.agents[agent_id] = agent
+                    logger.info(f"  - {agent_id} 초기화 완료")
+                else:
+                    logger.warning(f"  - {agent_id} 초기화 스킵 (class_path 미설정)")
             except Exception as e:
                 logger.error(f"  - {agent_id} 초기화 실패: {e}")
 
@@ -276,37 +275,56 @@ class NativeSupervisor:
         return results
 
     def _execute_plan(self, plan, results: Dict, context: Dict):
-        """실행 계획에 따라 단계별 병렬 실행"""
-        
+        """
+        실행 계획에 따라 단계별 병렬 실행
+
+        [REFACTOR] Exception 카테고리화 적용:
+        - LLM_ERROR, NETWORK_ERROR, VALIDATION_ERROR 등으로 분류
+        - 에러 타입에 따른 재시도 전략 적용 가능
+        """
+        # [NEW] 에러 카테고리화 함수 import
+        from utils.error_handler import categorize_error
+
         for step in plan.steps:
             logger.info(f"--- 단계 {step.step_id}: {step.description} ---")
-            
+
             # 병렬 실행을 위한 Future 목록
             futures = {}
-            
+
             with ThreadPoolExecutor() as executor:
                 for agent_id in step.agent_ids:
                     if agent_id in self.agents:
                         # 실행 컨텍스트 준비
                         agent_context = self._prepare_agent_context(agent_id, context, results)
-                        
+
                         # 비동기 제출
                         future = executor.submit(self.agents[agent_id].run, **agent_context)
                         futures[future] = agent_id
                         logger.info(f"  🚀 [Running] {agent_id}...")
-            
+
                 # 완료 대기 및 결과 수집
                 for future in as_completed(futures):
                     agent_id = futures[future]
                     try:
                         result = future.result()
-                        # 결과 키 매핑 (Legacy 호환)
+                        # 결과 키 매핑 (Registry 기반)
                         result_key = self._get_result_key(agent_id)
                         results[result_key] = result
                         logger.info(f"  ✅ [Done] {agent_id}")
                     except Exception as e:
-                        logger.error(f"  ❌ [Error] {agent_id}: {e}")
-                        results[self._get_result_key(agent_id)] = {"error": str(e)}
+                        # [REFACTOR] 에러 카테고리화 적용
+                        error_category = categorize_error(e)
+                        error_msg = str(e)
+
+                        # 카테고리별 로깅
+                        logger.error(f"  ❌ [{error_category}] {agent_id}: {error_msg}")
+
+                        # 에러 결과 저장 (카테고리 포함)
+                        results[self._get_result_key(agent_id)] = {
+                            "error": error_msg,
+                            "error_category": error_category,
+                            "agent_id": agent_id,
+                        }
 
     def _prepare_agent_context(self, agent_id: str, base_context: Dict, current_results: Dict) -> Dict:
         """각 에이전트에 필요한 입력 파라미터 구성"""
@@ -343,17 +361,9 @@ class NativeSupervisor:
             
         return ctx
 
-    def _get_result_key(self, agent_id: str) -> str:
-        """에이전트 ID -> 결과 키 매핑"""
-        mapping = {
-            "market": "market_analysis",
-            "bm": "business_model",
-            "financial": "financial_plan",
-            "risk": "risk_analysis",
-            "tech": "tech_architecture",    # [NEW]
-            "content": "content_strategy"   # [NEW]
-        }
-        return mapping.get(agent_id, f"{agent_id}_result")
+    # [REMOVED] _get_result_key 하드코딩 제거
+    # 이제 __init__에서 agents.agent_config.get_result_key를 self._get_result_key로 바인딩
+    # → AGENT_REGISTRY.result_key 필드를 사용하여 확장성 확보
         
     def _integrate_results(self, results: Dict[str, Any]) -> str:
         """전문 에이전트 결과를 마크다운으로 통합"""
