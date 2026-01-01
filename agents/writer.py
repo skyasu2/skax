@@ -30,20 +30,16 @@ def _get_prompts_by_doc_type(state: PlanCraftState) -> tuple:
     - web_app_plan: IT/Tech 기획서 (기본값)
     - business_plan: 일반 사업 기획서
     """
+    logger = get_file_logger()
     analysis = state.get("analysis")
-    doc_type = "web_app_plan"  # 기본값
-    
-    if analysis:
-        if isinstance(analysis, dict):
-            doc_type = analysis.get("doc_type", "web_app_plan")
-        else:
-            doc_type = getattr(analysis, "doc_type", "web_app_plan")
-    
+    analysis_dict = ensure_dict(analysis)
+    doc_type = analysis_dict.get("doc_type", "web_app_plan")
+
     if doc_type == "business_plan":
-        print(f"[Writer] 비IT 사업 기획서 모드로 작성합니다.")
+        logger.info("[Writer] 비IT 사업 기획서 모드로 작성합니다.")
         return BUSINESS_PLAN_SYSTEM_PROMPT, BUSINESS_PLAN_USER_PROMPT
     else:
-        print(f"[Writer] IT/Tech 기획서 모드로 작성합니다.")
+        logger.info("[Writer] IT/Tech 기획서 모드로 작성합니다.")
         return WRITER_SYSTEM_PROMPT, WRITER_USER_PROMPT
 
 
@@ -73,17 +69,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
     review_feedback_msg = ""
     
     if refine_count > 0 and review_data:
-        # dict 또는 객체 처리
-        if isinstance(review_data, dict):
-            verdict = review_data.get("verdict", "")
-            feedback_summary = review_data.get("feedback_summary", "")
-            critical_issues = review_data.get("critical_issues", [])
-            action_items = review_data.get("action_items", [])
-        else:
-            verdict = getattr(review_data, "verdict", "")
-            feedback_summary = getattr(review_data, "feedback_summary", "")
-            critical_issues = getattr(review_data, "critical_issues", [])
-            action_items = getattr(review_data, "action_items", [])
+        # dict 또는 객체 처리 (ensure_dict로 통일)
+        review_dict = ensure_dict(review_data)
+        verdict = review_dict.get("verdict", "")
+        feedback_summary = review_dict.get("feedback_summary", "")
+        critical_issues = review_dict.get("critical_issues", [])
+        action_items = review_dict.get("action_items", [])
 
         review_feedback_msg = f"""
 =====================================================================

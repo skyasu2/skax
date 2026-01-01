@@ -35,17 +35,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
         logger.error("[Refiner] 심사 결과 누락")
         return update_state(state, error="심사 결과가 없습니다.")
         
-    # Review 데이터 추출
-    if isinstance(review, dict):
-        verdict = review.get("verdict", "FAIL")
-        score = review.get("overall_score", 0)
-        feedback = review.get("feedback_summary", "")
-        issues = "\n".join([f"- {i}" for i in review.get("critical_issues", [])])
-    else:
-        verdict = getattr(review, "verdict", "FAIL")
-        score = getattr(review, "overall_score", 0)
-        feedback = getattr(review, "feedback_summary", "")
-        issues = "\n".join([f"- {i}" for i in getattr(review, "critical_issues", [])])
+    # Review 데이터 추출 (ensure_dict로 통일)
+    review_dict = ensure_dict(review)
+    verdict = review_dict.get("verdict", "FAIL")
+    score = review_dict.get("overall_score", 0)
+    feedback = review_dict.get("feedback_summary", "")
+    issues = "\n".join([f"- {i}" for i in review_dict.get("critical_issues", [])])
     
     current_count = state.get("refine_count", 0)
 
@@ -71,8 +66,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
     # Draft 요약 (너무 길면 자름)
     draft_summary = "초안 데이터 없음"
     if draft:
-        sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
-        draft_summary = "\n".join([f"[{s.get('name', 'Unknown')}]\n{s.get('content', '')[:200]}..." if isinstance(s, dict) else f"[{s.name}]\n{s.content[:200]}..." for s in sections])
+        draft_dict = ensure_dict(draft)
+        sections = draft_dict.get("sections", [])
+        draft_summary = "\n".join([
+            f"[{ensure_dict(s).get('name', 'Unknown')}]\n{ensure_dict(s).get('content', '')[:200]}..."
+            for s in sections
+        ])
 
     # LLM 초기화
     refiner_llm = get_llm(temperature=0.4).with_structured_output(RefinementStrategy)

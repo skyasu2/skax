@@ -66,7 +66,7 @@ from langgraph.types import interrupt, Command
 from utils.checkpointer import get_checkpointer  # [NEW] Factory 패턴
 from langchain_core.runnables import RunnableBranch  # [NEW] 분기 패턴
 from graph.state import PlanCraftState
-from utils.settings import settings
+from utils.settings import settings, QualityThresholds
 
 
 # =============================================================================
@@ -205,38 +205,38 @@ def _update_step_history(state: PlanCraftState, step_name: str, status: str, sum
 
 def _is_max_restart_reached(state: PlanCraftState) -> bool:
     """
-    최대 복귀 횟수(2회) 도달 여부
+    최대 복귀 횟수 도달 여부
 
-    - True: Analyzer 복귀 횟수가 2회 이상 → 무한 루프 방지
+    - True: Analyzer 복귀 횟수가 MAX_RESTART_COUNT 이상 → 무한 루프 방지
     - False: 아직 복귀 가능
     """
-    return state.get("restart_count", 0) >= 2
+    return state.get("restart_count", 0) >= QualityThresholds.MAX_RESTART_COUNT
 
 
 def _is_quality_fail(state: PlanCraftState) -> bool:
     """
     품질 실패 판정
 
-    - True: score < 5 또는 verdict == "FAIL" → Analyzer로 복귀
+    - True: score < SCORE_FAIL 또는 verdict == "FAIL" → Analyzer로 복귀
     - False: 다음 조건 평가
     """
     review = state.get("review", {})
-    score = review.get("overall_score", 5)
+    score = review.get("overall_score", QualityThresholds.FALLBACK_SCORE)
     verdict = review.get("verdict", "REVISE")
-    return score < 5 or verdict == "FAIL"
+    return QualityThresholds.is_fail(score) or verdict == "FAIL"
 
 
 def _is_quality_pass(state: PlanCraftState) -> bool:
     """
     품질 통과 판정
 
-    - True: score >= 9 및 verdict == "PASS" → 즉시 Formatter
+    - True: score >= SCORE_PASS 및 verdict == "PASS" → 즉시 Formatter
     - False: Refiner로 개선 필요
     """
     review = state.get("review", {})
-    score = review.get("overall_score", 5)
+    score = review.get("overall_score", QualityThresholds.FALLBACK_SCORE)
     verdict = review.get("verdict", "REVISE")
-    return score >= 9 and verdict == "PASS"
+    return QualityThresholds.is_pass(score) and verdict == "PASS"
 
 
 def create_reviewer_routing_branch() -> RunnableBranch:
@@ -1054,26 +1054,25 @@ def create_workflow() -> StateGraph:
         """
         logger = get_file_logger()
         review = state.get("review", {})
-        score = review.get("overall_score", 5)
+        score = review.get("overall_score", QualityThresholds.FALLBACK_SCORE)
         verdict = review.get("verdict", "REVISE")
-        skip_threshold = settings.DISCUSSION_SKIP_THRESHOLD
 
         # PASS 판정: 바로 완료
-        if score >= settings.SCORE_THRESHOLD_PASS and verdict == "PASS":
+        if QualityThresholds.is_pass(score) and verdict == "PASS":
             logger.info(f"[ROUTING] 품질 우수 ({score}점), 바로 완료")
             return RouteKey.COMPLETE
 
         # FAIL 판정: Analyzer 복귀
-        if score < settings.SCORE_THRESHOLD_FAIL or verdict == "FAIL":
+        if QualityThresholds.is_fail(score) or verdict == "FAIL":
             logger.info(f"[ROUTING] 품질 부족 ({score}점), Analyzer 복귀")
             return RouteKey.RESTART
 
-        # 중간 점수 (7-8): Discussion 스킵하고 바로 Refine
-        if score >= skip_threshold:
-            logger.info(f"[ROUTING] 중간 품질 ({score}점 >= {skip_threshold}), Discussion 스킵 → Refine")
+        # 중간 점수: Discussion 스킵하고 바로 Refine
+        if QualityThresholds.should_skip_discussion(score):
+            logger.info(f"[ROUTING] 중간 품질 ({score}점), Discussion 스킵 → Refine")
             return RouteKey.SKIP_TO_REFINE
 
-        # 낮은 점수 (5-6): Discussion 필요
+        # 낮은 점수: Discussion 필요
         logger.info(f"[ROUTING] 개선 필요 ({score}점), Discussion 진행")
         return RouteKey.DISCUSS
 
