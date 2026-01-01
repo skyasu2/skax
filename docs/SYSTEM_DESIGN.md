@@ -20,40 +20,99 @@ LangGraph를 기반으로 구축되었으며, **Supervisor 패턴**과 **DAG(Dir
 
 ## 2. 시스템 아키텍처 (Architecture)
 
-### 2.1 High-Level Design (Supervisor & DAG)
-
-시스템은 크게 **관리 계층(Supervisor)**과 **실행 계층(Specialists/Workers)**으로 나뉩니다.
+### 2.1 High-Level Architecture (C4 Container Style)
 
 ```mermaid
-graph TD
-    User((User)) -->|Input| Analyzer(Analyzer Agent)
-    Analyzer -->|Plan| Supervisor{Supervisor}
+C4Context
+    title PlanCraft System Architecture
     
-    subgraph "Specialist Squad (Parallel Execution)"
-        Supervisor -->|Plan| Market[Market Agent]
-        Market -->|Data| BM[Business Model Agent]
-        BM -->|Data| Financial[Financial Agent]
-        BM -->|Data| Risk[Risk Agent]
-    end
+    Person(user, "User", "비즈니스 기획 아이디어를 가진 사용자")
+    System(app, "PlanCraft Agent", "LangGraph 기반 멀티 에이전트 시스템")
     
-    Specialist_Squad -->|Report| Writer(Writer Agent)
-    Writer -->|Draft| Reviewer(Reviewer Agent)
-    Reviewer -->|Feedback| Refiner(Refiner Agent)
-    Refiner -->|Strategy| Writer
-    Reviewer -->|Pass| Formatter(Formatter Agent)
-    Formatter -->|Output| User
+    System_Ext(aoai, "Azure OpenAI", "GPT-4o, GPT-4o-mini")
+    System_Ext(tavily, "Tavily Search", "External Web Search API")
+    System_Ext(rag_db, "FAISS DB", "Internal Knowledge Base")
+
+    Rel(user, app, "Uses", "Streamlit UI")
+    Rel(app, aoai, "LLM Inference", "REST API")
+    Rel(app, tavily, "Fetch Market Data", "API")
+    Rel(app, rag_db, "Retrieve Guides", "Vector Search")
 ```
 
-### 2.2 Plan-and-Execute Pattern
+### 2.2 Core Workflow (Sequence Diagram)
 
-PlanCraft V2.1은 순차적 실행(Sequential)의 한계를 극복하기 위해 **Plan-and-Execute** 패턴을 도입했습니다.
+Supervisor와 Specialist Agents가 어떻게 병렬로 협업하는지 보여주는 평행 실행(Parallel Execution) 시퀀스입니다.
 
-1.  **Planning**: Supervisor가 사용자 요청을 분석하여 `Execution Plan`을 수립합니다.
-    *   예: "시장 분석과 BM 설계가 필요하다."
-2.  **Execution (DAG)**: 의존성에 따라 에이전트를 병렬로 실행합니다.
-    *   `Market Agent` (독립 실행)
-    *   `BM Agent` (Market 결과 대기)
-    *   `Financial` & `Risk` (BM 결과 나오면 동시 실행)
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as Analyzer
+    participant S as Supervisor
+    participant Mk as Market Agent
+    participant BM as BM Agent
+    participant W as Writer
+    participant R as Reviewer
+
+    U->>A: "중고 거래 앱 기획해줘"
+    A->>S: Analysis Result (Constraints 포함)
+    
+    rect rgb(240, 248, 255)
+    note right of S: Plan-and-Execute Phase
+    S->>S: Execution Plan 수립
+    
+    par Parallel Execution
+        S->>Mk: Market Analysis 요청
+        Mk->>Mk: Web Search (Tavily)
+        Mk-->>S: Market Data (20조원 시장)
+    and
+        S->>BM: BM Design 요청 (제약조건 준수)
+        BM-->>S: BM Strategy (지역 광고)
+    end
+    
+    S->>S: Integrate Results (Context Merging)
+    end
+    
+    S->>W: Full Context 전달
+    W->>W: Draft Generation
+    W->>R: 1st Draft
+    R-->>U: Final Output (or Refine Loop)
+```
+
+### 2.3 HITL State Machine (Process Flow)
+
+사용자 개입(Human-in-the-Loop)과 상태 전이를 보여주는 다이어그램입니다.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Analyze
+    
+    state Analyze {
+        [*] --> CheckIntent
+        CheckIntent --> NeedInfo: 모호함
+        CheckIntent --> AutoPlan: 명확함
+        
+        state NeedInfo {
+            [*] --> OptionPause
+            OptionPause --> UserInput: Interrupt
+            UserInput --> Resume: Resume
+        }
+    }
+    
+    AutoPlan --> Generate
+    Resume --> Generate
+    
+    state Generate {
+        [*] --> Structurer
+        Structurer --> Writer
+        Writer --> Reviewer
+    }
+    
+    Reviewer --> Refiner: Score < 9 (Revise)
+    Refiner --> Writer: Feedback Strategy
+    Reviewer --> Formatter: Score >= 9 (Pass)
+    
+    Formatter --> [*]
+```
 
 ---
 
