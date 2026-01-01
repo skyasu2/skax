@@ -1,5 +1,5 @@
 # =============================================================================
-# PlanCraft Agent - Docker Compose (v2.1)
+# PlanCraft Agent - Docker Compose (v2.2)
 # Multi-Agent AI 기획서 생성 서비스
 # =============================================================================
 #
@@ -8,14 +8,15 @@
 #   docker-compose logs -f        # 로그 확인
 #   docker-compose down           # 종료
 #
-# 환경변수 (.env 파일 필수):
+# 환경변수 (.env 또는 .env.local 파일 필수):
 #   AOAI_ENDPOINT=https://xxx.openai.azure.com/
 #   AOAI_API_KEY=xxx
-#   AOAI_API_VERSION=2024-08-01-preview
-#   AOAI_DEPLOY_CHAT=gpt-4o
-#   AOAI_DEPLOY_CHAT_MINI=gpt-4o-mini
-#   AOAI_DEPLOY_EMBED_LARGE=text-embedding-3-large
+#   AOAI_DEPLOY_GPT4O=gpt-4o
+#   AOAI_DEPLOY_GPT4O_MINI=gpt-4o-mini
+#   AOAI_DEPLOY_EMBED_3_LARGE=text-embedding-3-large
 #   TAVILY_API_KEY=xxx (선택)
+#   LANGCHAIN_TRACING_V2=true (LangSmith 활성화)
+#   LANGCHAIN_API_KEY=xxx (LangSmith API 키)
 #
 # =============================================================================
 
@@ -26,17 +27,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: plancraft-agent:2.1
+    image: plancraft-agent:2.2
     container_name: plancraft-agent
     ports:
       - "8501:8501"
     env_file:
-      - .env
+      - .env.local  # .env.local 우선 사용 (.env도 가능)
     environment:
       - PYTHONPATH=/app
       - CHECKPOINTER_TYPE=memory
-      # LangSmith 트레이싱 (선택)
+      # LangSmith 트레이싱 (.env.local에서 설정됨)
+      # 아래는 .env.local이 없는 경우 직접 설정
       # - LANGCHAIN_TRACING_V2=true
+      # - LANGCHAIN_API_KEY=your_api_key
       # - LANGCHAIN_PROJECT=PlanCraft-Prod
     volumes:
       # 로그 및 출력 영속화

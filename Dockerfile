@@ -1,6 +1,6 @@
 # =============================================================================
 # PlanCraft Agent - Production Dockerfile
-# Multi-Agent AI 기획서 생성 서비스 (v2.1)
+# Multi-Agent AI 기획서 생성 서비스 (v2.2)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -46,6 +46,7 @@ COPY graph/ ./graph/
 COPY prompts/ ./prompts/
 COPY tools/ ./tools/
 COPY utils/ ./utils/
+COPY ui/ ./ui/
 COPY rag/ ./rag/
 COPY app.py .
 COPY README.md .
