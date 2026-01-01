@@ -87,6 +87,54 @@ GENERATION_PRESETS = {
 DEFAULT_PRESET = "balanced"
 
 
+# =============================================================================
+# 품질 점수 임계값 (Quality Thresholds)
+# =============================================================================
+# 매직 넘버를 중앙화하여 코드 전반에서 일관되게 사용합니다.
+
+class QualityThresholds:
+    """
+    품질 평가 점수 임계값
+
+    워크플로우 라우팅에서 사용되는 점수 기준을 중앙 관리합니다.
+    """
+    # 리뷰어 판정 기준
+    SCORE_PASS = 9          # 이상이면 PASS (바로 포맷팅)
+    SCORE_FAIL = 5          # 미만이면 FAIL (재분석)
+    SCORE_REVISE_MIN = 5    # 5~8점: REVISE (개선 필요)
+    SCORE_REVISE_MAX = 8
+
+    # 토론 스킵 기준 (DISCUSSION_SKIP)
+    DISCUSSION_SKIP = 9     # 9점 이상이면 토론 없이 바로 개선
+
+    # 재시작 제한
+    MAX_RESTART_COUNT = 2   # 최대 재분석 횟수
+    MAX_REFINE_LOOPS = 3    # 최대 개선 루프
+
+    # Fallback 점수 (리뷰어 오류 시)
+    FALLBACK_SCORE = 7      # 리뷰어 실패 시 기본 점수
+
+    @classmethod
+    def is_pass(cls, score: int) -> bool:
+        """점수가 통과 기준인지 확인"""
+        return score >= cls.SCORE_PASS
+
+    @classmethod
+    def is_fail(cls, score: int) -> bool:
+        """점수가 실패 기준인지 확인"""
+        return score < cls.SCORE_FAIL
+
+    @classmethod
+    def is_revise(cls, score: int) -> bool:
+        """점수가 개선 필요 범위인지 확인"""
+        return cls.SCORE_REVISE_MIN <= score <= cls.SCORE_REVISE_MAX
+
+    @classmethod
+    def should_skip_discussion(cls, score: int) -> bool:
+        """토론을 건너뛰어도 되는 점수인지 확인"""
+        return score >= cls.DISCUSSION_SKIP
+
+
 def get_preset(preset_key: str = None) -> GenerationPreset:
     """
     프리셋 설정 가져오기

@@ -9,6 +9,55 @@ from typing import Dict, Optional
 from datetime import datetime
 from utils.llm import get_llm
 
+
+# =============================================================================
+# 프롬프트 인젝션 방어
+# =============================================================================
+
+# 위험한 프롬프트 인젝션 패턴 (대소문자 무시)
+DANGEROUS_PATTERNS = [
+    r"ignore\s+(above|previous|all)",
+    r"disregard\s+(above|previous|all)",
+    r"forget\s+(above|previous|all)",
+    r"new\s+instructions?",
+    r"system\s*prompt",
+    r"jailbreak",
+    r"pretend\s+you",
+    r"act\s+as\s+if",
+    r"bypass",
+    r"override",
+    r"\bDAN\b",  # "Do Anything Now" jailbreak
+    r"ignore\s+safety",
+]
+
+
+def _sanitize_user_input(user_input: str) -> str:
+    """
+    사용자 입력을 정제하여 프롬프트 인젝션 공격을 방어합니다.
+
+    Args:
+        user_input: 원본 사용자 입력
+
+    Returns:
+        str: 정제된 입력 (위험 패턴 감지 시 빈 문자열 반환)
+    """
+    if not user_input:
+        return ""
+
+    # 위험한 패턴 감지
+    for pattern in DANGEROUS_PATTERNS:
+        if re.search(pattern, user_input, re.IGNORECASE):
+            print(f"[WARN] 프롬프트 인젝션 패턴 감지됨: {pattern}")
+            return ""  # 검색 스킵 유도
+
+    # 제어 문자 제거 (탭, 줄바꿈은 유지)
+    sanitized = ''.join(
+        char for char in user_input
+        if ord(char) >= 32 or char in '\n\t'
+    )
+
+    return sanitized.strip()
+
 # =============================================================================
 # 웹 검색 필요 여부 판단 키워드
 # =============================================================================
@@ -68,14 +117,20 @@ def should_search_web(user_input: str, rag_context: str = "") -> Dict[str, any]:
 def _generate_search_query_with_llm(user_input: str) -> str:
     """LLM을 사용하여 최적의 검색 쿼리를 생성합니다."""
     try:
+        # [보안] 프롬프트 인젝션 방어
+        sanitized_input = _sanitize_user_input(user_input)
+        if not sanitized_input:
+            print("[WARN] 입력이 정제 후 비어있음, 검색 스킵")
+            return ""
+
         llm = get_llm(model_type="gpt-4o-mini", temperature=0.3)
-        
+
         # [수정] 입력이 너무 길면 가장 최근 내용(뒤쪽) 위주로 자름 (컨텍스트 오염 방지)
         # 이전 턴의 전체 대화나 로그가 넘어올 경우를 대비해 뒷부분(최신 요청)을 우선합니다.
-        if len(user_input) > 2000:
-            truncated_input = user_input[-2000:]
+        if len(sanitized_input) > 2000:
+            truncated_input = sanitized_input[-2000:]
         else:
-            truncated_input = user_input
+            truncated_input = sanitized_input
 
         system_prompt = (
             "당신은 전문적인 '웹 검색 키워드 추출기'입니다. 주어진 텍스트에서 기획서 작성에 필요한 핵심 주제를 파악하여 검색 쿼리를 생성하세요.\n\n"

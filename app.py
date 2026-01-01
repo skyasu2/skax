@@ -337,6 +337,11 @@ def render_main():
     # =========================================================================
     st.markdown("---")
     with st.expander("📎 참고 자료 추가 (파일 업로드)", expanded=False):
+        # 파일 업로드 보안 설정
+        MAX_FILE_SIZE_MB = 10
+        MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+        ALLOWED_EXTENSIONS = {"txt", "md", "docx", "pdf"}
+
         uploaded_file = st.file_uploader(
             "기획서 생성에 참고할 파일 (PDF, DOCX, TXT 등)",
             type=["txt", "md", "docx", "pdf"],
@@ -344,11 +349,26 @@ def render_main():
         )
         if uploaded_file:
             try:
-                content = uploaded_file.read().decode("utf-8", errors='ignore')
-                st.session_state.uploaded_content = content
-                st.success(f"✅ '{uploaded_file.name}' 업로드됨")
+                # 1. 파일 크기 검증
+                file_size = len(uploaded_file.getbuffer())
+                if file_size > MAX_FILE_SIZE_BYTES:
+                    st.error(f"파일이 너무 큽니다. 최대 {MAX_FILE_SIZE_MB}MB까지 허용됩니다.")
+                # 2. 파일명 검증 (경로 조회 방지)
+                elif ".." in uploaded_file.name or "/" in uploaded_file.name or "\\" in uploaded_file.name:
+                    st.error("유효하지 않은 파일명입니다.")
+                # 3. 확장자 재검증
+                elif not uploaded_file.name.split(".")[-1].lower() in ALLOWED_EXTENSIONS:
+                    st.error("지원하지 않는 파일 형식입니다.")
+                else:
+                    content = uploaded_file.read().decode("utf-8", errors='ignore')
+                    # 4. 콘텐츠 길이 제한 (50,000자)
+                    if len(content) > 50000:
+                        content = content[:50000]
+                        st.warning("파일이 너무 길어 일부만 사용됩니다 (50,000자 제한)")
+                    st.session_state.uploaded_content = content
+                    st.success(f"✅ '{uploaded_file.name}' 업로드됨 ({file_size // 1024}KB)")
             except Exception as e:
-                st.error(f"파일 읽기 실패: {str(e)}")
+                st.error("파일을 읽을 수 없습니다. 파일 형식을 확인해주세요.")
 
     # Prefill 확인 UI
     if st.session_state.prefill_prompt and not st.session_state.pending_input:

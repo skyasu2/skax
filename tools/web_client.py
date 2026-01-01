@@ -18,7 +18,83 @@ langchain-mcp-adapters를 사용하여 LangChain/LangGraph와 통합합니다.
 """
 
 import asyncio
+import ipaddress
 from typing import Optional, List, Dict, Any
+from urllib.parse import urlparse
+
+
+# =============================================================================
+# SSRF 방어: URL 검증
+# =============================================================================
+
+# 차단할 내부 호스트명
+BLOCKED_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+    "[::1]",
+}
+
+# 허용 프로토콜
+ALLOWED_SCHEMES = {"http", "https"}
+
+
+def _is_safe_url(url: str) -> bool:
+    """
+    URL이 안전한지 검증합니다 (SSRF 방어).
+
+    차단 대상:
+    - 내부 IP (private, loopback, link-local)
+    - localhost 및 유사 호스트명
+    - http/https 외의 프로토콜 (file://, ftp:// 등)
+
+    Args:
+        url: 검증할 URL
+
+    Returns:
+        bool: 안전하면 True, 위험하면 False
+    """
+    try:
+        parsed = urlparse(url)
+
+        # 1. 프로토콜 검증
+        if parsed.scheme.lower() not in ALLOWED_SCHEMES:
+            print(f"[SSRF] 차단된 프로토콜: {parsed.scheme}")
+            return False
+
+        # 2. 호스트명 검증
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        hostname_lower = hostname.lower()
+
+        # 3. 차단된 호스트명 검사
+        if hostname_lower in BLOCKED_HOSTS:
+            print(f"[SSRF] 차단된 호스트: {hostname}")
+            return False
+
+        # 4. IP 주소인 경우 내부 IP 검사
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                print(f"[SSRF] 차단된 내부 IP: {hostname}")
+                return False
+        except ValueError:
+            # 도메인명인 경우 (IP가 아님) - 허용
+            pass
+
+        # 5. 포트 검증 (선택적: 일반적인 웹 포트만 허용)
+        if parsed.port and parsed.port not in {80, 443, 8080, 8443}:
+            print(f"[SSRF] 비표준 포트: {parsed.port}")
+            # 비표준 포트는 경고만 하고 허용 (필요시 차단으로 변경)
+
+        return True
+
+    except Exception as e:
+        print(f"[SSRF] URL 파싱 오류: {e}")
+        return False
 
 
 class WebClient:
@@ -149,6 +225,10 @@ class WebClient:
             str: 추출된 텍스트 콘텐츠
         """
         try:
+            # [보안] SSRF 방어: URL 검증
+            if not _is_safe_url(url):
+                return "[보안 오류: 접근할 수 없는 URL입니다]"
+
             import requests
             from bs4 import BeautifulSoup
 
@@ -156,7 +236,7 @@ class WebClient:
                 "User-Agent": "Mozilla/5.0 (compatible; PlanCraftBot/1.0)"
             }
 
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=10, verify=True)
             response.raise_for_status()
 
             # HTML 파싱
