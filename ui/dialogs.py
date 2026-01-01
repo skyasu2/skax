@@ -98,7 +98,9 @@ def show_plan_dialog():
     # 탭
     tab1, tab2 = st.tabs(["📖 미리보기", "📝 마크다운"])
     with tab1:
-        st.markdown(selected_plan)
+        # [FIX] Mermaid 다이어그램 시각적 렌더링 지원
+        from ui.components import render_markdown_with_mermaid
+        render_markdown_with_mermaid(selected_plan)
     with tab2:
         st.code(selected_plan, language="markdown")
 

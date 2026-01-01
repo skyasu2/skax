@@ -27,6 +27,49 @@ def render_mermaid(code: str, height: int = 400):
     )
 
 
+def render_markdown_with_mermaid(content: str):
+    """
+    [NEW] Mermaid 다이어그램을 포함한 마크다운 렌더링
+
+    마크다운 콘텐츠에서 ```mermaid 블록을 추출하여
+    별도의 render_mermaid()로 시각화하고, 나머지는 st.markdown()으로 렌더링합니다.
+
+    Args:
+        content: 마크다운 문자열 (Mermaid 블록 포함 가능)
+    """
+    import re
+
+    # Mermaid 블록 패턴: ```mermaid ... ```
+    mermaid_pattern = r'```mermaid\s*([\s\S]*?)```'
+
+    # 모든 Mermaid 블록 찾기
+    mermaid_blocks = re.findall(mermaid_pattern, content)
+
+    if not mermaid_blocks:
+        # Mermaid 블록이 없으면 그냥 마크다운 렌더링
+        st.markdown(content)
+        return
+
+    # Mermaid 블록을 플레이스홀더로 대체
+    parts = re.split(mermaid_pattern, content)
+
+    # parts 구조: [text_before, mermaid_code_1, text_between, mermaid_code_2, ...]
+    # 짝수 인덱스: 일반 텍스트, 홀수 인덱스: Mermaid 코드
+    for i, part in enumerate(parts):
+        if not part.strip():
+            continue
+
+        if i % 2 == 0:
+            # 일반 마크다운 텍스트
+            st.markdown(part)
+        else:
+            # Mermaid 코드 블록 - 시각적 렌더링
+            st.markdown("---")
+            st.caption("📊 Mermaid 다이어그램")
+            render_mermaid(part.strip(), height=300)
+            st.markdown("---")
+
+
 def render_visual_timeline(step_history: list):
     """
     실행 이력 시각화 (텍스트 타임라인)

@@ -1,7 +1,7 @@
 
 import pytest
 from graph.hitl_config import create_option_payload, create_base_payload, InterruptType
-from pydantic import ValidationError
+# [REMOVED] ValidationError import - fail-fast 패턴으로 변경되어 ValueError 사용
 
 class TestInterruptSafety:
     """
@@ -44,25 +44,20 @@ class TestInterruptSafety:
 
     def test_invalid_option_structure(self):
         """옵션 구조가 잘못되면 Pydantic 검증에서 실패해야 함"""
-        # create_option_payload 내부에서 Pydantic 검증을 수행하므로,
-        # 잘못된 options를 넘기면 ValidationError가 발생할 것임
-        # (현재 구현은 try-except로 warning만 띄우고 원본 반환하지만, 
-        #  엄격한 테스트를 위해 로그 확인이나 로직 수정 필요. 일단 호출 자체는 성공하되 경고가 뜸)
-        
-        # 만약 Pydantic 검증 실패 시 raise하도록 로직을 변경했다면 여기서 잡힘.
-        # 현재는 안전장치로 pass하므로 payload가 그대로 반환됨.
-        # 따라서 반환된 payload가 Pydantic 검증에 실패하는지 확인.
-        
-        invalid_payload = create_option_payload(
-            question="Invalid Options",
-            options=[{"wrong_key": "val"}], # title/description 누락
-            node_ref="test_node",
-            interrupt_id="test_id_002"
-        )
-        
-        from graph.interrupt_types import OptionInterruptPayload
-        with pytest.raises(ValidationError):
-            OptionInterruptPayload(**invalid_payload)
+        # [FIX] create_option_payload는 이제 fail-fast 원칙에 따라
+        # 잘못된 옵션 구조에서 ValueError를 직접 발생시킴
+        # (이전: graceful degradation으로 원본 반환 → 현재: 즉시 예외 발생)
+
+        with pytest.raises(ValueError) as exc_info:
+            create_option_payload(
+                question="Invalid Options",
+                options=[{"wrong_key": "val"}],  # title/description 누락
+                node_ref="test_node",
+                interrupt_id="test_id_002"
+            )
+
+        # 에러 메시지에 Payload Validation Failed가 포함되어야 함
+        assert "Payload Validation Failed" in str(exc_info.value)
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

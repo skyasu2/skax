@@ -227,10 +227,25 @@ Action Items (실행 지침):
     if preset.include_diagrams > 0 or preset.include_charts > 0:
         visual_instruction = "\n\n📊 **시각적 요소 필수 요구사항 (Visual Elements Required)**:\n"
         if preset.include_diagrams > 0:
-            visual_instruction += f"- **Mermaid 다이어그램**: {preset.include_diagrams}개 이상 포함 (사용자 여정 또는 시스템 아키텍처)\n"
+            # [FIX] 코드블록 문법을 명시적으로 지시
+            visual_instruction += f"""- **Mermaid 다이어그램**: {preset.include_diagrams}개 이상 포함
+  ⚠️ 반드시 아래 형식으로 작성 (코드블록 필수!):
+  ```mermaid
+  graph LR
+      A[단계1] --> B[단계2]
+  ```
+  (사용자 여정 또는 시스템 아키텍처 시각화)
+"""
         if preset.include_charts > 0:
-            visual_instruction += f"- **마크다운 차트/그래프**: {preset.include_charts}개 이상 포함 (MAU 성장, 매출 추이 등에 ▓░ 또는 █ 막대 사용)\n"
-        visual_instruction += "\n위 시각적 요소가 없으면 기획서가 불완전합니다!\n"
+            # [FIX] ASCII 차트 형식 명시
+            visual_instruction += f"""- **ASCII 막대 그래프**: {preset.include_charts}개 이상 포함
+  ⚠️ 반드시 테이블 내에서 아래 형식 사용:
+  | 월 | MAU | 그래프 |
+  |---|---:|---|
+  | 1개월 | 1,000 | ▓░░░░░░░░░ 10% |
+  | 6개월 | 5,000 | ▓▓▓▓▓░░░░░ 50% |
+"""
+        visual_instruction += "\n🚨 위 시각적 요소가 없으면 검증 실패로 재작성됩니다!\n"
         logger.info(f"[Writer] 시각적 요소 요청: 다이어그램 {preset.include_diagrams}개, 그래프 {preset.include_charts}개")
 
     # 2. 프롬프트 구성 (시간 컨텍스트 주입)
@@ -459,12 +474,25 @@ Action Items (실행 지침):
             if validation_issues:
                 logger.warning(f"[Writer Reflection] ⚠️ 검증 실패: {', '.join(validation_issues)}. 재작성합니다.")
 
-                # 피드백 메시지 추가하여 다시 시도
+                # [FIX] 피드백 메시지 강화 - 구체적 예시 포함
                 visual_feedback = ""
                 if preset.include_diagrams > 0:
-                    visual_feedback += f"\n- Mermaid 다이어그램 필수: ```mermaid 코드블록으로 사용자 여정 또는 시스템 아키텍처를 표현하세요!"
+                    visual_feedback += """
+- 🚨 Mermaid 다이어그램 필수! 아래 형식을 복사해서 사용:
+```mermaid
+graph LR
+    A[인지/유입] --> B[탐색/가입]
+    B --> C[핵심 기능 사용]
+    C --> D[전환/결제]
+```
+  (반드시 ```mermaid로 시작하고 ```로 끝나야 함!)"""
                 if preset.include_charts > 0:
-                    visual_feedback += f"\n- ASCII 차트 필수: ▓░█ 등의 문자로 MAU 성장, 매출 추이 막대 그래프를 포함하세요!"
+                    visual_feedback += """
+- 🚨 ASCII 막대 그래프 필수! 아래 형식을 복사해서 사용:
+| 월 | MAU | 그래프 |
+|---|---:|---|
+| 1개월 | 1,000 | ▓░░░░░░░░░ 10% |
+| 6개월 | 5,000 | ▓▓▓▓▓░░░░░ 50% |"""
 
                 # [NEW] Specialist 데이터 누락 시 구체적 피드백 추가
                 specialist_feedback = ""
