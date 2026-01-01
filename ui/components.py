@@ -129,6 +129,8 @@ def render_specialist_agents_status(specialist_analysis: dict = None, is_running
     agents = [
         {"key": "market_analysis", "name": "시장 분석", "icon": "📊", "desc": "TAM/SAM/SOM, 경쟁사"},
         {"key": "business_model", "name": "비즈니스 모델", "icon": "💰", "desc": "수익 모델, 가격 전략"},
+        {"key": "tech_architecture", "name": "기술 아키텍처", "icon": "🏗️", "desc": "스택, 인프라, 로드맵"},
+        {"key": "content_strategy", "name": "콘텐츠 전략", "icon": "📣", "desc": "브랜딩, 유입, 마케팅"},
         {"key": "financial_plan", "name": "재무 계획", "icon": "📈", "desc": "투자비, BEP, 손익"},
         {"key": "risk_analysis", "name": "리스크", "icon": "⚠️", "desc": "8가지 리스크 분석"},
     ]
@@ -155,9 +157,23 @@ def render_specialist_agents_status(specialist_analysis: dict = None, is_running
         """, unsafe_allow_html=True)
         
         # 진행 중 애니메이션
-        cols = st.columns(4)
+        # 진행 중 애니메이션 (3열 그리드)
+        cols = st.columns(3)
         for i, agent in enumerate(agents):
-            with cols[i]:
+            col_idx = i % 3
+            if col_idx == 0 and i > 0:
+                 cols += st.columns(3) # 새 줄 추가 (이 방식은 streamlit에서 안됨. 미리 6개 깔거나 나눠야 함)
+            
+            # 간단히 3열 2행으로 처리
+            col_to_use = cols[col_idx] if i < 3 else st.columns(3)[col_idx] if i == 3 else cols[col_idx] # 복잡함.
+            
+        # 3열 Grid Helper
+        grid_cols = st.columns(3)
+        grid_cols_2 = st.columns(3)
+        
+        for i, agent in enumerate(agents):
+            target_col = grid_cols[i] if i < 3 else grid_cols_2[i-3]
+            with target_col:
                 st.markdown(f"""
                 <div style="
                     text-align: center;
@@ -198,12 +214,17 @@ def render_specialist_agents_status(specialist_analysis: dict = None, is_running
     """, unsafe_allow_html=True)
     
     # 완료된 에이전트 결과 표시
-    cols = st.columns(4)
+    # 완료된 에이전트 결과 표시 (3열 그리드)
+    grid_cols = st.columns(3)
+    grid_cols_2 = st.columns(3)
+    
     for i, agent in enumerate(agents):
+        target_col = grid_cols[i] if i < 3 else grid_cols_2[i-3]
+        
         result = specialist_analysis.get(agent["key"])
         is_done = result is not None
         
-        with cols[i]:
+        with target_col:
             if is_done:
                 st.markdown(f"""
                 <div style="
