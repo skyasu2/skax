@@ -592,47 +592,111 @@ class NativeSupervisor:
                     stats.get_agent_stats(agent_id).record_error(error_msg, categorize_error(e))
         return None
 
-    def _get_fallback_result(self, agent_id: str, context: Dict) -> Dict:
+    def _get_fallback_result(self, agent_id: str, context: Dict, error_msg: str = "") -> Dict:
         """
         에이전트 실패 시 Fallback 결과 생성
 
-        각 에이전트별로 최소한의 유효한 데이터 구조 반환
+        각 에이전트별로 최소한의 유효한 데이터 구조와 사용자 친화적 메시지를 반환합니다.
+
+        Returns:
+            Dict: fallback 데이터 + 메타 정보
+                - _fallback_reason: 사용자에게 표시할 실패 이유
+                - _fallback_guidance: 후속 조치 안내
+                - _fallback_severity: 심각도 (info/warning/error)
         """
         service = context.get("service_overview", "서비스")[:50]
 
-        fallback_map = {
+        # 에이전트별 사용자 친화적 메시지
+        user_messages = {
             "market": {
-                "tam": {"value": "분석 불가", "description": f"{service} 관련 시장"},
-                "sam": {"value": "분석 불가", "description": "접근 가능 시장"},
-                "som": {"value": "분석 불가", "description": "획득 가능 시장"},
-                "competitors": [],
-                "trends": ["시장 분석 데이터 수집 실패"]
+                "reason": "시장 분석 데이터를 수집하지 못했습니다",
+                "guidance": "외부 시장 조사 자료를 첨부하시면 더 정확한 분석이 가능합니다",
+                "severity": "warning",
             },
             "bm": {
-                "revenue_model": "수익 모델 분석 필요",
-                "pricing": {"strategy": "가격 전략 분석 필요"},
-                "moat": "경쟁 우위 분석 필요"
+                "reason": "비즈니스 모델 분석에 필요한 정보가 부족합니다",
+                "guidance": "수익 구조나 가격 정책에 대한 추가 정보를 제공해주세요",
+                "severity": "warning",
             },
             "financial": {
-                "initial_investment": "초기 투자 분석 필요",
-                "monthly_pl": "손익 분석 필요",
-                "bep": "손익분기점 분석 필요"
+                "reason": "재무 분석을 위한 데이터가 충분하지 않습니다",
+                "guidance": "예상 비용, 매출 목표 등 재무 관련 정보를 추가해주세요",
+                "severity": "info",
             },
             "risk": {
-                "risks": [{"category": "분석 실패", "description": "리스크 분석 데이터 수집 실패"}],
-                "mitigation": "추가 분석 필요"
+                "reason": "리스크 분석 중 오류가 발생했습니다",
+                "guidance": "기본적인 리스크 요소만 포함됩니다. 상세 분석이 필요하면 재시도해주세요",
+                "severity": "warning",
             },
             "tech": {
-                "recommended_stack": ["기술 스택 분석 필요"],
-                "architecture_desc": "아키텍처 분석 필요"
+                "reason": "기술 스택 분석에 실패했습니다",
+                "guidance": "원하시는 기술 스택이나 개발 환경을 직접 명시해주세요",
+                "severity": "info",
             },
             "content": {
-                "brand_concept": "브랜딩 분석 필요",
-                "acquisition_strategy": "유입 전략 분석 필요"
-            }
+                "reason": "콘텐츠 전략 분석에 실패했습니다",
+                "guidance": "타겟 고객층이나 마케팅 채널에 대한 정보를 추가해주세요",
+                "severity": "info",
+            },
         }
 
-        return fallback_map.get(agent_id, {"note": "분석 실패"})
+        # 에이전트별 Fallback 데이터
+        fallback_data = {
+            "market": {
+                "tam": {"value": "추가 분석 필요", "description": f"{service} 관련 전체 시장"},
+                "sam": {"value": "추가 분석 필요", "description": "접근 가능 시장 규모"},
+                "som": {"value": "추가 분석 필요", "description": "획득 목표 시장"},
+                "competitors": [],
+                "trends": ["시장 트렌드 데이터 수집 필요"],
+            },
+            "bm": {
+                "revenue_model": "수익 모델 정의 필요",
+                "pricing": {"strategy": "가격 전략 수립 필요", "tiers": []},
+                "moat": "경쟁 우위 요소 분석 필요",
+            },
+            "financial": {
+                "initial_investment": "초기 투자 규모 산정 필요",
+                "monthly_pl": "월간 손익 예측 필요",
+                "bep": "손익분기점 분석 필요",
+                "funding_strategy": "자금 조달 전략 수립 필요",
+            },
+            "risk": {
+                "risks": [
+                    {"category": "운영", "description": "운영 리스크 분석 필요", "probability": "중", "impact": "중"},
+                    {"category": "시장", "description": "시장 리스크 분석 필요", "probability": "중", "impact": "중"},
+                ],
+                "mitigation": "리스크 대응 전략 수립 필요",
+            },
+            "tech": {
+                "recommended_stack": ["기술 스택 선정 필요"],
+                "architecture_desc": "시스템 아키텍처 설계 필요",
+                "infrastructure": "인프라 구성 계획 필요",
+            },
+            "content": {
+                "brand_concept": "브랜드 컨셉 개발 필요",
+                "acquisition_strategy": "고객 유입 전략 수립 필요",
+                "content_pillars": ["콘텐츠 방향성 정의 필요"],
+            },
+        }
+
+        # 기본 메시지
+        default_message = {
+            "reason": f"{agent_id} 분석 중 오류가 발생했습니다",
+            "guidance": "잠시 후 다시 시도하거나 관련 정보를 추가해주세요",
+            "severity": "warning",
+        }
+
+        # 결과 조합
+        msg = user_messages.get(agent_id, default_message)
+        data = fallback_data.get(agent_id, {"note": "분석 데이터 없음"})
+
+        return {
+            **data,
+            "_fallback_reason": msg["reason"],
+            "_fallback_guidance": msg["guidance"],
+            "_fallback_severity": msg["severity"],
+            "_original_error": error_msg[:200] if error_msg else None,
+        }
 
     def _handle_failed_dependencies(self, failed_agents: List[str], plan, results: Dict, context: Dict):
         """
