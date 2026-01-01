@@ -702,6 +702,99 @@ def make_multi_approval_chain(approvers: List[Dict[str, str]], final_goto: str):
 
 
 # =============================================================================
+# Pause State 초기화 유틸리티 (Resume 완료 후 정리)
+# =============================================================================
+
+def reset_pause_state() -> Dict[str, Any]:
+    """
+    Pause 관련 상태 필드를 초기화합니다.
+
+    Resume 완료 후 다음 Pause를 위해 상태를 정리합니다.
+    이 함수의 반환값을 update_state()에 spread하여 사용합니다.
+
+    Returns:
+        초기화할 필드들의 딕셔너리
+
+    Usage:
+        from graph.interrupt_utils import reset_pause_state
+        new_state = update_state(state, **reset_pause_state())
+
+    Note:
+        - last_resume_value, last_human_event는 감사 추적용으로 유지됨
+        - step_history는 누적되므로 초기화하지 않음
+    """
+    return {
+        # Interrupt 메타데이터 초기화
+        "last_interrupt": None,
+        "last_pause_type": None,
+
+        # 옵션 선택 관련 (다음 Pause를 위해 비움)
+        "options": [],
+        "option_question": None,
+
+        # 에러 상태 초기화
+        "error": None,
+        "error_category": None,
+        "last_error": None,
+    }
+
+
+def get_pause_state_checklist(state: PlanCraftState) -> Dict[str, Any]:
+    """
+    현재 Pause 관련 상태를 점검합니다.
+
+    디버깅 및 Resume 전 상태 확인용입니다.
+
+    Returns:
+        Pause 관련 필드들의 현재 값
+    """
+    return {
+        "has_pending_interrupt": state.get("last_interrupt") is not None,
+        "last_pause_type": state.get("last_pause_type"),
+        "options_count": len(state.get("options", [])),
+        "has_question": state.get("option_question") is not None,
+        "has_error": state.get("error") is not None,
+        "last_resume_value": state.get("last_resume_value"),
+    }
+
+
+def validate_resume_readiness(state: PlanCraftState) -> tuple[bool, List[str]]:
+    """
+    Resume 준비 상태를 검증합니다.
+
+    Resume 전에 호출하여 상태가 올바른지 확인합니다.
+
+    Returns:
+        (is_ready, errors): 준비 완료 여부와 에러 목록
+
+    Usage:
+        is_ready, errors = validate_resume_readiness(state)
+        if not is_ready:
+            raise StateError(f"Resume 불가: {errors}")
+    """
+    errors = []
+
+    # 필수 필드 확인
+    if not state.get("user_input"):
+        errors.append("user_input 누락")
+
+    if not state.get("thread_id"):
+        errors.append("thread_id 누락")
+
+    # 카운터 범위 검증
+    from utils.settings import settings
+    refine_count = state.get("refine_count", 0)
+    if refine_count > settings.MAX_REFINE_LOOPS:
+        errors.append(f"refine_count 초과: {refine_count} > {settings.MAX_REFINE_LOOPS}")
+
+    restart_count = state.get("restart_count", 0)
+    if restart_count > settings.MAX_RESTART_COUNT:
+        errors.append(f"restart_count 초과: {restart_count} > {settings.MAX_RESTART_COUNT}")
+
+    return (len(errors) == 0, errors)
+
+
+# =============================================================================
 # Public API Export
 # =============================================================================
 
@@ -728,4 +821,8 @@ __all__ = [
     # [ENHANCED] HITL 이벤트 라벨
     "HITLEventLabel",
     "get_hitl_event_label",
+    # [NEW] Pause State 초기화 유틸리티
+    "reset_pause_state",
+    "get_pause_state_checklist",
+    "validate_resume_readiness",
 ]
