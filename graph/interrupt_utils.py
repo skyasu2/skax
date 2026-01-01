@@ -207,11 +207,24 @@ def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> Pla
     """
     from graph.state import update_state
     import time
+    from datetime import datetime  # [NEW]
 
     # =========================================================================
     # [NEW] 인터럽트 타입 추출 (last_interrupt에서 가져오거나 기본값)
     # =========================================================================
     last_interrupt = state.get("last_interrupt") or {}
+    
+    # [NEW] 만료(Timeout) 체크
+    if last_interrupt.get("expires_at"):
+        try:
+            expires_at = datetime.fromisoformat(last_interrupt["expires_at"])
+            if datetime.now() > expires_at:
+                print(f"[HITL] Interrupt Expired! (Event ID: {last_interrupt.get('event_id')})")
+                # 만료 시 에러 상태 반환 (User에게 재시도 요청 또는 종료 유도)
+                return update_state(state, error="Time Limit Exceeded: 입력 시간이 만료되었습니다.")
+        except Exception as e:
+            print(f"[ERROR] Expiry Check Failed: {e}")
+
     pause_type = last_interrupt.get("type", "option")  # 기본값: option
     current_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 

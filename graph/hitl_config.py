@@ -116,6 +116,11 @@ STANDARD_PAYLOAD_FIELDS: Dict[str, PayloadFieldSpec] = {
         description="워크플로우 스레드 식별자",
         required=False,
     ),
+    "expires_at": PayloadFieldSpec(
+        name="expires_at",
+        description="인터럽트 만료 시각 (ISO 8601)",
+        required=False,
+    ),
 }
 
 
@@ -141,11 +146,19 @@ def create_base_payload(
     Returns:
         표준화된 페이로드 dict
     """
+    from datetime import timedelta
+    
+    now = datetime.now()
+    # 타임아웃 계산 (기본값: 설정된 시간 or 1시간)
+    timeout_sec = kwargs.get("timeout_seconds", HITL_DEFAULT_TIMEOUT)
+    expires_at = now + timedelta(seconds=timeout_sec)
+    
     payload = {
         # 필수 필드
         "event_id": str(uuid.uuid4()),
         "node_ref": node_ref,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now.isoformat(),
+        "expires_at": expires_at.isoformat(),  # [NEW] 만료 시간
         "type": interrupt_type.value,
         "question": question,
         
