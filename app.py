@@ -585,7 +585,8 @@ def render_main():
                             mermaid_code = export_plan_to_mermaid(final_result["_plan"])
                             if mermaid_code:
                                 with st.expander("🔗 실행 계획 다이어그램 (Mermaid)", expanded=True):
-                                     st.markdown(f"```mermaid\n{mermaid_code}\n```", unsafe_allow_html=True)
+                                     from ui.components import render_scalable_mermaid
+                                     render_scalable_mermaid(mermaid_code, height=400)
                                      st.caption("Supervisor가 수립하고 실행한 에이전트 협업 구조도입니다.")
 
                     else:

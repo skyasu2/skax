@@ -10,6 +10,50 @@ from ui.dynamic_form import render_pydantic_form  # [NEW]
   # [NEW] HTML 컴포넌트용
 
 
+
+def render_scalable_mermaid(mermaid_code: str, height: int = 300):
+    """
+    [NEW] Mermaid 다이어그램을 적절한 크기로 렌더링 (HTML/JS 활용)
+    기본 st.markdown보다 크기 제어가 용이하며, Fit-to-screen을 지원합니다.
+    """
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({{ startOnLoad: true, theme: 'neutral' }});
+        </script>
+        <style>
+            .mermaid-container {{
+                display: flex;
+                justify_content: center;
+                align-items: center;
+                width: 100%;
+                height: 100%;
+                overflow: hidden; 
+            }}
+            /* SVG 크기 자동 조절 (Fit to Container) */
+            svg {{
+                max-width: 100% !important;
+                max-height: {height}px !important;
+                height: auto !important;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="mermaid-container">
+            <div class="mermaid">
+                {mermaid_code}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    # iframe 높이를 조절하여 스크롤 없이 보이게 함
+    components.html(html_code, height=height+20, scrolling=False)
+
+
 def render_mermaid(code: str, height: int = 800, scale: float = 1.8):
     """
     Mermaid 다이어그램 렌더링 (사이드바 최적화)
