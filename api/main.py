@@ -46,13 +46,14 @@ async def health_check():
     return {"status": "healthy", "service": "plancraft-api"}
 
 
-def start_api_server(host: str = "127.0.0.1", port: int = 8000) -> threading.Thread:
+def start_api_server(host: str = "127.0.0.1", port: int = 8000, timeout: float = 10.0) -> threading.Thread:
     """
     Start API server in background thread
 
     Args:
         host: Server host address
         port: Server port number
+        timeout: Max seconds to wait for server startup
 
     Returns:
         Thread running the server
@@ -61,7 +62,15 @@ def start_api_server(host: str = "127.0.0.1", port: int = 8000) -> threading.Thr
 
     # Prevent duplicate server starts
     if _api_thread is not None and _api_thread.is_alive():
-        return _api_thread
+        # Verify server is responding
+        import httpx
+        try:
+            resp = httpx.get(f"http://{host}:{port}/health", timeout=2.0)
+            if resp.status_code == 200:
+                print(f"[API] Server already running on {host}:{port}")
+                return _api_thread
+        except Exception:
+            pass  # Server thread alive but not responding, restart
 
     config = uvicorn.Config(
         app,
@@ -78,9 +87,20 @@ def start_api_server(host: str = "127.0.0.1", port: int = 8000) -> threading.Thr
     _api_thread = threading.Thread(target=run_server, daemon=True)
     _api_thread.start()
 
-    # Wait for server to start
-    time.sleep(0.5)
+    # Wait for server to actually start (health check)
+    import httpx
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            resp = httpx.get(f"http://{host}:{port}/health", timeout=1.0)
+            if resp.status_code == 200:
+                print(f"[API] Server started successfully on {host}:{port}")
+                return _api_thread
+        except Exception:
+            pass
+        time.sleep(0.3)
 
+    print(f"[API] WARNING: Server may not be ready after {timeout}s")
     return _api_thread
 
 
