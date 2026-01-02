@@ -46,6 +46,7 @@ class WorkflowService:
         self,
         thread_id: str,
         resume_data: Dict[str, Any],
+        generation_preset: str = "balanced",  # [FIX] 프리셋 파라미터 추가
     ):
         """Resume workflow in background"""
         from graph.workflow import run_plancraft
@@ -59,6 +60,7 @@ class WorkflowService:
             user_input="",
             thread_id=thread_id,
             resume_command={"resume": resume_data},
+            generation_preset=generation_preset,  # [FIX] 프리셋 전달
             callbacks=[token_callback],
         )
 
@@ -99,6 +101,7 @@ class WorkflowService:
         self,
         thread_id: str,
         resume_data: Dict[str, Any],
+        generation_preset: str = "balanced",  # [FIX] 프리셋 파라미터 추가
     ) -> WorkflowRunResponse:
         """Resume HITL interrupt (Wait for result)"""
         from graph.workflow import run_plancraft
@@ -112,6 +115,7 @@ class WorkflowService:
             user_input="",  # Not needed for resume
             thread_id=thread_id,
             resume_command={"resume": resume_data},
+            generation_preset=generation_preset,  # [FIX] 프리셋 전달
             callbacks=[token_callback],
         )
 

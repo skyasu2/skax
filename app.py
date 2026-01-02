@@ -483,7 +483,8 @@ def render_main():
                             f"{API_BASE_URL}/api/workflow/resume",
                             json={
                                 "thread_id": st.session_state.thread_id,
-                                "resume_data": resume_cmd["resume"]
+                                "resume_data": resume_cmd["resume"],
+                                "generation_preset": st.session_state.get("generation_preset", "balanced"),  # [FIX] 프리셋 전달
                             },
                             timeout=30.0
                         )

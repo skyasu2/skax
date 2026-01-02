@@ -39,6 +39,9 @@ class WorkflowResumeRequest(BaseModel):
     """POST /api/workflow/resume request (HITL resume)"""
     thread_id: str = Field(..., description="Session ID")
     resume_data: Dict[str, Any] = Field(..., description="User response data")
+    generation_preset: Literal["fast", "balanced", "quality"] = Field(
+        default="balanced", description="Generation mode"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -46,7 +49,8 @@ class WorkflowResumeRequest(BaseModel):
                 "thread_id": "abc-123",
                 "resume_data": {
                     "selected_option": {"title": "웹 앱", "description": "브라우저 기반 서비스"}
-                }
+                },
+                "generation_preset": "balanced"
             }
         }
     }

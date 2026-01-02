@@ -58,6 +58,7 @@ async def resume_workflow(request: WorkflowResumeRequest, background_tasks: Back
         service.resume_background,
         thread_id=request.thread_id,
         resume_data=request.resume_data,
+        generation_preset=request.generation_preset,  # [FIX] 프리셋 전달
     )
     
     return WorkflowRunResponse(
