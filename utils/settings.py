@@ -21,6 +21,7 @@ class GenerationPreset(BaseModel):
     name: str = Field(description="프리셋 이름")
     icon: str = Field(description="UI 표시 아이콘")
     description: str = Field(description="프리셋 설명")
+    model_type: str = Field(default="gpt-4o", description="사용할 LLM 모델 타입")  # [NEW] 모델 타입 추가
     temperature: float = Field(description="LLM 창의성 (0.0~1.0)")
     max_refine_loops: int = Field(description="최대 개선 루프 횟수")
     max_restart_count: int = Field(description="최대 재분석 횟수")
@@ -43,6 +44,7 @@ GENERATION_PRESETS = {
         name="균형",
         icon="⚖️",
         description="품질과 속도의 균형 (권장)",
+        model_type="gpt-4o",  # 균형: GPT-4o 사용
         temperature=0.7,
         max_refine_loops=2,
         max_restart_count=2,
@@ -57,6 +59,7 @@ GENERATION_PRESETS = {
         name="빠른 생성",
         icon="⚡",
         description="속도 우선, 빠른 결과물 생성",
+        model_type="gpt-4o-mini",  # [IMPROVE] 빠른 생성: GPT-4o-mini 사용 (속도/비용 최적화)
         temperature=0.3,
         max_refine_loops=1,
         max_restart_count=1,
@@ -71,7 +74,8 @@ GENERATION_PRESETS = {
         name="고품질",
         icon="💎",
         description="품질 우선, 철저한 검토",
-        temperature=1.0,
+        model_type="gpt-4o",  # 고품질: GPT-4o 필수
+        temperature=0.8,  # [IMPROVE] 1.0 -> 0.8 (안정성 확보)
         max_refine_loops=3,
         max_restart_count=2,
         writer_max_retries=3,
@@ -210,6 +214,7 @@ class ProjectSettings(BaseModel):
         """
         preset = get_preset(self.active_preset)
         return {
+            "model_type": preset.model_type,  # [NEW] 모델 타입 전달
             "temperature": preset.temperature,
             "max_refine_loops": preset.max_refine_loops,
             "max_restart_count": preset.max_restart_count,

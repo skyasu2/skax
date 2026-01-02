@@ -33,7 +33,11 @@ def run(state: PlanCraftState) -> PlanCraftState:
     """
     logger = get_file_logger()
     
-    # 1. 입력 데이터 준비 (Dict Access)
+    # 1. 프리셋 및 입력 데이터 준비
+    from utils.settings import get_preset
+    generation_preset = state.get("generation_preset", "balanced")
+    preset = get_preset(generation_preset)
+
     user_input = state.get("user_input", "")
     analysis = state.get("analysis")
     
@@ -76,8 +80,11 @@ def run(state: PlanCraftState) -> PlanCraftState:
         =====================================================================
         """
         
-    # 동적 LLM 생성
-    dynamic_llm = get_llm(temperature=target_temp).with_structured_output(StructureResult)
+    # 동적 LLM 생성 (프리셋 모델 적용)
+    dynamic_llm = get_llm(
+        model_type=preset.model_type, 
+        temperature=target_temp
+    ).with_structured_output(StructureResult)
 
     # 2. 프롬프트 구성 (시간 컨텍스트 주입)
     user_msg_content = STRUCTURER_USER_PROMPT.format(
@@ -95,9 +102,6 @@ def run(state: PlanCraftState) -> PlanCraftState:
     
     # 3. LLM 호출 + Self-Reflection (최소 섹션 검증)
     # [UPDATE] 프리셋 기반 동적 설정 적용
-    from utils.settings import get_preset
-    generation_preset = state.get("generation_preset", "balanced")
-    preset = get_preset(generation_preset)
     MIN_SECTIONS = preset.min_sections  # fast:7, balanced:9, quality:10
     MAX_RETRIES = preset.structurer_max_retries  # 모든 모드 2회 고정
 

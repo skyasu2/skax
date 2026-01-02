@@ -8,15 +8,7 @@ from utils.schemas import JudgeResult
 from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.reviewer_prompt import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 
-# LLM은 함수 내에서 지연 초기화 (환경 변수 로딩 타이밍 이슈 방지)
-_reviewer_llm = None
-
-def _get_reviewer_llm():
-    """Reviewer LLM 지연 초기화"""
-    global _reviewer_llm
-    if _reviewer_llm is None:
-        _reviewer_llm = get_llm(temperature=0.1).with_structured_output(JudgeResult)
-    return _reviewer_llm
+# LLM은 함수 내에서 동적으로 생성 (프리셋 적용)
 
 def run(state: PlanCraftState) -> PlanCraftState:
     """
@@ -32,6 +24,10 @@ def run(state: PlanCraftState) -> PlanCraftState:
     """
     
     # 1. 입력 데이터 준비
+    from utils.settings import get_preset
+    generation_preset = state.get("generation_preset", "balanced")
+    preset = get_preset(generation_preset)
+
     draft = state.get("draft")
     if not draft:
         return update_state(state, error="검토할 초안이 없습니다.")
@@ -68,7 +64,13 @@ def run(state: PlanCraftState) -> PlanCraftState:
     
     # 3. LLM 호출
     try:
-        review_result = _get_reviewer_llm().invoke(messages)
+        # 동적 LLM 생성 (프리셋 모델 적용)
+        reviewer_llm = get_llm(
+            model_type=preset.model_type, 
+            temperature=0.1  # Reviewer는 항상 엄격하게
+        ).with_structured_output(JudgeResult)
+
+        review_result = reviewer_llm.invoke(messages)
         
         # 4. 상태 업데이트 (Pydantic -> Dict 일관성 보장)
         review_dict = ensure_dict(review_result)

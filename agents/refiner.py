@@ -74,7 +74,11 @@ def run(state: PlanCraftState) -> PlanCraftState:
         ])
 
     # LLM 초기화
-    refiner_llm = get_llm(temperature=0.4).with_structured_output(RefinementStrategy)
+    # LLM 초기화 (프리셋 모델 적용)
+    refiner_llm = get_llm(
+        model_type=preset.model_type,
+        temperature=0.4
+    ).with_structured_output(RefinementStrategy)
     
     messages = [
         {"role": "system", "content": REFINER_SYSTEM_PROMPT},

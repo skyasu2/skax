@@ -14,14 +14,7 @@ from prompts.writer_prompt import WRITER_SYSTEM_PROMPT, WRITER_USER_PROMPT
 from prompts.business_plan_prompt import BUSINESS_PLAN_SYSTEM_PROMPT, BUSINESS_PLAN_USER_PROMPT
 
 # LLM은 함수 내에서 지연 초기화 (환경 변수 로딩 타이밍 이슈 방지)
-_writer_llm = None
-
-def _get_writer_llm():
-    """Writer LLM 지연 초기화"""
-    global _writer_llm
-    if _writer_llm is None:
-        _writer_llm = get_llm(temperature=settings.LLM_TEMPERATURE_STRICT).with_structured_output(DraftResult)
-    return _writer_llm
+# LLM은 함수 내에서 동적으로 생성 (프리셋 적용)
 
 
 def _get_prompts_by_doc_type(state: PlanCraftState) -> tuple:
@@ -385,6 +378,14 @@ Action Items (실행 지침):
     # 프리셋에서 재시도 횟수 가져오기 (동적) - preset은 상단에서 이미 로드됨
     max_retries = preset.writer_max_retries
 
+    # [FIX] 프리셋 기반 LLM 동적 생성
+    # - Fast: gpt-4o-mini (Speed)
+    # - Balanced/Quality: gpt-4o (Depth)
+    writer_llm = get_llm(
+        model_type=preset.model_type, 
+        temperature=preset.temperature
+    ).with_structured_output(DraftResult)
+
     current_try = 0
     final_draft_dict = None
     last_draft_dict = None  # 마지막으로 생성된 결과 (부분이라도 보존)
@@ -394,7 +395,7 @@ Action Items (실행 지침):
     while current_try < max_retries:
         try:
             logger.info(f"[Writer] 초안 작성 시도 ({current_try + 1}/{max_retries})...")
-            draft_result = _get_writer_llm().invoke(messages)
+            draft_result = writer_llm.invoke(messages)
             
             # Pydantic -> Dict 일관성 보장
             draft_dict = ensure_dict(draft_result)

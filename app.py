@@ -153,7 +153,7 @@ def render_main():
             format_func=lambda k: f"{GENERATION_PRESETS[k].icon} {GENERATION_PRESETS[k].name} ({GENERATION_PRESETS[k].description})",
             key="generation_preset",
             label_visibility="collapsed",
-            help="⚡빠른: 속도우선 | ⚖️균형: 권장 (기본값) | 💎고품질: 품질우선"
+            help="⚡빠른(GPT-4o-mini): 속도/가성비 | ⚖️균형(GPT-4o): 표준 | 💎고품질(GPT-4o+Deep): 심층분석"
         )
 
     with col_menu:
@@ -553,7 +553,12 @@ def render_main():
                         if hasattr(streamlit_callback, 'get_usage_summary'):
                             usage = streamlit_callback.get_usage_summary()
                             if usage.get("total_tokens", 0) > 0:
-                                usage_info = f"\n\n---\n📊 **토큰 사용량**: {usage['total_tokens']:,}개 (입력: {usage['input_tokens']:,}, 출력: {usage['output_tokens']:,})\n💰 **예상 비용**: ${usage['estimated_cost_usd']:.4f} (약 {int(usage['estimated_cost_krw'])}원)"
+                                # 프리셋 정보 가져오기
+                                from utils.settings import get_preset
+                                preset_key = st.session_state.get("generation_preset", "balanced")
+                                preset = get_preset(preset_key)
+                                
+                                usage_info = f"\n\n---\n🤖 **사용 모델**: {preset.model_type} ({preset.name})\n📊 **토큰 사용량**: {usage['total_tokens']:,}개 (입력: {usage['input_tokens']:,}, 출력: {usage['output_tokens']:,})\n💰 **예상 비용**: ${usage['estimated_cost_usd']:.4f} (약 {int(usage['estimated_cost_krw'])}원)"
                         
                         st.session_state.chat_history.append({
                             "role": "assistant", 
