@@ -530,12 +530,13 @@ def render_main():
                     last_step_count = 0
                     final_result = None
                     start_time = time.time()
-                    execution_log = []
+                    execution_log = []  # 전체 로그 수집 (Progressive Disclosure용)
                     consecutive_errors = 0
 
-                    # 진행률 바 생성
+                    # [UX] Progressive Disclosure 패턴: 진행률 + 현재 상태만 표시
                     progress_bar = status.progress(0)
                     current_progress = 0
+                    current_step_display = status.empty()  # 현재 단계 표시용
 
                     while True:
                         elapsed = int(time.time() - start_time)
@@ -553,9 +554,8 @@ def render_main():
 
                             # HTTP 상태 코드별 처리
                             if status_res.status_code == 404:
-                                # 초기 시작 단계에서는 404 허용 (워크플로우가 아직 저장 안됨)
                                 if elapsed < INITIAL_WAIT_TIME:
-                                    status.write(f"⏳ 워크플로우 초기화 중... ({elapsed}초)")
+                                    current_step_display.markdown("⏳ **초기화 중...** 워크플로우를 준비하고 있습니다")
                                     time.sleep(POLL_INTERVAL)
                                     continue
                                 raise ValueError("워크플로우를 찾을 수 없습니다")
@@ -563,7 +563,6 @@ def render_main():
                                 consecutive_errors += 1
                                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                                     raise RuntimeError(f"서버 오류가 계속 발생합니다 ({consecutive_errors}회)")
-                                status.write(f"⚠️ 서버 응답 대기 중... ({consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
                                 time.sleep(POLL_INTERVAL * 2)
                                 continue
                             elif status_res.status_code != 200:
@@ -571,7 +570,6 @@ def render_main():
                                 time.sleep(POLL_INTERVAL)
                                 continue
 
-                            # 성공 시 에러 카운트 리셋
                             consecutive_errors = 0
 
                         except httpx.RequestError as e:
@@ -586,17 +584,20 @@ def render_main():
                         step_history = status_data.get("step_history", [])
                         current_step = status_data.get("current_step", "")
 
-                        # 2. 진행률 업데이트
+                        # 2. [UX] 현재 단계만 업데이트 (Single Active State Indicator)
                         for step_key, progress in STEP_PROGRESS.items():
                             if current_step and step_key in current_step.lower():
                                 if progress > current_progress:
                                     current_progress = progress
                                     progress_bar.progress(min(current_progress / 100, 0.95))
                                     icon, label = STEP_LABELS.get(step_key, ("▶️", current_step))
-                                    status.update(label=f"{icon} {label} ({elapsed}초 경과)", state="running")
+                                    # 상단 라벨 업데이트
+                                    status.update(label=f"{icon} {label} ({elapsed}초)", state="running")
+                                    # 현재 단계 상세 표시
+                                    current_step_display.markdown(f"🟢 **진행 중:** {label} 단계")
                                 break
 
-                        # 3. 새로운 스텝 로그 표시
+                        # 3. 로그 수집만 (화면 출력 X - Progressive Disclosure)
                         if len(step_history) > last_step_count:
                             new_steps = step_history[last_step_count:]
                             for step in new_steps:
@@ -604,15 +605,15 @@ def render_main():
                                 summary = step.get("summary", "")
                                 exec_time = step.get("execution_time", "")
 
-                                icon = "👣"
+                                icon = "✔"
                                 for key, (ic, _) in STEP_LABELS.items():
                                     if key in step_name.lower():
                                         icon = ic
                                         break
 
-                                status.write(f"{icon} **[{step_name.upper()}]** {summary}")
                                 execution_log.append({
                                     "step": step_name,
+                                    "summary": summary,
                                     "icon": icon,
                                     "time": exec_time or f"{elapsed}s"
                                 })
@@ -623,7 +624,6 @@ def render_main():
                         if current_status in ["completed", "interrupted", "failed"]:
                             final_result = status_data.get("result")
                             if not final_result:
-                                # 재시도
                                 time.sleep(0.5)
                                 retry_res = httpx.get(
                                     f"{API_BASE_URL}/api/workflow/status/{st.session_state.thread_id}",
@@ -639,19 +639,20 @@ def render_main():
 
                     # --- Loop End ---
 
-                    # 진행률 100% 완료
+                    # [UX] 완료 상태 표시 (Progressive Disclosure)
                     progress_bar.progress(100)
                     total_elapsed = int(time.time() - start_time)
+                    current_step_display.empty()  # 진행 중 표시 제거
 
-                    # 실행 로그 표시 (마지막 단계만 표시, 나머지는 접힘)
+                    # Collapsible Activity Timeline
                     if execution_log:
-                        last_log = execution_log[-1]
-                        status.write(f"✅ {last_log['icon']} {last_log['step']} 완료")
+                        # 최종 완료 메시지만 표시
+                        status.markdown(f"✅ **완료** — 총 {len(execution_log)}단계 실행됨")
 
-                        if len(execution_log) > 1:
-                            with status.expander(f"📋 전체 실행 로그 ({len(execution_log)}단계)", expanded=False):
-                                for log in execution_log:
-                                    st.write(f"✅ {log['icon']} {log['step']} - {log['time']}")
+                        # 세부 로그는 접힌 상태로 제공
+                        with status.expander("📋 세부 진행 내역 보기", expanded=False):
+                            for log in execution_log:
+                                st.write(f"✔ **{log['step'].upper()}** — {log.get('summary', '')} `{log['time']}`")
 
                     # API 응답 필드 매핑 (interrupt -> __interrupt__)
                     if final_result.get("interrupt"):
