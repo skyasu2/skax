@@ -937,6 +937,23 @@ def option_pause_node(state: PlanCraftState) -> Command[Literal["analyze"]]:
     # 재개(Resume) 시 이 노드는 처음부터 다시 실행되므로, Side Effect가 중복 실행(Duplicate Execution)될 수 있습니다.
     # (LangGraph Best Practice: Side Effect는 항상 interrupt 이후 혹은 별도 노드에서 처리)
 
+    # =========================================================================
+    # ⚠️ CRITICAL: Multi-Interrupt Chain 주의사항
+    # =========================================================================
+    # interrupt() 호출 순서/갯수는 절대 변경되지 않아야 합니다.
+    # Resume matching이 index 기반이므로, Pause 구조를 동적으로 변경하면 안 됩니다.
+    #
+    # 예시 (잘못된 패턴):
+    #   if condition:
+    #       interrupt(payload1)  # index 0
+    #   else:
+    #       interrupt(payload2)  # 조건에 따라 index가 달라짐 → Resume Mismatch!
+    #
+    # 예시 (올바른 패턴 - 현재 구현):
+    #   while retry_count < MAX_RETRIES:
+    #       interrupt(payload)   # 항상 동일한 위치에서 호출 → 안전
+    # =========================================================================
+
     # [NEW] Input Validation Loop with Safety Limit
     while retry_count < MAX_RETRIES:
         # [NEW] 재시도 시 사용자에게 에러 피드백 제공

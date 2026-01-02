@@ -104,3 +104,4 @@ class WorkflowStatusResponse(BaseModel):
     current_step: Optional[str] = None
     step_history: List[Dict[str, Any]] = []
     has_pending_interrupt: bool = False
+    result: Optional[Dict[str, Any]] = None  # 완료/중단 시 전체 상태 반환

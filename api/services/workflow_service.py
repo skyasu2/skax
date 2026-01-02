@@ -13,6 +13,44 @@ from api.schemas.workflow import (
 class WorkflowService:
     """Workflow business logic service"""
 
+    async def run_background(
+        self,
+        user_input: str,
+        thread_id: str,
+        file_content: Optional[str] = None,
+        generation_preset: str = "balanced",
+        refine_count: int = 0,
+        previous_plan: Optional[str] = None,
+    ):
+        """Execute workflow in background (Fire-and-Forget)"""
+        from graph.workflow import run_plancraft
+        
+        # run_plancraft saves state to checkpointer automatically
+        await asyncio.to_thread(
+            run_plancraft,
+            user_input=user_input,
+            file_content=file_content,
+            generation_preset=generation_preset,
+            thread_id=thread_id,
+            refine_count=refine_count,
+            previous_plan=previous_plan,
+        )
+
+    async def resume_background(
+        self,
+        thread_id: str,
+        resume_data: Dict[str, Any],
+    ):
+        """Resume workflow in background"""
+        from graph.workflow import run_plancraft
+
+        await asyncio.to_thread(
+            run_plancraft,
+            user_input="",
+            thread_id=thread_id,
+            resume_command={"resume": resume_data},
+        )
+
     async def run(
         self,
         user_input: str,
@@ -22,7 +60,7 @@ class WorkflowService:
         refine_count: int = 0,
         previous_plan: Optional[str] = None,
     ) -> WorkflowRunResponse:
-        """Execute workflow"""
+        """Execute workflow (Wait for result)"""
         from graph.workflow import run_plancraft
 
         if not thread_id:
@@ -46,7 +84,7 @@ class WorkflowService:
         thread_id: str,
         resume_data: Dict[str, Any],
     ) -> WorkflowRunResponse:
-        """Resume HITL interrupt"""
+        """Resume HITL interrupt (Wait for result)"""
         from graph.workflow import run_plancraft
 
         result = await asyncio.to_thread(
@@ -73,14 +111,33 @@ class WorkflowService:
             return None
 
         state = snapshot.values
-        has_interrupt = bool(snapshot.next and snapshot.tasks)
+        
+        # Check for interrupts
+        interrupt_value = None
+        if snapshot.next and snapshot.tasks:
+            if hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
+                 interrupt_value = snapshot.tasks[0].interrupts[0].value
+
+        has_interrupt = bool(interrupt_value)
+        status = self._determine_status(state, has_interrupt)
+        
+        # Prepare result dict if finished or interrupted
+        result_data = None
+        if status in [WorkflowStatus.COMPLETED, WorkflowStatus.INTERRUPTED, WorkflowStatus.FAILED]:
+            result_data = dict(state)
+            if interrupt_value:
+                result_data["__interrupt__"] = interrupt_value
+            # Add error info if failed
+            if status == WorkflowStatus.FAILED and not result_data.get("error"):
+                 result_data["error"] = "Unknown error occurred"
 
         return WorkflowStatusResponse(
             thread_id=thread_id,
-            status=self._determine_status(state, has_interrupt),
+            status=status,
             current_step=state.get("current_step"),
             step_history=state.get("step_history", []),
             has_pending_interrupt=has_interrupt,
+            result=result_data
         )
 
     def _convert_to_response(self, thread_id: str, result: dict) -> WorkflowRunResponse:

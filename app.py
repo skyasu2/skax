@@ -473,8 +473,10 @@ def render_main():
                     current_refine_count = st.session_state.get("next_refine_count", 0)
                     previous_plan = st.session_state.generated_plan
 
-                    # API 호출로 워크플로우 실행
-                    status.write("🔄 AI 에이전트 실행 중...")
+                    import time
+                    
+                    # API 호출로 워크플로우 실행 (Background)
+                    status.write("🔄 작업 요청을 전송 중입니다...")
                     if resume_cmd:
                         # Resume 요청 (HITL 재개)
                         response = httpx.post(
@@ -483,7 +485,7 @@ def render_main():
                                 "thread_id": st.session_state.thread_id,
                                 "resume_data": resume_cmd["resume"]
                             },
-                            timeout=180.0
+                            timeout=30.0
                         )
                     else:
                         # 신규 실행
@@ -497,11 +499,58 @@ def render_main():
                                 "refine_count": current_refine_count,
                                 "previous_plan": previous_plan
                             },
-                            timeout=180.0
+                            timeout=30.0
                         )
 
                     response.raise_for_status()
-                    final_result = response.json()
+                    # 초기 응답은 RUNNING 상태임
+                    
+                    # --- Polling Loop ---
+                    last_step_count = 0
+                    final_result = None
+                    
+                    while True:
+                        # 1. 상태 조회
+                        status_res = httpx.get(f"{API_BASE_URL}/api/workflow/status/{st.session_state.thread_id}", timeout=10.0)
+                        if status_res.status_code != 200:
+                            time.sleep(2)
+                            continue
+                            
+                        status_data = status_res.json()
+                        current_status = status_data.get("status", "running")
+                        step_history = status_data.get("step_history", [])
+                        
+                        # 2. UI 업데이트 (새로운 스텝이 있을 때만)
+                        if len(step_history) > last_step_count:
+                            new_steps = step_history[last_step_count:]
+                            for step in new_steps:
+                                step_name = step.get("step", "Unknown")
+                                summary = step.get("summary", "")
+                                # 이모지 매핑
+                                icon = "👣"
+                                if "retrieve" in step_name: icon = "📚"
+                                elif "analyze" in step_name: icon = "🔍"
+                                elif "structure" in step_name: icon = "🏗️"
+                                elif "write" in step_name: icon = "✍️"
+                                elif "review" in step_name: icon = "🔎"
+                                elif "refine" in step_name: icon = "✨"
+                                elif "format" in step_name: icon = "📋"
+                                
+                                status.write(f"{icon} **[{step_name.upper()}]** {summary}")
+                            
+                            last_step_count = len(step_history)
+                            
+                        # 3. 종료 조건 확인
+                        if current_status in ["completed", "interrupted", "failed"]:
+                            final_result = status_data.get("result")
+                            if not final_result:
+                                # Fallback: result가 비어있으면(구버전 호환) 에러 처리
+                                raise Exception("작업이 완료되었으나 결과 데이터를 받아올 수 없습니다.")
+                            break
+                            
+                        time.sleep(1) # 1초 대기
+                    
+                    # --- Loop End ---
 
                     # API 응답 필드 매핑 (interrupt -> __interrupt__)
                     if final_result.get("interrupt"):

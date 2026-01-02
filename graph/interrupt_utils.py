@@ -501,6 +501,7 @@ def make_pause_node(
     Resume 시 생성된 노드 전체가 처음부터 재실행됩니다!
     - interrupt() 호출 전: Side-Effect 금지 (DB 저장, API 호출, 알림 발송)
     - interrupt() 호출 후: 안전하게 상태 변경 가능
+    - Subgraph 내부에서 interrupt() 사용 시 부모 노드도 처음부터 재실행됨
     - 참조: LangGraph human-in-the-loop.txt, interrupt function.txt
 
     Args:
@@ -572,7 +573,8 @@ def make_approval_pause_node(
     Resume 시 생성된 노드 전체가 처음부터 재실행됩니다!
     - interrupt() 호출 전: Side-Effect 금지 (DB 저장, API 호출, 알림 발송)
     - interrupt() 호출 후: 안전하게 상태 변경 가능
-    - 서브그래프 내 사용 시 부모 노드도 재실행될 수 있음에 주의
+    - Subgraph 내부에서 interrupt() 사용 시 부모 노드도 처음부터 재실행됨
+    - interrupt() 호출 순서/갯수는 절대 변경 금지 (Resume matching이 index 기반)
     - 참조: LangGraph human-in-the-loop.txt, interrupt function.txt
 
     Approval Flow Diagram:
