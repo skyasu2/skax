@@ -68,6 +68,16 @@ class InterruptPayloadResponse(BaseModel):
     input_schema_name: Optional[str] = None
 
 
+class TokenUsage(BaseModel):
+    """Token usage statistics"""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    llm_calls: int = 0
+    estimated_cost_usd: float = 0.0
+    estimated_cost_krw: float = 0.0
+
+
 class WorkflowRunResponse(BaseModel):
     """POST /api/workflow/run response"""
     thread_id: str
@@ -78,6 +88,7 @@ class WorkflowRunResponse(BaseModel):
     analysis: Optional[Dict[str, Any]] = None
     step_history: List[Dict[str, Any]] = []
     error: Optional[str] = None
+    token_usage: Optional[TokenUsage] = None  # [NEW] Token usage tracking
 
     model_config = {
         "json_schema_extra": {
@@ -105,3 +116,4 @@ class WorkflowStatusResponse(BaseModel):
     step_history: List[Dict[str, Any]] = []
     has_pending_interrupt: bool = False
     result: Optional[Dict[str, Any]] = None  # 완료/중단 시 전체 상태 반환
+    token_usage: Optional[TokenUsage] = None  # [NEW] Token usage tracking

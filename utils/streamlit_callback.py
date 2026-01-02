@@ -2,11 +2,54 @@ import time
 from typing import Any, Dict, List, Optional
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
-import streamlit as st
 
 # 토큰당 비용 (USD) - GPT-4o 기준
 COST_PER_INPUT_TOKEN = 2.5 / 1_000_000  # $2.5 per 1M tokens
 COST_PER_OUTPUT_TOKEN = 10 / 1_000_000  # $10 per 1M tokens
+
+
+class TokenTrackingCallback(BaseCallbackHandler):
+    """
+    API 환경에서 토큰 사용량을 추적하는 콜백.
+    Streamlit 의존성 없이 토큰 사용량만 추적합니다.
+    """
+
+    def __init__(self):
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.llm_call_count = 0
+
+    def on_llm_start(
+        self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
+    ) -> None:
+        """LLM 호출 시작"""
+        self.llm_call_count += 1
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        """LLM 호출 완료 - 토큰 추적"""
+        try:
+            if response.llm_output:
+                usage = response.llm_output.get("token_usage", {})
+                self.total_input_tokens += usage.get("prompt_tokens", 0)
+                self.total_output_tokens += usage.get("completion_tokens", 0)
+        except Exception:
+            pass
+
+    def get_usage_summary(self) -> dict:
+        """토큰 사용량 요약"""
+        total_tokens = self.total_input_tokens + self.total_output_tokens
+        estimated_cost = (
+            self.total_input_tokens * COST_PER_INPUT_TOKEN +
+            self.total_output_tokens * COST_PER_OUTPUT_TOKEN
+        )
+        return {
+            "input_tokens": self.total_input_tokens,
+            "output_tokens": self.total_output_tokens,
+            "total_tokens": total_tokens,
+            "llm_calls": self.llm_call_count,
+            "estimated_cost_usd": round(estimated_cost, 4),
+            "estimated_cost_krw": round(estimated_cost * 1350, 0)
+        }
 
 # 단계별 표시 정보 (key, icon, label, progress%)
 STEP_INFO = {

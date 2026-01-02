@@ -504,59 +504,118 @@ def render_main():
 
                     response.raise_for_status()
                     # 초기 응답은 RUNNING 상태임
-                    
-                    # --- Polling Loop ---
+
+                    # --- Polling Loop with Progress Bar ---
+                    # 단계별 진행률 매핑
+                    STEP_PROGRESS = {
+                        "retrieve": 10, "context": 10,
+                        "analyze": 25,
+                        "structure": 40,
+                        "write": 60,
+                        "review": 75,
+                        "refine": 85,
+                        "format": 95,
+                    }
+                    STEP_LABELS = {
+                        "retrieve": ("📚", "컨텍스트 수집"),
+                        "context": ("📚", "컨텍스트 수집"),
+                        "analyze": ("🔍", "요구사항 분석"),
+                        "structure": ("🏗️", "구조 설계"),
+                        "write": ("✍️", "콘텐츠 작성"),
+                        "review": ("🔎", "품질 검토"),
+                        "refine": ("✨", "내용 개선"),
+                        "format": ("📋", "최종 포맷팅"),
+                    }
+
                     last_step_count = 0
                     final_result = None
-                    
+                    start_time = time.time()
+                    execution_log = []  # 실행 로그 수집
+
+                    # 진행률 바 생성
+                    progress_bar = status.progress(0)
+                    current_progress = 0
+
                     while True:
                         # 1. 상태 조회
                         status_res = httpx.get(f"{API_BASE_URL}/api/workflow/status/{st.session_state.thread_id}", timeout=10.0)
                         if status_res.status_code != 200:
                             time.sleep(2)
                             continue
-                            
+
                         status_data = status_res.json()
                         current_status = status_data.get("status", "running")
                         step_history = status_data.get("step_history", [])
-                        
-                        # 2. UI 업데이트 (새로운 스텝이 있을 때만)
+                        current_step = status_data.get("current_step", "")
+                        elapsed = int(time.time() - start_time)
+
+                        # 2. 진행률 업데이트
+                        for step_key, progress in STEP_PROGRESS.items():
+                            if current_step and step_key in current_step.lower():
+                                if progress > current_progress:
+                                    current_progress = progress
+                                    progress_bar.progress(current_progress / 100)
+                                    # 라벨 업데이트
+                                    icon, label = STEP_LABELS.get(step_key, ("▶️", current_step))
+                                    status.update(label=f"{icon} {label} ({elapsed}초 경과)", state="running")
+                                break
+
+                        # 3. 새로운 스텝 로그 표시
                         if len(step_history) > last_step_count:
                             new_steps = step_history[last_step_count:]
                             for step in new_steps:
                                 step_name = step.get("step", "Unknown")
                                 summary = step.get("summary", "")
+                                exec_time = step.get("execution_time", "")
+
                                 # 이모지 매핑
                                 icon = "👣"
-                                if "retrieve" in step_name: icon = "📚"
-                                elif "analyze" in step_name: icon = "🔍"
-                                elif "structure" in step_name: icon = "🏗️"
-                                elif "write" in step_name: icon = "✍️"
-                                elif "review" in step_name: icon = "🔎"
-                                elif "refine" in step_name: icon = "✨"
-                                elif "format" in step_name: icon = "📋"
-                                
+                                for key, (ic, _) in STEP_LABELS.items():
+                                    if key in step_name.lower():
+                                        icon = ic
+                                        break
+
                                 status.write(f"{icon} **[{step_name.upper()}]** {summary}")
-                            
+
+                                # 실행 로그 수집
+                                execution_log.append({
+                                    "step": step_name,
+                                    "icon": icon,
+                                    "time": exec_time or f"{elapsed}s"
+                                })
+
                             last_step_count = len(step_history)
-                            
-                        # 3. 종료 조건 확인
+
+                        # 4. 종료 조건 확인
                         if current_status in ["completed", "interrupted", "failed"]:
                             final_result = status_data.get("result")
                             if not final_result:
-                                # Fallback: result가 비어있으면(구버전 호환) 에러 처리
                                 raise Exception("작업이 완료되었으나 결과 데이터를 받아올 수 없습니다.")
                             break
-                            
-                        time.sleep(1) # 1초 대기
-                    
+
+                        time.sleep(1)
+
                     # --- Loop End ---
+
+                    # 진행률 100% 완료
+                    progress_bar.progress(100)
+                    total_elapsed = int(time.time() - start_time)
+
+                    # 실행 로그 표시 (마지막 단계만 표시, 나머지는 접힘)
+                    if execution_log:
+                        last_log = execution_log[-1]
+                        status.write(f"✅ {last_log['icon']} {last_log['step']} 완료")
+
+                        if len(execution_log) > 1:
+                            with status.expander(f"📋 전체 실행 로그 ({len(execution_log)}단계)", expanded=False):
+                                for log in execution_log:
+                                    st.write(f"✅ {log['icon']} {log['step']} - {log['time']}")
 
                     # API 응답 필드 매핑 (interrupt -> __interrupt__)
                     if final_result.get("interrupt"):
                         final_result["__interrupt__"] = final_result["interrupt"]
-                    
-                    status.update(label="✅ 처리 완료!", state="complete", expanded=False)
+
+                    status.update(label=f"✅ 완료! (총 {total_elapsed}초)", state="complete", expanded=False)
 
                     # 3. 결과 State 저장
                     st.session_state.current_state = final_result
@@ -627,11 +686,17 @@ def render_main():
                         # C. 기획서 완성
                         st.session_state.generated_plan = generated_plan
 
-                        # 프리셋 정보 표시
+                        # 프리셋 및 토큰 사용량 정보 표시
                         from utils.settings import get_preset
                         preset_key = st.session_state.get("generation_preset", "balanced")
                         preset = get_preset(preset_key)
                         usage_info = f"\n\n---\n🤖 **사용 모델**: {preset.model_type} ({preset.name})"
+
+                        # [NEW] API 응답에서 토큰 사용량 추출
+                        token_usage = final_result.get("token_usage") or status_data.get("token_usage")
+                        if token_usage and token_usage.get("total_tokens", 0) > 0:
+                            usage_info += f"\n📊 **토큰 사용량**: {token_usage['total_tokens']:,}개 (입력: {token_usage['input_tokens']:,}, 출력: {token_usage['output_tokens']:,})"
+                            usage_info += f"\n💰 **예상 비용**: ${token_usage['estimated_cost_usd']:.4f} (약 {int(token_usage['estimated_cost_krw'])}원)"
 
                         st.session_state.chat_history.append({
                             "role": "assistant",

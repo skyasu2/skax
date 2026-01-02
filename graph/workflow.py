@@ -1438,4 +1438,13 @@ def run_plancraft(
     if interrupt_payload:
         result["__interrupt__"] = interrupt_payload
 
+    # [NEW] 토큰 사용량 추적 (콜백에서 수집)
+    if callbacks:
+        for cb in callbacks:
+            if hasattr(cb, "get_usage_summary"):
+                usage = cb.get_usage_summary()
+                if usage.get("total_tokens", 0) > 0:
+                    result["token_usage"] = usage
+                break
+
     return result

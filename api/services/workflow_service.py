@@ -7,6 +7,7 @@ from api.schemas.workflow import (
     WorkflowRunResponse,
     WorkflowStatus,
     WorkflowStatusResponse,
+    TokenUsage,
 )
 
 
@@ -24,7 +25,11 @@ class WorkflowService:
     ):
         """Execute workflow in background (Fire-and-Forget)"""
         from graph.workflow import run_plancraft
-        
+        from utils.streamlit_callback import TokenTrackingCallback
+
+        # [NEW] Token tracking callback for API context
+        token_callback = TokenTrackingCallback()
+
         # run_plancraft saves state to checkpointer automatically
         await asyncio.to_thread(
             run_plancraft,
@@ -34,6 +39,7 @@ class WorkflowService:
             thread_id=thread_id,
             refine_count=refine_count,
             previous_plan=previous_plan,
+            callbacks=[token_callback],
         )
 
     async def resume_background(
@@ -43,12 +49,17 @@ class WorkflowService:
     ):
         """Resume workflow in background"""
         from graph.workflow import run_plancraft
+        from utils.streamlit_callback import TokenTrackingCallback
+
+        # [NEW] Token tracking callback for API context
+        token_callback = TokenTrackingCallback()
 
         await asyncio.to_thread(
             run_plancraft,
             user_input="",
             thread_id=thread_id,
             resume_command={"resume": resume_data},
+            callbacks=[token_callback],
         )
 
     async def run(
@@ -62,9 +73,13 @@ class WorkflowService:
     ) -> WorkflowRunResponse:
         """Execute workflow (Wait for result)"""
         from graph.workflow import run_plancraft
+        from utils.streamlit_callback import TokenTrackingCallback
 
         if not thread_id:
             thread_id = str(uuid.uuid4())
+
+        # [NEW] Token tracking callback for API context
+        token_callback = TokenTrackingCallback()
 
         # run_plancraft is synchronous, use asyncio.to_thread
         result = await asyncio.to_thread(
@@ -75,6 +90,7 @@ class WorkflowService:
             thread_id=thread_id,
             refine_count=refine_count,
             previous_plan=previous_plan,
+            callbacks=[token_callback],
         )
 
         return self._convert_to_response(thread_id, result)
@@ -86,12 +102,17 @@ class WorkflowService:
     ) -> WorkflowRunResponse:
         """Resume HITL interrupt (Wait for result)"""
         from graph.workflow import run_plancraft
+        from utils.streamlit_callback import TokenTrackingCallback
+
+        # [NEW] Token tracking callback for API context
+        token_callback = TokenTrackingCallback()
 
         result = await asyncio.to_thread(
             run_plancraft,
             user_input="",  # Not needed for resume
             thread_id=thread_id,
             resume_command={"resume": resume_data},
+            callbacks=[token_callback],
         )
 
         return self._convert_to_response(thread_id, result)
@@ -131,13 +152,27 @@ class WorkflowService:
             if status == WorkflowStatus.FAILED and not result_data.get("error"):
                  result_data["error"] = "Unknown error occurred"
 
+        # [NEW] Extract token usage if available
+        token_usage = None
+        if state.get("token_usage"):
+            usage_data = state["token_usage"]
+            token_usage = TokenUsage(
+                input_tokens=usage_data.get("input_tokens", 0),
+                output_tokens=usage_data.get("output_tokens", 0),
+                total_tokens=usage_data.get("total_tokens", 0),
+                llm_calls=usage_data.get("llm_calls", 0),
+                estimated_cost_usd=usage_data.get("estimated_cost_usd", 0.0),
+                estimated_cost_krw=usage_data.get("estimated_cost_krw", 0.0),
+            )
+
         return WorkflowStatusResponse(
             thread_id=thread_id,
             status=status,
             current_step=state.get("current_step"),
             step_history=state.get("step_history", []),
             has_pending_interrupt=has_interrupt,
-            result=result_data
+            result=result_data,
+            token_usage=token_usage,
         )
 
     def _convert_to_response(self, thread_id: str, result: dict) -> WorkflowRunResponse:
@@ -153,6 +188,19 @@ class WorkflowService:
         else:
             status = WorkflowStatus.RUNNING
 
+        # [NEW] Extract token usage if available
+        token_usage = None
+        if result.get("token_usage"):
+            usage_data = result["token_usage"]
+            token_usage = TokenUsage(
+                input_tokens=usage_data.get("input_tokens", 0),
+                output_tokens=usage_data.get("output_tokens", 0),
+                total_tokens=usage_data.get("total_tokens", 0),
+                llm_calls=usage_data.get("llm_calls", 0),
+                estimated_cost_usd=usage_data.get("estimated_cost_usd", 0.0),
+                estimated_cost_krw=usage_data.get("estimated_cost_krw", 0.0),
+            )
+
         return WorkflowRunResponse(
             thread_id=thread_id,
             status=status,
@@ -162,6 +210,7 @@ class WorkflowService:
             analysis=result.get("analysis"),
             step_history=result.get("step_history", []),
             error=result.get("error"),
+            token_usage=token_usage,
         )
 
     def _determine_status(self, state: dict, has_interrupt: bool) -> WorkflowStatus:
