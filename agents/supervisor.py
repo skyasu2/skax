@@ -763,51 +763,47 @@ class NativeSupervisor:
     # → AGENT_REGISTRY.result_key 필드를 사용하여 확장성 확보
         
     def _integrate_results(self, results: Dict[str, Any]) -> str:
-        """전문 에이전트 결과를 마크다운으로 통합"""
+        """
+        전문 에이전트 결과를 마크다운으로 통합 (Registry 기반 동적 통합)
+        
+        [REFACTOR] 하드코딩된 에이전트 순서 제거 → AGENT_REGISTRY 기반 반복 처리
+        새로운 에이전트가 Registry에 추가되면 자동으로 결과에 포함됩니다.
+        """
         integrated = "## 전문 에이전트 분석 결과\n\n"
         
-        routing = results.get("_routing", {})
-        if routing:
-            pass # routing info 로깅 (생략)
-        
-        # 1. Market
-        if results.get("market_analysis"):
-            integrated += "### 📊 시장 분석 (Market Agent)\n\n"
-            integrated += self.agents["market"].format_as_markdown(results["market_analysis"])
-            integrated += "\n"
-        
-        # 2. BM
-        if results.get("business_model"):
-            integrated += "### 💰 비즈니스 모델 (BM Agent)\n\n"
-            integrated += self.agents["bm"].format_as_markdown(results["business_model"])
-            integrated += "\n"
+        # Registry 순서대로 처리 (market -> bm -> financial ...)
+        # AGENT_REGISTRY는 Python 3.7+부터 삽입 순서 보장 (정의된 순서대로 출력됨)
+        for agent_id, spec in self.agent_registry.items():
+            result_key = spec.result_key
+            result_data = results.get(result_key)
             
-        # 3. Tech [NEW]
-        if results.get("tech_architecture"):
-            integrated += "### 🏗️ 기술 아키텍처 (Tech Architect)\n\n"
-            # 람다 에이전트의 format 메서드 사용
-            integrated += self.agents["tech"].format_as_markdown(results["tech_architecture"])
-            integrated += "\n"
+            if result_data:
+                # 에이전트 이름과 결과 포맷팅
+                # 예: ### 📊 시장 분석 (Market Agent)
+                icon = getattr(spec, "icon", "📄")  # 아이콘이 설정을 따르거나 기본값
+                name = getattr(spec, "name", agent_id.upper())
+                
+                integrated += f"### {icon} {name}\n\n"
+                
+                # 포맷터 사용 (Agent 인스턴스의 format_as_markdown)
+                if agent_id in self.agents:
+                    integrated += self.agents[agent_id].format_as_markdown(result_data)
+                else:
+                    # Fallback 포맷터
+                    import json
+                    integrated += f"```json\n{json.dumps(result_data, ensure_ascii=False, indent=2)}\n```"
+                
+                integrated += "\n\n"
+                
+        # [Backup] Registry에 없는 키가 혹시 있다면 (하위호환성)
+        known_keys = [spec.result_key for spec in self.agent_registry.values()]
+        for k, v in results.items():
+            if k not in known_keys and not k.startswith("_") and isinstance(v, dict):
+                 integrated += f"### 📦 기타 분석 ({k})\n\n"
+                 integrated += str(v) + "\n\n"
 
-        # 4. Content [NEW]
-        if results.get("content_strategy"):
-            integrated += "### 📣 콘텐츠 전략 (Content Strategist)\n\n"
-            integrated += self.agents["content"].format_as_markdown(results["content_strategy"])
-            integrated += "\n"
-        
-        # 5. Financial
-        if results.get("financial_plan"):
-            integrated += "### 📈 재무 계획 (Financial Agent)\n\n"
-            integrated += self.agents["financial"].format_as_markdown(results["financial_plan"])
-            integrated += "\n"
-        
-        # 6. Risk
-        if results.get("risk_analysis"):
-            integrated += "### ⚠️ 리스크 분석 (Risk Agent)\n\n"
-            integrated += self.agents["risk"].format_as_markdown(results["risk_analysis"])
-            integrated += "\n"
-        
         return integrated
+
 
 # 하위 호환성을 위해 alias 제공
 PlanSupervisor = NativeSupervisor

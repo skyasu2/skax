@@ -897,6 +897,11 @@ def option_pause_node(state: PlanCraftState) -> Command[Literal["analyze"]]:
     # Refactoring: interrupt_id 명시
     interrupt_id = "analyze_direction_select"
     
+    # [CRITICAL NOTICE]
+    # ⚠️ DO NOT put side-effects before interrupt!
+    # interrupt() 이전 구간에서는 외부 API 호출, DB 저장, LLM 생성 등이 절대 불가합니다.
+    # Resume 시 이 노드는 처음부터 재실행되므로 사이드 이펙트가 중복 발생할 수 있습니다.
+    
     payload = create_option_interrupt(state, interrupt_id=interrupt_id)
     
     # [NEW] Semantic Key for Safety (Resume Mismatch 방지)
@@ -979,6 +984,25 @@ def option_pause_node(state: PlanCraftState) -> Command[Literal["analyze"]]:
         base_err = updated_state.get("error", "")
         fallback_msg = "⚠️ 입력 횟수 초과: 기본 설정으로 자동 진행합니다."
         updated_state["error"] = f"{base_err}\n{fallback_msg}" if base_err else fallback_msg
+
+    # [NEW] Multiple Interrupt Check (연쇄 질문 패턴)
+    # "직접 입력" 또는 "기타" 옵션 선택 시 -> 추가 정보 입력 폼으로 전환 (재귀 호출)
+    selected_opt = user_response.get("selected_option")
+    if selected_opt and isinstance(selected_opt, dict):
+        title = selected_opt.get("title", "")
+        if "직접" in title or "기타" in title:
+             print(f"[HITL] Detailed Input Required for option: {title}")
+             # 재귀적 인터럽트를 위해 상태 업데이트
+             updated_state = update_state(
+                 updated_state,
+                 need_more_info=True,
+                 input_schema_name="free_text_input",  # 상세 입력 모드 활성화
+                 option_question=f"선택하신 '{title}'에 대한 구체적인 내용을 입력해주세요.",
+                 options=[], # 기존 옵션 제거 (폼 모드)
+                 retry_count=0 
+             )
+             # 자기 자신(option_pause)으로 이동하여 다시 interrupt 발생
+             return Command(update=updated_state, goto="option_pause")
 
     return Command(
         update=updated_state,
