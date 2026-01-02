@@ -21,8 +21,8 @@ test_output*.txt
 # Outputs
 outputs/
 
-# Streamlit
-.streamlit/
+# Streamlit (secrets only - config.toml is tracked for deployment)
+.streamlit/secrets.toml
 
 # IDE
 .vscode/

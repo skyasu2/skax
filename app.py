@@ -98,30 +98,59 @@ def init_resources():
     앱 실행 시 무거운 리소스를 초기화합니다.
     st.cache_resource를 사용하여 프로세스당 1회만 실행되도록 합니다.
     """
+    result = {"api_server": False, "config": False, "rag": False}
+
+    # 0. FastAPI 백엔드 서버 시작 (Thread)
     try:
-        # 0. FastAPI 백엔드 서버 시작 (Thread)
         from api.main import start_api_server
         print("[INIT] Starting FastAPI Backend Server...")
-        start_api_server(port=8000)
+        start_api_server(port=8000, timeout=15.0)  # 배포환경에서 더 긴 대기시간
+        result["api_server"] = True
         print("[INIT] FastAPI Backend Server Started on http://127.0.0.1:8000")
+    except Exception as e:
+        print(f"[ERROR] FastAPI Server Start Failed: {e}")
+        import traceback
+        traceback.print_exc()
 
-        # 1. Config 검증
+    # 1. Config 검증
+    try:
         Config.validate()
+        result["config"] = True
+    except Exception as e:
+        print(f"[WARN] Config Validation Warning: {e}")
 
-        # 2. RAG 벡터스토어 로드 (없으면 생성)
-        # 배포 환경에서 첫 실행 시 인덱스를 생성합니다.
-        # 네트워크 문제(403) 발생 시에도 앱이 멈추지 않도록 예외 처리합니다.
+    # 2. RAG 벡터스토어 로드 (없으면 생성)
+    try:
         from rag.vectorstore import load_vectorstore
         print("[INIT] Loading RAG Vectorstore...")
         vs = load_vectorstore()
         if vs:
-             print("[INIT] RAG Vectorstore Loaded Successfully")
+            result["rag"] = True
+            print("[INIT] RAG Vectorstore Loaded Successfully")
         else:
-             print("[WARN] RAG Vectorstore Load Failed (None)")
-
+            print("[WARN] RAG Vectorstore Load Failed (None)")
     except Exception as e:
-        print(f"[WARN] Resource Initialization Warning: {e}")
-        # 치명적이지 않은 오류는 로그만 남기고 진행
+        print(f"[WARN] RAG Vectorstore Warning: {e}")
+
+    print(f"[INIT] Resource Status: {result}")
+    return result
+
+
+def ensure_api_server():
+    """API 서버가 실행 중인지 확인하고, 필요하면 재시작"""
+    try:
+        response = httpx.get(f"{API_BASE_URL}/health", timeout=2.0)
+        return response.status_code == 200
+    except Exception:
+        # 서버가 응답하지 않으면 재시작 시도
+        try:
+            from api.main import start_api_server
+            print("[INIT] Restarting API Server...")
+            start_api_server(port=8000, timeout=10.0)
+            return True
+        except Exception as e:
+            print(f"[ERROR] API Server Restart Failed: {e}")
+            return False
 
 
 
@@ -474,7 +503,13 @@ def render_main():
                     previous_plan = st.session_state.generated_plan
 
                     import time
-                    
+
+                    # [FIX] API 서버 상태 확인 및 재시작
+                    status.write("🔌 백엔드 서버 연결 확인 중...")
+                    if not ensure_api_server():
+                        st.error("⚠️ 백엔드 서버에 연결할 수 없습니다. 페이지를 새로고침해주세요.")
+                        st.stop()
+
                     # API 호출로 워크플로우 실행 (Background)
                     status.write("🔄 작업 요청을 전송 중입니다...")
                     if resume_cmd:
