@@ -513,11 +513,6 @@ def is_general_query(state: PlanCraftState) -> bool:
         return analysis.get("is_general_query", False)
     return getattr(analysis, "is_general_query", False)
 
-# ... (중략) ...
-
-# [REMOVED] create_routing_branch: should_ask_user 함수가 조건부 엣지 로직을 전담함
-
-# ... (option_pause_node, general_response_node 생략, 아래에서 처리) ...
 
 def general_response_node(state: PlanCraftState) -> PlanCraftState:
     """일반 질의 응답 노드"""

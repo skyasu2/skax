@@ -18,7 +18,6 @@ from utils.config import Config
 
 # UI 컴포넌트 Import (분리된 모듈에서)
 from ui import (
-    render_timeline,
     render_chat_message,
     show_plan_dialog,
     show_analysis_dialog,
@@ -26,7 +25,6 @@ from ui import (
     render_dev_tools,
     render_refinement_ui,
     render_error_state,
-    render_option_selector,
     render_visual_timeline,
     render_human_interaction
 )

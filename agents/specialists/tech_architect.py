@@ -232,24 +232,6 @@ class TechArchitectAgent:
 
 
 # =============================================================================
-# 하위 호환성을 위한 함수 래퍼 (Deprecated)
-# =============================================================================
-
-def run_tech_architect(context: dict) -> dict:
-    """
-    [Deprecated] 함수 기반 호출 - 하위 호환성 유지
-
-    새 코드에서는 TechArchitectAgent 클래스를 직접 사용하세요.
-    """
-    agent = TechArchitectAgent()
-    return agent.run(
-        service_overview=context.get("service_overview", ""),
-        target_users=context.get("target_users", ""),
-        user_constraints=context.get("user_constraints", [])
-    )
-
-
-# =============================================================================
 # 단독 실행 테스트
 # =============================================================================
 

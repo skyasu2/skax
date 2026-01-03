@@ -780,7 +780,3 @@ def trigger_browser_notification(title: str, body: str):
     </script>
     """
     components.html(js_code, height=0, width=0)
-
-
-# render_structure_dialog has been removed since Structure Approval step is deprecated.
-
