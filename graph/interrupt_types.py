@@ -46,17 +46,58 @@ LangGraph HITL 패턴을 위한 타입 안전한 인터럽트 페이로드 관�
 =============================================================================
 
 사용 예시:
-    from graph.interrupt_types import InterruptFactory, InterruptType
+    from graph.interrupt_types import InterruptFactory, InterruptType, InterruptOption
 
-    # 옵션 인터럽트 생성
+    # ─────────────────────────────────────────────────────────────
+    # 예시 1: 옵션 선택 인터럽트
+    # ─────────────────────────────────────────────────────────────
     payload = InterruptFactory.create(
         InterruptType.OPTION,
-        question="방향을 선택하세요",
-        options=[{"title": "A", "description": "설명A"}]
+        question="다음 단계를 선택하세요",
+        options=[
+            InterruptOption(title="기획서 작성", description="AI가 초안을 작성합니다"),
+            InterruptOption(title="추가 분석", description="자료를 더 수집합니다"),
+        ],
+        allow_custom=True,  # 직접 입력 허용
+        node_ref="option_pause",  # 발생 노드 (추적용)
+        interrupt_id="direction_select"  # Semantic Key (Resume 매칭)
     )
-
-    # interrupt() 호출에 사용
     user_response = interrupt(payload.to_dict())
+    # user_response 예시: {"selected_option": {"title": "기획서 작성", ...}}
+
+    # ─────────────────────────────────────────────────────────────
+    # 예시 2: 역할 기반 승인 인터럽트
+    # ─────────────────────────────────────────────────────────────
+    approval_payload = InterruptFactory.create(
+        InterruptType.APPROVAL,
+        question="기획서 초안을 검토해주세요",
+        role="팀장",
+        rejection_feedback_enabled=True
+    )
+    # user_response 예시: {"approved": True} 또는 {"approved": False, "feedback": "수정 필요"}
+
+    # ─────────────────────────────────────────────────────────────
+    # 예시 3: 동적 폼 인터럽트
+    # ─────────────────────────────────────────────────────────────
+    form_payload = InterruptFactory.create(
+        InterruptType.FORM,
+        question="상세 정보를 입력해주세요",
+        input_schema_name="UserInfo",
+        required_fields=["email", "company"],
+        field_types={"email": "email", "company": "str"}
+    )
+    # user_response 예시: {"email": "user@example.com", "company": "Acme Inc"}
+
+    # ─────────────────────────────────────────────────────────────
+    # 예시 4: 간단한 확인 인터럽트
+    # ─────────────────────────────────────────────────────────────
+    confirm_payload = InterruptFactory.create(
+        InterruptType.CONFIRM,
+        question="이대로 진행하시겠습니까?",
+        confirm_text="예, 진행합니다",
+        cancel_text="아니오, 취소합니다"
+    )
+    # user_response 예시: {"confirmed": True}
 """
 
 from abc import ABC, abstractmethod
@@ -613,7 +654,8 @@ class InterruptFactory:
         options: List[Union[Dict[str, str], InterruptOption]],
         allow_custom: bool = True,
         node_ref: str = None,
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
+        interrupt_id: str = None
     ) -> OptionInterruptPayload:
         """
         옵션 선택 인터럽트 간편 생성
@@ -640,7 +682,7 @@ class InterruptFactory:
         normalized_options = normalize_options(options)
         import uuid
         import datetime
-        
+
         return OptionInterruptPayload(
             question=question,
             options=normalized_options,
@@ -648,7 +690,8 @@ class InterruptFactory:
             node_ref=node_ref or "option_pause",
             event_id=f"evt_{uuid.uuid4().hex[:8]}",
             timestamp=datetime.datetime.now().isoformat(),
-            data=metadata or {}
+            data=metadata or {},
+            interrupt_id=interrupt_id
         )
     
     @classmethod
@@ -658,7 +701,8 @@ class InterruptFactory:
         schema_name: str,
         required_fields: List[str] = None,
         field_types: Dict[str, str] = None,
-        node_ref: str = None
+        node_ref: str = None,
+        interrupt_id: str = None
     ) -> FormInterruptPayload:
         """
         폼 입력 인터럽트 간편 생성
@@ -682,7 +726,7 @@ class InterruptFactory:
         """
         import uuid
         import datetime
-        
+
         return FormInterruptPayload(
             question=question,
             input_schema_name=schema_name,
@@ -690,7 +734,8 @@ class InterruptFactory:
             field_types=field_types or {},
             node_ref=node_ref or "form_pause",
             event_id=f"evt_{uuid.uuid4().hex[:8]}",
-            timestamp=datetime.datetime.now().isoformat()
+            timestamp=datetime.datetime.now().isoformat(),
+            interrupt_id=interrupt_id
         )
     
     @classmethod
@@ -700,7 +745,8 @@ class InterruptFactory:
         confirm_text: str = "예",
         cancel_text: str = "아니오",
         default_value: bool = False,
-        node_ref: str = None
+        node_ref: str = None,
+        interrupt_id: str = None
     ) -> ConfirmInterruptPayload:
         """
         확인(예/아니오) 인터럽트 간편 생성
@@ -724,7 +770,7 @@ class InterruptFactory:
         """
         import uuid
         import datetime
-        
+
         return ConfirmInterruptPayload(
             question=question,
             confirm_text=confirm_text,
@@ -732,7 +778,8 @@ class InterruptFactory:
             default_value=default_value,
             node_ref=node_ref or "confirm_pause",
             event_id=f"evt_{uuid.uuid4().hex[:8]}",
-            timestamp=datetime.datetime.now().isoformat()
+            timestamp=datetime.datetime.now().isoformat(),
+            interrupt_id=interrupt_id
         )
     
     @classmethod
@@ -743,7 +790,8 @@ class InterruptFactory:
         approve_text: str = "✅ 승인",
         reject_text: str = "🔄 반려",
         rejection_feedback_enabled: bool = True,
-        node_ref: str = None
+        node_ref: str = None,
+        interrupt_id: str = None
     ) -> ApprovalInterruptPayload:
         """
         역할 기반 승인 인터럽트 간편 생성
@@ -769,7 +817,7 @@ class InterruptFactory:
         """
         import uuid
         import datetime
-        
+
         return ApprovalInterruptPayload(
             question=question,
             role=role,
@@ -780,7 +828,8 @@ class InterruptFactory:
             rejection_feedback_enabled=rejection_feedback_enabled,
             node_ref=node_ref or f"{role.lower()}_approval",
             event_id=f"evt_{uuid.uuid4().hex[:8]}",
-            timestamp=datetime.datetime.now().isoformat()
+            timestamp=datetime.datetime.now().isoformat(),
+            interrupt_id=interrupt_id
         )
 
 

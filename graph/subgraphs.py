@@ -25,6 +25,7 @@ SubGraph 내부에서 interrupt()가 호출되면, Resume 시:
 따라서:
 - interrupt() 전에는 Side-Effect(DB 저장, API 호출, 알림 발송) 금지
 - 초기화 코드(discussion_messages=[] 등)는 Resume 시 다시 실행됨을 인지
+- 외부 시스템 연동 시: State에 스냅샷 저장 또는 별도 저장소 백업 필요
 - 자세한 내용: docs/HITL_GUIDE.md 참조
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """

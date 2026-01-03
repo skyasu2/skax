@@ -33,6 +33,19 @@ class GenerationPreset(BaseModel):
     # [NEW] 시각적 요소 설정 (다이어그램, 그래프)
     include_diagrams: int = Field(default=0, description="포함할 Mermaid 다이어그램 개수")
     include_charts: int = Field(default=0, description="포함할 Markdown 그래프/차트 개수")
+    # [NEW] Mermaid 다이어그램 커스텀 옵션
+    diagram_types: list = Field(
+        default=["flowchart", "sequenceDiagram"],
+        description="선호 다이어그램 유형 (flowchart, sequenceDiagram, classDiagram, erDiagram, gantt, pie)"
+    )
+    diagram_direction: str = Field(
+        default="TB",
+        description="다이어그램 방향 (TB: 위→아래, LR: 왼쪽→오른쪽, BT: 아래→위, RL: 오른쪽→왼쪽)"
+    )
+    diagram_theme: str = Field(
+        default="default",
+        description="다이어그램 테마 (default, dark, forest, neutral)"
+    )
     # [NEW] Advanced RAG 설정
     use_reranker: bool = Field(default=False, description="Cross-Encoder Reranking 사용 여부")
     use_multi_query: bool = Field(default=False, description="Multi-Query Retrieval 사용 여부")

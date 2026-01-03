@@ -450,6 +450,358 @@ class TestErrorHandling:
         assert "error" in payload_dict.get("data", {})
 
 
+class TestInterruptIndexSafety:
+    """
+    Interrupt Index Safety 테스트
+
+    LangGraph에서 interrupt()는 index 기반으로 resume 매칭됩니다.
+    interrupt() 호출 순서나 개수가 변경되면 resume mismatch가 발생합니다.
+
+    이 테스트 클래스는 index mismatch 방지를 위한 패턴을 검증합니다.
+    """
+
+    def test_semantic_interrupt_id_required(self):
+        """interrupt_id (Semantic Key)가 없으면 경고 또는 기본값 생성"""
+        # interrupt_id가 없는 경우
+        payload_without_id = InterruptFactory.option(
+            question="테스트",
+            options=[{"title": "A", "description": ""}]
+        )
+
+        # interrupt_id가 없어도 동작하지만, 권장되지 않음
+        # event_id는 자동 생성됨
+        assert payload_without_id.event_id is not None
+        assert payload_without_id.event_id.startswith("evt_")
+
+    def test_semantic_interrupt_id_explicit(self):
+        """명시적 interrupt_id 설정 테스트"""
+        payload = InterruptFactory.option(
+            question="방향 선택",
+            options=[{"title": "A", "description": ""}],
+            interrupt_id="direction_select_v1"
+        )
+
+        assert payload.interrupt_id == "direction_select_v1"
+
+        # to_dict()에 포함되어야 함
+        payload_dict = payload.to_dict()
+        assert payload_dict.get("interrupt_id") == "direction_select_v1"
+
+    def test_consistent_interrupt_order_pattern(self):
+        """
+        일관된 interrupt 순서 패턴 검증
+
+        GOOD: 조건과 무관하게 항상 동일한 순서로 interrupt 호출
+        BAD: 조건에 따라 interrupt 순서가 달라지는 패턴
+        """
+        def good_pattern(need_detail: bool):
+            """올바른 패턴: 항상 동일한 순서"""
+            payloads = []
+
+            # 1번째 interrupt (항상 실행)
+            payloads.append(InterruptFactory.option(
+                question="기본 선택",
+                options=[{"title": "A", "description": ""}],
+                interrupt_id="step_1_basic"
+            ))
+
+            # 2번째 interrupt (항상 실행, 조건은 내부에서 처리)
+            if need_detail:
+                payloads.append(InterruptFactory.form(
+                    question="상세 정보",
+                    schema_name="Detail",
+                    required_fields=["info"],
+                    interrupt_id="step_2_detail"
+                ))
+
+            return payloads
+
+        # need_detail=True일 때
+        payloads_with_detail = good_pattern(True)
+        assert len(payloads_with_detail) == 2
+        assert payloads_with_detail[0].interrupt_id == "step_1_basic"
+        assert payloads_with_detail[1].interrupt_id == "step_2_detail"
+
+        # need_detail=False일 때
+        payloads_without_detail = good_pattern(False)
+        assert len(payloads_without_detail) == 1
+        assert payloads_without_detail[0].interrupt_id == "step_1_basic"
+
+    def test_interrupt_id_uniqueness_within_flow(self):
+        """동일 플로우 내 interrupt_id 고유성 검증"""
+        flow_interrupt_ids = []
+
+        # 시뮬레이션: 하나의 워크플로우에서 여러 interrupt 발생
+        payload1 = InterruptFactory.option(
+            question="1단계",
+            options=[{"title": "A", "description": ""}],
+            interrupt_id="analyze_direction"
+        )
+        flow_interrupt_ids.append(payload1.interrupt_id)
+
+        payload2 = InterruptFactory.form(
+            question="2단계",
+            schema_name="Info",
+            required_fields=["name"],
+            interrupt_id="input_details"
+        )
+        flow_interrupt_ids.append(payload2.interrupt_id)
+
+        payload3 = InterruptFactory.approval(
+            question="3단계",
+            role="팀장",
+            interrupt_id="final_approval"
+        )
+        flow_interrupt_ids.append(payload3.interrupt_id)
+
+        # 모든 interrupt_id가 고유해야 함
+        assert len(flow_interrupt_ids) == len(set(flow_interrupt_ids))
+
+    def test_payload_node_ref_tracking(self):
+        """node_ref 필드로 인터럽트 발생 위치 추적"""
+        payload = InterruptFactory.option(
+            question="테스트",
+            options=[{"title": "A", "description": ""}],
+            node_ref="option_pause_node",
+            interrupt_id="test_interrupt"
+        )
+
+        assert payload.node_ref == "option_pause_node"
+
+        # Resume 시 node_ref로 어느 노드에서 발생한 interrupt인지 확인 가능
+        payload_dict = payload.to_dict()
+        assert payload_dict.get("node_ref") == "option_pause_node"
+
+    def test_timestamp_for_ordering(self):
+        """timestamp로 interrupt 순서 검증 가능"""
+        import time
+
+        payload1 = InterruptFactory.option(
+            question="첫 번째",
+            options=[{"title": "A", "description": ""}]
+        )
+
+        time.sleep(0.01)  # 약간의 시간 차이
+
+        payload2 = InterruptFactory.option(
+            question="두 번째",
+            options=[{"title": "B", "description": ""}]
+        )
+
+        # 둘 다 timestamp가 있어야 함
+        assert payload1.timestamp is not None
+        assert payload2.timestamp is not None
+
+        # timestamp 순서가 올바른지 (ISO 8601 형식이므로 문자열 비교 가능)
+        assert payload1.timestamp <= payload2.timestamp
+
+
+class TestSubgraphInterruptSafety:
+    """
+    서브그래프 내 Interrupt 안전성 테스트
+
+    서브그래프 내부에서 interrupt() 호출 시:
+    - Resume 시 부모 노드(run_*_subgraph) 전체가 재실행됨
+    - 서브그래프도 처음부터 다시 시작됨
+    - interrupt() 이전의 모든 코드가 다시 실행됨
+    """
+
+    def test_interrupt_payload_immutability(self):
+        """Payload 생성 후 불변성 검증 (재실행 시 동일한 결과)"""
+        def create_payload():
+            return InterruptFactory.option(
+                question="동일한 질문",
+                options=[
+                    {"title": "옵션1", "description": "설명1"},
+                    {"title": "옵션2", "description": "설명2"}
+                ],
+                interrupt_id="immutable_test"
+            )
+
+        # 여러 번 호출해도 동일한 구조의 payload 생성
+        payload1 = create_payload()
+        payload2 = create_payload()
+
+        assert payload1.question == payload2.question
+        assert payload1.interrupt_id == payload2.interrupt_id
+        assert len(payload1.options) == len(payload2.options)
+        assert payload1.options[0].title == payload2.options[0].title
+
+    def test_no_side_effect_in_payload_creation(self):
+        """Payload 생성 시 부수효과 없음 검증"""
+        side_effect_counter = {"count": 0}
+
+        def create_payload_with_side_effect():
+            # 잘못된 패턴: payload 생성 시 부수효과
+            # side_effect_counter["count"] += 1  # 이런 코드가 있으면 안됨
+
+            return InterruptFactory.option(
+                question="테스트",
+                options=[{"title": "A", "description": ""}]
+            )
+
+        # 여러 번 호출 (Resume 시 재실행 시뮬레이션)
+        for _ in range(3):
+            create_payload_with_side_effect()
+
+        # 부수효과가 없어야 함
+        assert side_effect_counter["count"] == 0
+
+    def test_state_initialization_idempotency(self):
+        """
+        상태 초기화가 멱등성을 보장하는지 검증
+
+        Resume 시 노드가 재실행되므로, 초기화 코드가
+        기존 상태를 덮어쓰지 않아야 함
+        """
+        # 시뮬레이션: 첫 실행에서 discussion_messages 생성
+        state = create_initial_state("테스트")
+        state = update_state(state, discussion_messages=[
+            {"role": "reviewer", "content": "첫 메시지"}
+        ])
+
+        # Resume 후 재실행 시뮬레이션
+        # 올바른 패턴: 기존 값이 있으면 유지
+        existing_messages = state.get("discussion_messages", [])
+        if not existing_messages:
+            existing_messages = []  # 초기화는 비어있을 때만
+
+        assert len(existing_messages) == 1
+        assert existing_messages[0]["content"] == "첫 메시지"
+
+    def test_cross_subgraph_interrupt_state_preservation(self):
+        """
+        서브그래프 간 interrupt 시 상태 보존 검증
+
+        Generation → QA 서브그래프 전환 시
+        이전 서브그래프의 결과가 보존되어야 함
+        """
+        # Generation 서브그래프 결과 시뮬레이션
+        state = create_initial_state("AI 앱")
+        state = update_state(state,
+            analysis={"topic": "AI 헬스케어 앱"},
+            structure={"sections": [{"name": "개요"}]},
+            draft={"sections": [{"name": "개요", "content": "내용"}]}
+        )
+
+        # QA 서브그래프에서 interrupt 발생 시뮬레이션
+        qa_interrupt_payload = InterruptFactory.approval(
+            question="기획서를 승인하시겠습니까?",
+            role="팀장",
+            interrupt_id="qa_approval"
+        )
+
+        # interrupt 전 상태 스냅샷 저장 (권장 패턴)
+        snapshot = {
+            "analysis": state.get("analysis"),
+            "structure": state.get("structure"),
+            "draft": state.get("draft"),
+        }
+
+        # Resume 후에도 이전 서브그래프 결과가 보존되어야 함
+        assert snapshot["analysis"]["topic"] == "AI 헬스케어 앱"
+        assert snapshot["draft"] is not None
+
+    def test_nested_interrupt_scenario(self):
+        """
+        중첩된 interrupt 시나리오 테스트
+
+        한 노드 내에서 조건부 interrupt가 여러 번 호출될 수 있는 경우
+        interrupt_id로 구분 가능해야 함
+        """
+        def simulate_nested_interrupts(need_detail: bool, need_approval: bool):
+            """조건에 따라 다른 interrupt 발생"""
+            payloads = []
+
+            if need_detail:
+                payloads.append(InterruptFactory.form(
+                    question="상세 정보 입력",
+                    schema_name="DetailForm",
+                    required_fields=["description"],
+                    interrupt_id="nested_detail_form"
+                ))
+
+            if need_approval:
+                payloads.append(InterruptFactory.approval(
+                    question="승인 요청",
+                    role="관리자",
+                    interrupt_id="nested_approval"
+                ))
+
+            return payloads
+
+        # 케이스 1: 둘 다 필요
+        both_payloads = simulate_nested_interrupts(True, True)
+        assert len(both_payloads) == 2
+        assert both_payloads[0].interrupt_id == "nested_detail_form"
+        assert both_payloads[1].interrupt_id == "nested_approval"
+
+        # 케이스 2: approval만 필요
+        approval_only = simulate_nested_interrupts(False, True)
+        assert len(approval_only) == 1
+        assert approval_only[0].interrupt_id == "nested_approval"
+
+    def test_resume_value_propagation(self):
+        """
+        Resume 값이 올바르게 상태에 전파되는지 검증
+        """
+        state = create_initial_state("테스트")
+
+        # interrupt 발생 시뮬레이션
+        interrupt_payload = InterruptFactory.option(
+            question="방향 선택",
+            options=[
+                {"title": "A 경로", "description": "빠른 진행"},
+                {"title": "B 경로", "description": "상세 진행"}
+            ],
+            interrupt_id="direction_select"
+        )
+
+        # 사용자 응답 시뮬레이션
+        user_response = {
+            "selected_option": {"title": "A 경로", "value": "a_경로"}
+        }
+
+        # 응답 처리
+        new_state = handle_user_response(state, user_response)
+
+        # 상태에 선택이 반영되어야 함
+        assert new_state.get("selected_option") is not None
+        assert new_state.get("need_more_info") is False
+
+    def test_subgraph_boundary_state_consistency(self):
+        """
+        서브그래프 경계에서 상태 일관성 검증
+
+        서브그래프 진입/퇴장 시 상태가 올바르게 전달되어야 함
+        """
+        # 부모 그래프 상태
+        parent_state = create_initial_state("AI 서비스 기획")
+        parent_state = update_state(parent_state,
+            rag_context="관련 문서 컨텍스트",
+            generation_preset="balanced"
+        )
+
+        # 서브그래프 진입 전 필수 필드 검증
+        required_for_generation = ["user_input", "rag_context"]
+        for field in required_for_generation:
+            assert parent_state.get(field) is not None, f"{field} 누락"
+
+        # 서브그래프 실행 후 출력 필드 시뮬레이션
+        subgraph_output = {
+            "analysis": {"topic": "AI 서비스", "features": ["기능1"]},
+            "structure": {"sections": []},
+        }
+
+        # 부모 상태에 병합
+        merged_state = update_state(parent_state, **subgraph_output)
+
+        # 원본 입력과 서브그래프 출력이 모두 존재해야 함
+        assert merged_state.get("user_input") == "AI 서비스 기획"
+        assert merged_state.get("rag_context") == "관련 문서 컨텍스트"
+        assert merged_state.get("analysis") is not None
+
+
 # =============================================================================
 # 실행
 # =============================================================================

@@ -431,3 +431,163 @@ def validate_state(state: Any) -> bool:
         assert validate_state(state), f"Expected dict, got {type(state)}"
     """
     return isinstance(state, dict) and hasattr(state, "get")
+
+
+# =============================================================================
+# Agent Context Schemas (Agent별 입력/출력 스키마)
+# =============================================================================
+#
+# 각 Agent가 필요로 하는 입력 필드와 생성하는 출력 필드를 명시합니다.
+# 이를 통해:
+# 1. Agent 간 의존성이 명확해짐
+# 2. 테스트 시 필요한 mock 데이터 구성이 쉬워짐
+# 3. 불필요한 필드 접근 방지 (컨텍스트 분리)
+#
+
+class AgentContextSchema(TypedDict, total=False):
+    """Agent 컨텍스트 스키마 메타데이터"""
+    agent_name: str
+    input_fields: List[str]
+    output_fields: List[str]
+    required_fields: List[str]
+
+
+# 각 Agent별 필요 필드 정의
+AGENT_CONTEXT_SCHEMAS: Dict[str, AgentContextSchema] = {
+    "analyzer": {
+        "agent_name": "Analyzer",
+        "input_fields": [
+            "user_input", "file_content", "rag_context", "web_context",
+            "previous_plan", "review", "generation_preset"
+        ],
+        "output_fields": ["analysis", "need_more_info", "options", "option_question"],
+        "required_fields": ["user_input"]
+    },
+    "structurer": {
+        "agent_name": "Structurer",
+        "input_fields": [
+            "user_input", "analysis", "rag_context", "web_context",
+            "structure", "generation_preset"
+        ],
+        "output_fields": ["structure"],
+        "required_fields": ["analysis"]
+    },
+    "writer": {
+        "agent_name": "Writer",
+        "input_fields": [
+            "analysis", "structure", "rag_context", "web_context",
+            "refinement_guideline", "specialist_analysis", "generation_preset"
+        ],
+        "output_fields": ["draft", "final_output", "generated_plan"],
+        "required_fields": ["analysis", "structure"]
+    },
+    "reviewer": {
+        "agent_name": "Reviewer",
+        "input_fields": [
+            "draft", "rag_context", "web_context",
+            "specialist_analysis", "generation_preset"
+        ],
+        "output_fields": ["review"],
+        "required_fields": ["draft"]
+    },
+    "refiner": {
+        "agent_name": "Refiner",
+        "input_fields": [
+            "review", "draft", "refine_count", "generation_preset"
+        ],
+        "output_fields": ["refinement_guideline", "refine_count", "previous_plan", "refined"],
+        "required_fields": ["review"]
+    }
+}
+
+
+def get_agent_context(state: PlanCraftState, agent_name: str) -> Dict[str, Any]:
+    """
+    특정 Agent에 필요한 컨텍스트만 추출합니다.
+
+    Agent가 필요하지 않은 필드에 접근하는 것을 방지하고,
+    명시적인 입력 계약을 강제합니다.
+
+    Args:
+        state: 전체 PlanCraftState
+        agent_name: Agent 이름 (analyzer, structurer, writer, reviewer, refiner)
+
+    Returns:
+        해당 Agent에 필요한 필드만 포함된 dict
+
+    Usage:
+        context = get_agent_context(state, "analyzer")
+        # context에는 user_input, file_content, rag_context 등만 포함
+
+    Example:
+        >>> state = {"user_input": "AI 앱", "draft": {...}, "review": {...}}
+        >>> ctx = get_agent_context(state, "analyzer")
+        >>> "draft" in ctx  # Analyzer는 draft 불필요
+        False
+        >>> "user_input" in ctx
+        True
+    """
+    schema = AGENT_CONTEXT_SCHEMAS.get(agent_name)
+    if not schema:
+        # 알 수 없는 agent면 전체 state 반환 (하위 호환성)
+        return dict(state)
+
+    input_fields = schema.get("input_fields", [])
+    return {
+        key: state.get(key)
+        for key in input_fields
+        if key in state
+    }
+
+
+def validate_agent_input(state: PlanCraftState, agent_name: str) -> List[str]:
+    """
+    Agent 실행 전 필수 입력 필드 검증
+
+    Args:
+        state: 현재 상태
+        agent_name: Agent 이름
+
+    Returns:
+        누락된 필수 필드 목록 (빈 리스트면 검증 통과)
+
+    Usage:
+        missing = validate_agent_input(state, "writer")
+        if missing:
+            raise ValueError(f"Writer 실행 불가: {missing} 필드 누락")
+    """
+    schema = AGENT_CONTEXT_SCHEMAS.get(agent_name)
+    if not schema:
+        return []
+
+    required = schema.get("required_fields", [])
+    missing = []
+
+    for field in required:
+        value = state.get(field)
+        if value is None:
+            missing.append(field)
+        elif isinstance(value, (list, dict, str)) and len(value) == 0:
+            missing.append(field)
+
+    return missing
+
+
+def get_agent_output_fields(agent_name: str) -> List[str]:
+    """
+    Agent가 생성하는 출력 필드 목록 반환
+
+    Args:
+        agent_name: Agent 이름
+
+    Returns:
+        출력 필드 목록
+
+    Usage:
+        outputs = get_agent_output_fields("reviewer")
+        # ["review"]
+    """
+    schema = AGENT_CONTEXT_SCHEMAS.get(agent_name)
+    if not schema:
+        return []
+    return schema.get("output_fields", [])

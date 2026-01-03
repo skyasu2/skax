@@ -252,20 +252,66 @@ def _build_visual_instruction(preset, logger) -> str:
 """
 
     if preset.include_diagrams > 0:
-        visual_instruction += f"""
-### Mermaid 다이어그램 ({preset.include_diagrams}개 이상 필수)
-**권장 삽입 위치**: "시스템 아키텍처", "사용자 플로우", 또는 "서비스 구조" 섹션
+        # [NEW] Mermaid 커스텀 옵션 적용
+        diagram_types = getattr(preset, 'diagram_types', ['flowchart', 'sequenceDiagram'])
+        direction = getattr(preset, 'diagram_direction', 'TB')
+        theme = getattr(preset, 'diagram_theme', 'default')
 
-아래 형식을 **정확히** 사용하세요 (백틱 3개 + mermaid):
-```mermaid
-graph TB
+        # 다이어그램 유형별 예시 생성
+        type_examples = {
+            "flowchart": f"""```mermaid
+%%{{init: {{'theme': '{theme}'}}}}%%
+flowchart {direction}
     A[사용자 접속] --> B[로그인/회원가입]
     B --> C{{서비스 선택}}
     C -->|기능A| D[기능A 처리]
     C -->|기능B| E[기능B 처리]
     D --> F[결과 표시]
     E --> F
-```
+```""",
+            "sequenceDiagram": f"""```mermaid
+%%{{init: {{'theme': '{theme}'}}}}%%
+sequenceDiagram
+    actor User as 사용자
+    participant API as 백엔드
+    participant DB as 데이터베이스
+    User->>API: 요청 전송
+    API->>DB: 데이터 조회
+    DB-->>API: 결과 반환
+    API-->>User: 응답 표시
+```""",
+            "classDiagram": f"""```mermaid
+%%{{init: {{'theme': '{theme}'}}}}%%
+classDiagram
+    class User {{
+        +String name
+        +login()
+    }}
+    class Service {{
+        +process()
+    }}
+    User --> Service
+```""",
+            "erDiagram": f"""```mermaid
+%%{{init: {{'theme': '{theme}'}}}}%%
+erDiagram
+    USER ||--o{{ ORDER : places
+    ORDER ||--|{{ ITEM : contains
+```""",
+        }
+
+        # 선호 다이어그램 유형에서 첫 번째 예시 선택
+        primary_type = diagram_types[0] if diagram_types else "flowchart"
+        example_diagram = type_examples.get(primary_type, type_examples["flowchart"])
+
+        visual_instruction += f"""
+### Mermaid 다이어그램 ({preset.include_diagrams}개 이상 필수)
+**권장 삽입 위치**: "시스템 아키텍처", "사용자 플로우", 또는 "서비스 구조" 섹션
+**선호 다이어그램 유형**: {', '.join(diagram_types)}
+**방향**: {direction} | **테마**: {theme}
+
+아래 형식을 **정확히** 사용하세요 (백틱 3개 + mermaid):
+{example_diagram}
 """
 
     if preset.include_charts > 0:

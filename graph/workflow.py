@@ -885,6 +885,12 @@ def option_pause_node(state: PlanCraftState) -> Command[Literal["analyze"]]:
     - Side-Effect(DB 저장, API 호출, 알림 발송)는 반드시 interrupt() 이후에 배치
     - LLM 호출, 외부 API 호출은 interrupt() 전에 절대 금지
 
+    💡 외부 시스템 연동 시 주의사항:
+    - LangGraph checkpointer는 State만 복원하며, 외부 시스템(DB, Redis, 3rd-party API) 상태는 복원하지 않음
+    - 외부 시스템과 연동하는 경우, interrupt() 호출 직전에 해당 상태를 State에 저장하거나
+      별도 저장소에 백업하는 패턴을 적용하세요
+    - 예시: state["external_snapshot"] = {"order_id": order_id, "payment_status": status}
+
     LangGraph Human Interrupt 필수 요소:
     1. interrupt() 함수로 Pause
     2. Command(resume=...) 로 Resume
