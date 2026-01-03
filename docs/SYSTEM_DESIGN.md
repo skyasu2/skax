@@ -1,6 +1,6 @@
 # 🏗️ PlanCraft System Design Document
 
-**Version**: 2.4
+**Version**: 2.5
 **Date**: 2026-01-03
 **Framework**: LangGraph, LangChain, Streamlit
 **Standards**: MCP (Model Context Protocol), A2A (Agent-to-Agent)
@@ -82,6 +82,93 @@ app = workflow.compile(checkpointer=PostgresSaver(pool))
 "프레임워크를 쓰기 전에, 반드시 LLM API 직접 사용을 이해해야 한다."
 PlanCraft 팀은 OpenAI API 직접 호출을 먼저 학습한 후 LangChain으로 전환했습니다.
 ```
+
+#### 1.2.3 LLM의 본질과 한계 이해
+
+PlanCraft 설계의 출발점은 **LLM의 구조적 한계를 인정하는 것**입니다.
+
+**LLM의 본질:**
+```
+📌 핵심 전제
+LLM은 "지능"이 아니라 "확률 기반 다음 토큰 예측기"입니다.
+"생각"하지 않고, "가장 그럴듯한 문장"을 생성합니다.
+```
+
+**LLM의 구조적 한계:**
+
+| 한계 | 설명 | PlanCraft 대응 |
+|------|------|----------------|
+| **최신 정보 부재** | 학습 데이터 이후 정보 모름 | Web Search (Tavily) 연동 |
+| **Hallucination** | 사실 검증 없이 그럴듯한 답변 생성 | RAG + 출력 검증 (Reviewer) |
+| **계산/논리 오류** | 복잡한 연산에서 실수 가능 | 구조화된 프롬프트 + 자체 검증 |
+| **Context Window 제한** | 긴 문서 전체 이해 불가 | Chunking (1000자, overlap 200) |
+| **일관성 부족** | 같은 입력에 다른 출력 가능 | Structured Output + Pydantic 검증 |
+
+**Hallucination 3중 방어 전략:**
+
+```mermaid
+flowchart LR
+    subgraph "1차: 입력 보강"
+        RAG[RAG 검색<br/>내부 가이드]
+        WEB[Web Search<br/>실시간 팩트]
+    end
+
+    subgraph "2차: 출력 검증"
+        REV[Reviewer<br/>품질 심사]
+        SCHEMA[Pydantic<br/>스키마 검증]
+    end
+
+    subgraph "3차: 반복 개선"
+        REFINE[Refiner<br/>피드백 반영]
+    end
+
+    RAG --> LLM[LLM 생성]
+    WEB --> LLM
+    LLM --> REV
+    LLM --> SCHEMA
+    REV --> REFINE
+    REFINE --> LLM
+```
+
+| 방어 계층 | 전략 | 구현 위치 |
+|----------|------|----------|
+| **1차 (입력)** | RAG로 내부 가이드 제공 + Web Search로 실시간 팩트 주입 | `rag/retriever.py`, `tools/web_search.py` |
+| **2차 (출력)** | Reviewer의 팩트 체크 + Pydantic 스키마 검증 | `agents/reviewer.py`, `with_structured_output()` |
+| **3차 (반복)** | Refiner의 피드백 반영 후 재생성 | `agents/refiner.py`, `agents/writer.py` |
+
+**LLM 단독 사용 vs RAG 비교:**
+
+| 관점 | LLM 단독 | LLM + RAG (PlanCraft) |
+|------|----------|----------------------|
+| **정확성** | 환각 위험 높음 | 내부 문서 기반으로 환각 감소 |
+| **최신성** | 학습 시점 데이터만 | Web Search로 실시간 보완 |
+| **일관성** | 응답마다 다름 | 가이드라인 기반 일관된 형식 |
+| **신뢰성** | 검증 불가 | 출처 표기 + 교차 검증 가능 |
+
+```
+📌 설계 원칙
+LLM 단독 사용은 서비스에 위험합니다.
+PlanCraft는 RAG + Web Search + 다단계 검증으로 "믿을 수 있는" 결과물을 생성합니다.
+```
+
+#### 1.2.4 Temperature 설정 전략
+
+Temperature는 LLM 응답의 창의성/안정성을 조절하는 핵심 파라미터입니다.
+
+| Temperature | 특성 | PlanCraft 적용 |
+|-------------|------|----------------|
+| **0.0~0.3** | 결정적, 일관된 응답 | Reviewer (0.1) - 엄격한 평가 필요 |
+| **0.3~0.5** | 안정적, 약간의 변화 | Refiner (0.4) - 일관된 개선 전략 |
+| **0.5~0.8** | 균형잡힌 창의성 | Writer (0.7) - 다양한 표현 |
+| **0.8~1.0** | 높은 창의성, 불안정 | 사용 안함 - 기획서에 부적합 |
+
+**프리셋별 Temperature 설정:**
+
+| 프리셋 | Temperature | 이유 |
+|--------|-------------|------|
+| ⚡ 빠른 생성 | 0.3 | 일관된 결과로 빠른 완료 |
+| ⚖️ 균형 | 0.7 | 창의성과 안정성 균형 |
+| 💎 고품질 | 0.8 | 다양한 표현으로 풍부한 내용 |
 
 ---
 
