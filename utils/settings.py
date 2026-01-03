@@ -33,8 +33,11 @@ class GenerationPreset(BaseModel):
     # [NEW] 시각적 요소 설정 (다이어그램, 그래프)
     include_diagrams: int = Field(default=0, description="포함할 Mermaid 다이어그램 개수")
     include_charts: int = Field(default=0, description="포함할 Markdown 그래프/차트 개수")
-    # [NEW] RAG Reranking 설정
+    # [NEW] Advanced RAG 설정
     use_reranker: bool = Field(default=False, description="Cross-Encoder Reranking 사용 여부")
+    use_multi_query: bool = Field(default=False, description="Multi-Query Retrieval 사용 여부")
+    use_query_expansion: bool = Field(default=False, description="Query Expansion 사용 여부")
+    use_context_reorder: bool = Field(default=False, description="Long Context Reorder 사용 여부")
 
 
 # 프리셋 정의
@@ -56,6 +59,9 @@ GENERATION_PRESETS = {
         structurer_max_retries=2,  # 구조 검증은 고정
         include_diagrams=1,  # 균형 모드: 다이어그램 1개
         include_charts=1,    # 그래프 1개
+        # Advanced RAG: Multi-Query + Query Expansion
+        use_multi_query=True,
+        use_query_expansion=True,
     ),
     "fast": GenerationPreset(
         name="빠른 생성",
@@ -86,7 +92,11 @@ GENERATION_PRESETS = {
         structurer_max_retries=2,  # 구조 검증은 고정
         include_diagrams=1,  # 고품질 모드: 다이어그램 1개
         include_charts=2,    # 그래프 2개 (추가 1개)
-        use_reranker=True,   # [NEW] 고품질 모드: Cross-Encoder Reranking 활성화
+        # Advanced RAG: 모든 기능 활성화
+        use_reranker=True,
+        use_multi_query=True,
+        use_query_expansion=True,
+        use_context_reorder=True,
     ),
 }
 

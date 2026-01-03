@@ -342,11 +342,12 @@ def should_refine_or_restart(state: PlanCraftState) -> ReviewerRoutes:
 @handle_node_error
 def retrieve_context(state: PlanCraftState) -> PlanCraftState:
     """
-    RAG 검색 노드
+    RAG 검색 노드 (Advanced RAG Pipeline)
 
-    프리셋에 따라 Cross-Encoder Reranking을 활성화합니다.
-    - quality 모드: Reranking 사용 (정확도 향상)
-    - balanced/fast 모드: MMR만 사용 (속도 우선)
+    프리셋에 따라 다양한 고급 RAG 기능을 활성화합니다:
+    - quality 모드: Reranking + Multi-Query + Query Expansion + Context Reorder
+    - balanced 모드: Multi-Query + Query Expansion
+    - fast 모드: 기본 MMR 검색만
 
     LangSmith: run_name="📚 컨텍스트 수집", tags=["rag", "retrieval"]
     """
@@ -354,13 +355,18 @@ def retrieve_context(state: PlanCraftState) -> PlanCraftState:
     from graph.state import update_state
     from utils.settings import get_preset
 
-    # 프리셋에서 Reranker 설정 로드
+    # 프리셋에서 Advanced RAG 설정 로드
     preset_key = state.get("generation_preset", "balanced")
     preset = get_preset(preset_key)
-    use_reranker = preset.use_reranker
 
-    # Retriever 초기화 (상위 3개 문서 검색)
-    retriever = Retriever(k=3, use_reranker=use_reranker)
+    # Retriever 초기화 (프리셋 기반 고급 기능 활성화)
+    retriever = Retriever(
+        k=3,
+        use_reranker=getattr(preset, 'use_reranker', False),
+        use_multi_query=getattr(preset, 'use_multi_query', False),
+        use_query_expansion=getattr(preset, 'use_query_expansion', False),
+        use_context_reorder=getattr(preset, 'use_context_reorder', False)
+    )
 
     # 사용자 입력으로 관련 문서 검색
     user_input = state["user_input"]
@@ -372,8 +378,17 @@ def retrieve_context(state: PlanCraftState) -> PlanCraftState:
     status = "SUCCESS"
     rag_context = new_state.get("rag_context")
     doc_count = len(rag_context.split('---')) if rag_context else 0
-    rerank_label = " (Reranked)" if use_reranker else ""
-    summary = f"검색된 문서: {doc_count}건{rerank_label}"
+
+    # 활성화된 기능 라벨 생성
+    features = []
+    if getattr(preset, 'use_multi_query', False):
+        features.append("MultiQ")
+    if getattr(preset, 'use_reranker', False):
+        features.append("Rerank")
+    if getattr(preset, 'use_context_reorder', False):
+        features.append("Reorder")
+    feature_label = f" ({', '.join(features)})" if features else ""
+    summary = f"검색된 문서: {doc_count}건{feature_label}"
 
     return _update_step_history(new_state, "retrieve", status, summary)
 
