@@ -14,7 +14,7 @@ import httpx
 import streamlit as st
 
 # API Base URL
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "http://127.0.0.1:8000/api/v1"
 
 # 단계별 진행률 매핑
 STEP_PROGRESS = {
@@ -103,7 +103,7 @@ def execute_workflow_api(
     if resume_cmd:
         # Resume 요청 (HITL 재개)
         response = httpx.post(
-            f"{API_BASE_URL}/api/workflow/resume",
+            f"{API_BASE_URL}/workflow/resume",
             json={
                 "thread_id": thread_id,
                 "resume_data": resume_cmd["resume"],
@@ -114,7 +114,7 @@ def execute_workflow_api(
     else:
         # 신규 실행
         response = httpx.post(
-            f"{API_BASE_URL}/api/workflow/run",
+            f"{API_BASE_URL}/workflow/run",
             json={
                 "user_input": pending_text,
                 "file_content": file_content,
@@ -170,7 +170,7 @@ def poll_workflow_status(
         # 상태 조회
         try:
             status_res = httpx.get(
-                f"{API_BASE_URL}/api/workflow/status/{thread_id}",
+                f"{API_BASE_URL}/workflow/status/{thread_id}",
                 timeout=10.0
             )
 
@@ -245,7 +245,7 @@ def poll_workflow_status(
             if not final_result:
                 time.sleep(0.5)
                 retry_res = httpx.get(
-                    f"{API_BASE_URL}/api/workflow/status/{thread_id}",
+                    f"{API_BASE_URL}/workflow/status/{thread_id}",
                     timeout=5.0
                 )
                 if retry_res.status_code == 200:

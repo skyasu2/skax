@@ -22,6 +22,10 @@ _api_thread = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler with resource management"""
+    # JSON 로깅 설정
+    from utils.logging_config import setup_logging
+    setup_logging(level="INFO", json_format=True)
+    
     logger.info("[API] FastAPI server starting...")
     yield
     logger.info("[API] FastAPI server shutting down...")

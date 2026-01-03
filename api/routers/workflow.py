@@ -14,7 +14,7 @@ from api.schemas.workflow import (
 from api.services.workflow_service import WorkflowService
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/workflow", tags=["workflow"])
+router = APIRouter(prefix="/api/v1/workflow", tags=["workflow"])
 
 
 @router.post("/run", response_model=WorkflowRunResponse)

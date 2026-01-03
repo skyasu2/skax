@@ -40,6 +40,7 @@ tavily-python>=0.3.3
 
 # Observability
 langsmith>=0.1.50         # 최신 트레이싱 기능 지원
+python-json-logger>=2.0.7 # JSON 구조화 로깅
 
 # RAG Reranking
 sentence-transformers>=2.2.0  # Cross-Encoder 기반 Reranking
