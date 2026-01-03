@@ -140,14 +140,19 @@ def render_mermaid(code: str, height: int = 600, scale: float = 1.0, auto_fit: b
                     curve: 'basis'
                 }},
                 gantt: {{
-                    fontSize: 12,
-                    barHeight: 25,
-                    barGap: 6,
-                    topPadding: 60,
-                    bottomPadding: 60,
-                    sectionFontSize: '12px',
-                    numberSectionStyles: 3,
-                    axisFormat: '%Y-%m'
+                    fontSize: 11,
+                    barHeight: 20,
+                    barGap: 4,
+                    topPadding: 50,
+                    bottomPadding: 10,
+                    leftPadding: 120,
+                    rightPadding: 20,
+                    gridLineStartPadding: 35,
+                    sectionFontSize: 11,
+                    numberSectionStyles: 4,
+                    axisFormat: '%m월',
+                    tickInterval: '1 month',
+                    useMaxWidth: true
                 }}
             }});
         </script>
