@@ -52,3 +52,5 @@ PROJECT_PRESENTATION.md
 *_diagram.html
 *_viz.html
 *_architecture.html
+.coverage
+htmlcov/
