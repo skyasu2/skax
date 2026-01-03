@@ -4,12 +4,21 @@ PlanCraft Agent - LLM 클라이언트 모듈
 Azure OpenAI의 Chat 모델과 Embedding 모델을 초기화하는 유틸리티 함수를 제공합니다.
 LangChain의 AzureChatOpenAI와 AzureOpenAIEmbeddings를 래핑합니다.
 
-사용 예시:
-    from utils.llm import get_llm, get_embeddings
+[NEW] Exponential Backoff with Jitter:
+    - get_llm_with_retry(): Rate Limit, 네트워크 오류 시 자동 재시도
+    - LangChain 공식 with_retry() 패턴 사용
+    - 2025 Best Practice 기반 구현
 
-    # Chat 모델 가져오기
+사용 예시:
+    from utils.llm import get_llm, get_embeddings, get_llm_with_retry
+
+    # 기본 Chat 모델 (retry 없음)
     llm = get_llm(model_type="gpt-4o", temperature=0.7)
     response = llm.invoke("안녕하세요")
+
+    # Retry가 적용된 Chat 모델 (프로덕션 권장)
+    llm_with_retry = get_llm_with_retry(temperature=0.7)
+    response = llm_with_retry.invoke("안녕하세요")
 
     # Embedding 모델 가져오기
     embeddings = get_embeddings()
@@ -111,3 +120,65 @@ def get_embeddings() -> AzureOpenAIEmbeddings:
         api_version=Config.AOAI_API_VERSION,
         azure_deployment=Config.AOAI_DEPLOY_EMBED_LARGE
     )
+
+
+# =============================================================================
+# Retry 적용 LLM (프로덕션 권장)
+# =============================================================================
+
+def get_llm_with_retry(
+    model_type: str = "gpt-4o",
+    temperature: float = 0.7,
+    max_retries: int = 3
+) -> AzureChatOpenAI:
+    """
+    Exponential Backoff with Jitter가 적용된 LLM 인스턴스 반환
+
+    LangChain의 공식 with_retry() 메서드를 사용하여
+    Rate Limit, 네트워크 오류 시 자동으로 재시도합니다.
+
+    Best Practice:
+        - Retriable 예외만 재시도 (5xx, 429, 네트워크 오류)
+        - Non-Retriable 예외는 즉시 실패 (4xx, 인증 오류)
+        - Exponential Backoff with Jitter (Thundering Herd 방지)
+
+    Args:
+        model_type: 모델 타입 (gpt-4o, gpt-4o-mini)
+        temperature: 생성 온도 (0.0 ~ 2.0)
+        max_retries: 최대 재시도 횟수 (기본 3)
+
+    Returns:
+        RunnableRetry: Retry가 적용된 LLM
+
+    Example:
+        >>> llm = get_llm_with_retry(temperature=0.7)
+        >>> response = llm.invoke([{"role": "user", "content": "Hello"}])
+
+        # Structured Output과 함께 사용
+        >>> llm = get_llm_with_retry().with_structured_output(MySchema)
+        >>> result = llm.invoke(messages)
+
+    Note:
+        - 프로덕션 환경에서는 이 함수 사용을 권장합니다.
+        - Rate Limit 오류 시 최대 60초까지 대기할 수 있습니다.
+    """
+    from utils.retry import (
+        RetryConfig,
+        DEFAULT_RETRY_CONFIG,
+        apply_retry_to_llm,
+    )
+
+    # 기본 LLM 가져오기
+    base_llm = get_llm(model_type=model_type, temperature=temperature)
+
+    # Retry 설정 (max_retries 반영)
+    config = RetryConfig(
+        max_attempts=max_retries,
+        initial_wait=DEFAULT_RETRY_CONFIG.initial_wait,
+        max_wait=DEFAULT_RETRY_CONFIG.max_wait,
+        exponential_base=DEFAULT_RETRY_CONFIG.exponential_base,
+        jitter=DEFAULT_RETRY_CONFIG.jitter,
+        jitter_range=DEFAULT_RETRY_CONFIG.jitter_range,
+    )
+
+    return apply_retry_to_llm(base_llm, config)
