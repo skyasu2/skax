@@ -378,8 +378,7 @@ def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> Pla
         "event_id": last_interrupt.get("event_id"),
     }
 
-    # [NEW] Update Phase 6 Task
-    # TODO: This logic should ideally be in the task boundary, but marking progress here
+    # Step history 기록 (HITL 이벤트 추적)
     
     current_history = state.get("step_history", []) or []
     updated_history = current_history + [resume_history_item]

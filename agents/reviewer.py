@@ -1,12 +1,12 @@
 """
 PlanCraft Reviewer Agent - 기획서 평가 및 심사
 """
-import logging
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
 from utils.schemas import JudgeResult
 from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.reviewer_prompt import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
+from utils.file_logger import get_file_logger
 
 # LLM은 함수 내에서 동적으로 생성 (프리셋 적용)
 
@@ -82,7 +82,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
         )
         
     except Exception as e:
-        print(f"[ERROR] Reviewer Failed: {e}")
+        get_file_logger().error(f"[Reviewer] Failed: {e}")
         # Fallback: 기본 심사 결과 (REVISE로 설정하여 Refiner가 보완하도록 함)
         fallback_review = {
             "overall_score": 7,  # 7점 = REVISE 범위 (5-8점)

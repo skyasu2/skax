@@ -8,6 +8,7 @@ from utils.schemas import AnalysisResult
 from utils.time_context import get_time_context, get_time_instruction
 from graph.state import PlanCraftState, update_state, ensure_dict
 from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_USER_PROMPT
+from utils.file_logger import get_file_logger
 
 # LLM은 함수 내에서 동적 초기화 (설정 유연성)
 
@@ -64,13 +65,13 @@ def run(state: PlanCraftState) -> PlanCraftState:
         # 길이 제한 (토큰 비용 및 컨텍스트 초과 방지)
         if len(file_content) > MAX_FILE_LENGTH:
             file_content = file_content[:MAX_FILE_LENGTH] + "\n...(내용이 너무 길어 생략됨)..."
-            print(f"[Analyzer] 파일 내용이 너무 길어 {MAX_FILE_LENGTH}자로 단축되었습니다.")
+            get_file_logger().info(f"[Analyzer] 파일 내용이 너무 길어 {MAX_FILE_LENGTH}자로 단축되었습니다.")
             
         file_context_msg = f"\n\n=== [첨부 파일 내용 (중요)] ===\n{file_content}\n=============================\n"
         
         # 사용자 입력이 매우 짧으면 파일 내용이 주가 됨을 알림
         if len(user_input.strip()) < 10:
-             print("[Analyzer] 사용자 입력이 짧아 첨부 파일 내용을 중심으로 분석합니다.")
+            get_file_logger().info("[Analyzer] 사용자 입력이 짧아 첨부 파일 내용을 중심으로 분석합니다.")
 
     # 2. 컨텍스트 구성
     review_data = state.get("review")
@@ -155,7 +156,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
             input_len = len(user_input.strip())
             if input_len >= 20:
                 # 구체적 입력이므로 Fast Track 적용
-                print(f"[HITL] Fast Track: 입력 길이({input_len}자) >= 20자, 바로 진행")
+                get_file_logger().info(f"[HITL] Fast Track: 입력 길이({input_len}자) >= 20자, 바로 진행")
                 analysis_dict["need_more_info"] = False
                 analysis_dict["option_question"] = None
                 analysis_dict["options"] = []
@@ -182,7 +183,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
         return update_state(state, **updates)
         
     except Exception as e:
-        print(f"[ERROR] Analyzer Failed: {e}")
+        get_file_logger().error(f"[Analyzer] Failed: {e}")
         # Fallback: 기본 분석 결과 반환 (운영 안전성 확보)
         fallback_analysis = {
             "topic": "분석 실패 (시스템 에러)",

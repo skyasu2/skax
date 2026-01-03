@@ -120,9 +120,8 @@ def trace_node(
             # run_name 생성
             run_name = NODE_DESCRIPTIONS.get(node_name, f"🔄 {node_name}")
 
-            # LangSmith 환경변수로 메타데이터 전달 (임시)
-            # 주의: 이 방식은 동시성 이슈가 있을 수 있음
-            # 더 나은 방법은 RunnableConfig를 사용하는 것
+            # LangSmith 환경변수로 메타데이터 전달
+            # Note: RunnableConfig 방식이 더 안전하나, 현재 구조상 환경변수 방식 사용
             _set_trace_context(run_name, all_tags, metadata)
 
             # 트레이싱 로그 (LangSmith 비활성화 시에도 로컬 로그 유지)
