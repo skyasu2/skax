@@ -72,7 +72,8 @@ GENERATION_PRESETS = {
         structurer_max_retries=2,  # 구조 검증은 고정
         include_diagrams=1,  # 균형 모드: 다이어그램 1개
         include_charts=1,    # 그래프 1개
-        # Advanced RAG: Multi-Query + Query Expansion
+        # Advanced RAG: Multi-Query + Query Expansion + Reranking
+        use_reranker=True,  # [IMPROVE] Cross-Encoder Reranking 활성화 (정확도 향상)
         use_multi_query=True,
         use_query_expansion=True,
     ),

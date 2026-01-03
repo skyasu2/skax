@@ -139,7 +139,8 @@ class TestReranker:
         """빈 입력에 대한 Reranker 동작 검증"""
         try:
             from rag.reranker import rerank_documents
-            result = rerank_documents([], "테스트 쿼리")
+            # [FIX] 함수 시그니처: rerank_documents(query, documents, ...)
+            result = rerank_documents("테스트 쿼리", [])
             assert result == []
         except ImportError:
             pytest.skip("Reranker 의존성 없음")

@@ -37,10 +37,10 @@ class TestAgentContextSchemas:
     def test_schema_has_required_fields(self):
         """각 스키마가 필수 메타데이터를 포함하는지 확인"""
         for agent_name, schema in AGENT_CONTEXT_SCHEMAS.items():
-            with pytest.raises(AssertionError) if "agent_name" not in schema else pytest.warns(None):
-                assert "agent_name" in schema, f"{agent_name}: agent_name 누락"
-                assert "input_fields" in schema, f"{agent_name}: input_fields 누락"
-                assert "output_fields" in schema, f"{agent_name}: output_fields 누락"
+            # 모든 스키마는 필수 메타데이터를 포함해야 함
+            assert "agent_name" in schema, f"{agent_name}: agent_name 누락"
+            assert "input_fields" in schema, f"{agent_name}: input_fields 누락"
+            assert "output_fields" in schema, f"{agent_name}: output_fields 누락"
 
     def test_input_output_no_overlap(self):
         """입력과 출력 필드가 겹치지 않는지 확인 (일부 예외)"""

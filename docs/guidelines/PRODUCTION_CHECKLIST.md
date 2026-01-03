@@ -85,3 +85,5 @@ llm = get_llm_with_retry().with_structured_output(AnalysisResult)
 | **Exponential Backoff** | ✅ | `utils/retry.py`, `utils/llm.py` |
 | FileLogger | ✅ | `utils/file_logger.py` |
 | LangSmith Tracing | ✅ | `utils/tracing.py` |
+| **Cross-Encoder Reranking** | ✅ | `rag/reranker.py` (balanced/quality 프리셋 기본 활성화) |
+| **pytest-cov 커버리지** | ✅ | `pyproject.toml` (`pytest --cov` 지원) |
