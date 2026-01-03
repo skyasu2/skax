@@ -81,12 +81,12 @@ class MarketAgent:
         web_search_results: List[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        시장 분석을 수행합니다.
+        시장 분석을 수행합니다. (Active Search 적용)
         
         Args:
             service_overview: 서비스 개요
             target_market: 타겟 시장
-            web_search_results: 웹 검색 결과 (선택)
+            web_search_results: 초기 웹 검색 결과 (참고용)
             
         Returns:
             MarketAnalysis dict
@@ -95,31 +95,57 @@ class MarketAgent:
             MARKET_SYSTEM_PROMPT,
             MARKET_USER_PROMPT
         )
+        from langchain_community.tools.tavily_search import TavilySearchResults
+        from langgraph.prebuilt import create_react_agent
+        from langchain_core.messages import SystemMessage, HumanMessage
         
-        logger.info(f"[{self.name}] 시장 분석 시작")
+        logger.info(f"[{self.name}] 시장 분석 시작 (Active Search Enabled)")
         
-        # 웹 검색 결과 포맷팅
+        # 1. 초기 컨텍스트 구성
         web_context = ""
         if web_search_results:
-            for result in web_search_results[:10]:
-                web_context += f"- {result.get('title', '')}: {result.get('content', '')[:200]}\n"
+            for result in web_search_results[:5]:
+                web_context += f"- {result.get('title', '')}: {result.get('content', '')[:100]}\n"
         
-        # 프롬프트 구성
-        user_prompt = MARKET_USER_PROMPT.format(
+        # 2. 검색 도구 준비 (Tavily)
+        # [Rate Limit] 최대 2개 결과, 에이전트 루프에서 횟수 제한 유도
+        search_tool = TavilySearchResults(max_results=2)
+        tools = [search_tool]
+
+        # 3. React 에이전트 생성 (일회성)
+        # 검색 능력을 가진 에이전트로 업그레이드
+        agent_executor = create_react_agent(self.llm, tools)
+
+        # 4. 프롬프트 구성
+        user_prompt_content = MARKET_USER_PROMPT.format(
             service_overview=service_overview,
             target_market=target_market,
-            web_context=web_context or "(웹 검색 결과 없음)"
+            web_context=web_context or "(초기 검색 결과 없음)"
         )
+
+        # [Instruction] 검색 활용 지침 추가
+        extended_system_prompt = MARKET_SYSTEM_PROMPT + """
+\n
+### [Active Research Instructions]
+1. You have access to a web search tool (`tavily_search_results_json`).
+2. If the initial context is insufficient for exact numbers (TAM/SAM/SOM) or competitor details, **USE THE SEARCH TOOL**.
+3. **LIMIT**: usage of search tool to **MAXIMUM 2 TIMES** to save time.
+4. If you act as a searcher, query for specific latest data (e.g., "AI education market size 2025").
+5. Finally, you MUST output the JSON format as defined above.
+"""
         
         messages = [
-            {"role": "system", "content": MARKET_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt}
+            SystemMessage(content=extended_system_prompt),
+            HumanMessage(content=user_prompt_content)
         ]
         
         try:
-            response = self.llm.invoke(messages)
-            content = response.content if hasattr(response, 'content') else str(response)
-            
+            # 5. 실행
+            result_state = agent_executor.invoke({"messages": messages})
+            last_message = result_state["messages"][-1]
+            content = last_message.content
+
+            # 6. JSON 파싱
             import json
             import re
             
@@ -129,12 +155,17 @@ class MarketAgent:
             else:
                 json_str = content
             
-            result = json.loads(json_str)
+            # JSON 파싱 시도 (실패 시 클린업)
+            try:
+                result = json.loads(json_str)
+            except json.JSONDecodeError:
+                # 가끔 마크다운이나 잡다한 텍스트가 섞일 수 있음
+                logger.warning(f"[{self.name}] JSON 파싱 1차 실패, 클린업 후 재시도")
+                json_str = re.sub(r'^[^{]*', '', json_str) # 첫 { 앞부분 제거
+                json_str = re.sub(r'[^}]*$', '', json_str) # 마지막 } 뒷부분 제거
+                result = json.loads(json_str)
             
-            logger.info(f"[{self.name}] 시장 분석 완료")
-            logger.debug(f"  - TAM: {result.get('tam', {}).get('value', 'N/A')}")
-            logger.debug(f"  - 경쟁사: {len(result.get('competitors', []))}개")
-            
+            logger.info(f"[{self.name}] 시장 분석 완료 (Active Search 활용함)")
             return result
             
         except Exception as e:
