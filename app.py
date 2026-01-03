@@ -8,20 +8,13 @@ LangGraph 워크플로우와 Azure OpenAI를 활용합니다.
 import streamlit as st
 import os
 import sys
-import random
 import uuid
-import json
 from datetime import datetime
-
-import httpx
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.config import Config
-
-# API Base URL
-API_BASE_URL = "http://127.0.0.1:8000"
 
 # UI 컴포넌트 Import (분리된 모듈에서)
 from ui import (
@@ -35,9 +28,8 @@ from ui import (
     render_error_state,
     render_option_selector,
     render_visual_timeline,
-    render_human_interaction  # [NEW]
+    render_human_interaction
 )
-# from ui.components import render_structure_dialog  # [REMOVED] Structure Approval Deprecated
 
 # =============================================================================
 # 페이지 설정
@@ -81,10 +73,8 @@ def init_session_state():
         st.session_state.input_key = 0
     if "prefill_prompt" not in st.session_state:
         st.session_state.prefill_prompt = None
-    # [NEW] 알림 트리거 플래그
     if "trigger_notification" not in st.session_state:
         st.session_state.trigger_notification = False
-    # [FIX] 생성 모드 프리셋 기본값 (balanced = 균형)
     if "generation_preset" not in st.session_state:
         st.session_state.generation_preset = "balanced"
 
@@ -117,40 +107,25 @@ def init_resources():
         print(f"[WARN] Resource Initialization Warning: {e}")
 
 
-
-
 # =============================================================================
-# 메인 렌더링
+# 헤더 렌더링
 # =============================================================================
-def render_main():
-    """메인 영역 렌더링"""
-    # =========================================================================
-    # 헤더
-    # =========================================================================
-    
-    # [CHECK] 예약된 알림이 있으면 실행
+def _render_header():
+    """헤더 영역 렌더링 (타이틀, 프리셋, 메뉴)"""
+    # 알림 트리거 확인
     if st.session_state.get("trigger_notification"):
         from ui.components import trigger_browser_notification
         trigger_browser_notification("PlanCraft 알림", "기획서 작성이 완료되었습니다! 📄")
         st.session_state.trigger_notification = False
 
-    # 헤더: 타이틀 | 프리셋 선택 | 메뉴
-    # [FIX] 프리셋 설명이 잘리지 않도록 컬럼 비율 조정 (1.5 -> 2.5)
     col_title, col_preset, col_menu = st.columns([4, 2.5, 0.5])
 
     with col_title:
         st.markdown("### 📋 PlanCraft Agent")
 
-    # [NEW] 프리셋 선택기 - 헤더에 직접 배치
     with col_preset:
-        from utils.settings import GENERATION_PRESETS, DEFAULT_PRESET
-
-        # 프리셋 드롭다운 옵션
+        from utils.settings import GENERATION_PRESETS
         preset_keys = list(GENERATION_PRESETS.keys())
-
-        # [FIX] Streamlit 위젯 key와 session_state 충돌 방지
-        # - key 사용 시 index 파라미터 제거 (Streamlit 권장 패턴)
-        # - 기본값은 init_session_state()에서 설정
         st.selectbox(
             "생성 모드",
             options=preset_keys,
@@ -170,7 +145,6 @@ def render_main():
                 st.session_state.generated_plan = None
                 st.session_state.input_key += 1
                 st.session_state.thread_id = str(uuid.uuid4())
-                # 브레인스토밍 상태 초기화
                 st.session_state.idea_category = "random"
                 st.session_state.idea_llm_count = 0
                 st.session_state.random_examples = None
@@ -194,170 +168,153 @@ def render_main():
 
     st.divider()
 
-    # =========================================================================
-    # 시작 화면 (채팅 히스토리가 없을 때만 표시)
-    # =========================================================================
-    if not st.session_state.chat_history:
-        st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
 
-        # 세션 상태 초기화
-        if "idea_category" not in st.session_state:
-            st.session_state.idea_category = "random"
-        if "idea_llm_count" not in st.session_state:
-            st.session_state.idea_llm_count = 0
-        if "random_examples" not in st.session_state or st.session_state.random_examples is None:
-            from utils.prompt_examples import get_examples_by_category
-            st.session_state.random_examples = get_examples_by_category("random", 3)
+# =============================================================================
+# 브레인스토밍 히어로 렌더링
+# =============================================================================
+def _render_brainstorming_hero():
+    """시작 화면 브레인스토밍 UI"""
+    st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
 
-        # 카테고리 드롭다운 & AI 생성 버튼 (한 줄로 통합)
-        from utils.prompt_examples import CATEGORIES, get_examples_by_category
+    # 세션 상태 초기화
+    if "idea_category" not in st.session_state:
+        st.session_state.idea_category = "random"
+    if "idea_llm_count" not in st.session_state:
+        st.session_state.idea_llm_count = 0
+    if "random_examples" not in st.session_state or st.session_state.random_examples is None:
+        from utils.prompt_examples import get_examples_by_category
+        st.session_state.random_examples = get_examples_by_category("random", 3)
 
-        # 카테고리 드롭다운 (format_func 패턴 - 베스트 프랙티스)
-        cat_keys = list(CATEGORIES.keys())
+    from utils.prompt_examples import CATEGORIES, get_examples_by_category
+    cat_keys = list(CATEGORIES.keys())
 
-        # 카테고리 변경 시 예시 갱신 (side effect가 필요한 경우만 on_change 사용)
-        def on_category_change():
-            new_category = st.session_state.idea_category
-            st.session_state.random_examples = get_examples_by_category(new_category, 3)
+    def on_category_change():
+        new_category = st.session_state.idea_category
+        st.session_state.random_examples = get_examples_by_category(new_category, 3)
 
-        # 헤더 + 드롭다운 + 버튼을 한 줄로
-        llm_remaining = max(0, 10 - st.session_state.idea_llm_count)
-        col_title, col_dropdown, col_btn = st.columns([2.5, 1.5, 1])
+    llm_remaining = max(0, 10 - st.session_state.idea_llm_count)
+    col_title, col_dropdown, col_btn = st.columns([2.5, 1.5, 1])
 
-        with col_title:
-            st.markdown(f"#### 🎲 AI 브레인스토밍 <small style='color:gray;'>({llm_remaining}회)</small>", unsafe_allow_html=True)
+    with col_title:
+        st.markdown(f"#### 🎲 AI 브레인스토밍 <small style='color:gray;'>({llm_remaining}회)</small>", unsafe_allow_html=True)
 
-        with col_dropdown:
-            st.selectbox(
-                "카테고리",
-                options=cat_keys,
-                # index 제거: session_state.idea_category가 자동으로 선택값 결정
-                format_func=lambda k: f"{CATEGORIES[k]['icon']} {CATEGORIES[k]['label']}",
-                key="idea_category",  # session_state key와 동일 → 자동 동기화
-                label_visibility="collapsed",
-                on_change=on_category_change  # 예시 갱신을 위한 side effect
-            )
+    with col_dropdown:
+        st.selectbox(
+            "카테고리",
+            options=cat_keys,
+            format_func=lambda k: f"{CATEGORIES[k]['icon']} {CATEGORIES[k]['label']}",
+            key="idea_category",
+            label_visibility="collapsed",
+            on_change=on_category_change
+        )
 
-        with col_btn:
-            if st.button("🔄 AI 생성", key="refresh_hero_ex", use_container_width=True, help="AI가 실시간으로 새로운 아이디어를 제안합니다"):
-                from utils.idea_generator import generate_ideas
-                with st.spinner("💡 아이디어를 떠올리는 중..."):
-                    ideas, used_llm = generate_ideas(
-                        category=st.session_state.idea_category,
-                        count=3,
-                        use_llm=True,
-                        session_call_count=st.session_state.idea_llm_count
-                    )
-                    st.session_state.random_examples = ideas
-                    if used_llm:
-                        st.session_state.idea_llm_count += 1
-                st.rerun()
+    with col_btn:
+        if st.button("🔄 AI 생성", key="refresh_hero_ex", use_container_width=True, help="AI가 실시간으로 새로운 아이디어를 제안합니다"):
+            from utils.idea_generator import generate_ideas
+            with st.spinner("💡 아이디어를 떠올리는 중..."):
+                ideas, used_llm = generate_ideas(
+                    category=st.session_state.idea_category,
+                    count=3,
+                    use_llm=True,
+                    session_call_count=st.session_state.idea_llm_count
+                )
+                st.session_state.random_examples = ideas
+                if used_llm:
+                    st.session_state.idea_llm_count += 1
+            st.rerun()
 
-        # 카테고리 설명
-        current_cat = CATEGORIES.get(st.session_state.idea_category, {})
-        st.caption(f"💡 {current_cat.get('description', '')}")
+    current_cat = CATEGORIES.get(st.session_state.idea_category, {})
+    st.caption(f"💡 {current_cat.get('description', '')}")
 
-        # 아이디어 카드
-        cols = st.columns(3)
-        for i, (title, prompt) in enumerate(st.session_state.random_examples):
-            with cols[i]:
-                if st.button(title, key=f"hero_ex_{i}", use_container_width=True, help=prompt):
-                    st.session_state.prefill_prompt = prompt
+    cols = st.columns(3)
+    for i, (title, prompt) in enumerate(st.session_state.random_examples):
+        with cols[i]:
+            if st.button(title, key=f"hero_ex_{i}", use_container_width=True, help=prompt):
+                st.session_state.prefill_prompt = prompt
 
-        # [NEW] 입력 팁 안내
-        st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-left: 4px solid #667eea;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-top: 1rem;
-        ">
-            <strong>💡 Tip: 빠른 기획서 생성을 위한 입력 가이드</strong>
-            <p style="margin: 8px 0 0 0; color: #495057; font-size: 0.9rem;">
-                <b>20자 이상</b> 입력 시 확인 절차 없이 바로 기획서가 생성됩니다.<br/>
-                예) "직장인을 위한 AI 기반 식단 관리 앱" ✅ &nbsp; vs &nbsp; "다이어트 앱" ❓ (확인 필요)
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-left: 4px solid #667eea;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-top: 1rem;
+    ">
+        <strong>💡 Tip: 빠른 기획서 생성을 위한 입력 가이드</strong>
+        <p style="margin: 8px 0 0 0; color: #495057; font-size: 0.9rem;">
+            <b>20자 이상</b> 입력 시 확인 절차 없이 바로 기획서가 생성됩니다.<br/>
+            예) "직장인을 위한 AI 기반 식단 관리 앱" ✅ &nbsp; vs &nbsp; "다이어트 앱" ❓ (확인 필요)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # =========================================================================
-    # 3. 화면 렌더링 (채팅 히스토리 & 현재 상태 UI) [위치 이동됨]
-    # =========================================================================
-    
-    # 3-1. 채팅 히스토리
+
+# =============================================================================
+# 채팅 히스토리 & 상태 렌더링
+# =============================================================================
+def _render_chat_and_state():
+    """채팅 히스토리와 현재 상태 UI 렌더링"""
+    # 채팅 히스토리
     for msg in st.session_state.chat_history:
         render_chat_message(msg["role"], msg["content"], msg.get("type", "text"))
 
-    # 3-2. 현재 상태 기반 UI (인터럽트, 에러, 결과)
+    # 현재 상태 기반 UI
     if st.session_state.current_state:
         state = st.session_state.current_state
-        
-        # A. 에러
+
         if state.get("error") or state.get("error_message"):
             render_error_state(state)
-            
-        # B. 인터럽트 (Native Payload 우선)
+
         elif state.get("__interrupt__"):
             payload = state["__interrupt__"]
-            
-            # [CASE] 목차 승인 (Multi-HITL) - 모달 & Fast Track
-            # [CASE] 일반 옵션 선택 (기존 로직)
-            ui_state = state.copy() 
+            ui_state = state.copy()
             ui_state.update({
                 "input_schema_name": payload.get("input_schema_name"),
                 "options": payload.get("options"),
                 "option_question": payload.get("question"),
-                "error": payload.get("error"),  # [NEW] 에러 메시지 전달 (UI 표시용)
+                "error": payload.get("error"),
                 "need_more_info": True
             })
             render_human_interaction(ui_state)
-            
-        # C. 기존 방식 호환 (need_more_info 플래그)
+
         elif state.get("need_more_info"):
             render_human_interaction(state)
-            
-        # D. 최종 결과
+
         elif state.get("final_output") and not state.get("analysis", {}).get("is_general_query", False):
-             st.success("기획서 작성이 완료되었습니다!")
-             st.session_state.generated_plan = state["final_output"]
-             
-             # 히스토리 중복 방지
-             if not st.session_state.plan_history or st.session_state.plan_history[-1]['content'] != state["final_output"]:
-                 now_str = datetime.now().strftime("%H:%M:%S")
-                 st.session_state.plan_history.append({
+            st.success("기획서 작성이 완료되었습니다!")
+            st.session_state.generated_plan = state["final_output"]
+
+            if not st.session_state.plan_history or st.session_state.plan_history[-1]['content'] != state["final_output"]:
+                now_str = datetime.now().strftime("%H:%M:%S")
+                st.session_state.plan_history.append({
                     "version": len(st.session_state.plan_history) + 1,
                     "timestamp": now_str,
                     "content": state["final_output"]
-                 })
+                })
 
-             st.divider()
-             # 메인 액션 버튼 (모달 호출)
-             col_act1, col_act2 = st.columns(2)
-             with col_act1:
-                 st.markdown('<div class="bounce-guide">👇 클릭하여 확인</div>', unsafe_allow_html=True)
-                 if st.button("📄 기획서 보기", type="primary", use_container_width=True):
-                     show_plan_dialog()
-             with col_act2:
-                 if st.button("🔍 AI 분석 데이터 (설계도)", use_container_width=True):
-                     show_analysis_dialog()
+            st.divider()
+            col_act1, col_act2 = st.columns(2)
+            with col_act1:
+                st.markdown('<div class="bounce-guide">👇 클릭하여 확인</div>', unsafe_allow_html=True)
+                if st.button("📄 기획서 보기", type="primary", use_container_width=True):
+                    show_plan_dialog()
+            with col_act2:
+                if st.button("🔍 AI 분석 데이터 (설계도)", use_container_width=True):
+                    show_analysis_dialog()
 
-             # 실행 과정 시각화
-             with st.expander("📊 실행 과정 상세 보기", expanded=False):
-                 hist = state.get("step_history", [])
-                 render_visual_timeline(hist)
+            with st.expander("📊 실행 과정 상세 보기", expanded=False):
+                hist = state.get("step_history", [])
+                render_visual_timeline(hist)
 
-             render_refinement_ui()
-
-    # [MOVED] 상태 표시기 위치는 더 아래로 이동됨
+            render_refinement_ui()
 
 
-    # =========================================================================
-    # 하단 입력 영역
-    # =========================================================================
-    st.markdown("---")
+# =============================================================================
+# 파일 업로드 렌더링
+# =============================================================================
+def _render_file_upload():
+    """파일 업로드 영역 렌더링"""
     with st.expander("📎 참고 자료 추가 (파일 업로드)", expanded=False):
-        # 파일 업로드 보안 설정
         MAX_FILE_SIZE_MB = 10
         MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
         ALLOWED_EXTENSIONS = {"txt", "md", "docx", "pdf"}
@@ -369,19 +326,15 @@ def render_main():
         )
         if uploaded_file:
             try:
-                # 1. 파일 크기 검증
                 file_size = len(uploaded_file.getbuffer())
                 if file_size > MAX_FILE_SIZE_BYTES:
                     st.error(f"파일이 너무 큽니다. 최대 {MAX_FILE_SIZE_MB}MB까지 허용됩니다.")
-                # 2. 파일명 검증 (경로 조회 방지)
                 elif ".." in uploaded_file.name or "/" in uploaded_file.name or "\\" in uploaded_file.name:
                     st.error("유효하지 않은 파일명입니다.")
-                # 3. 확장자 재검증
                 elif not uploaded_file.name.split(".")[-1].lower() in ALLOWED_EXTENSIONS:
                     st.error("지원하지 않는 파일 형식입니다.")
                 else:
                     content = uploaded_file.read().decode("utf-8", errors='ignore')
-                    # 4. 콘텐츠 길이 제한 (50,000자)
                     if len(content) > 50000:
                         content = content[:50000]
                         st.warning("파일이 너무 길어 일부만 사용됩니다 (50,000자 제한)")
@@ -390,6 +343,12 @@ def render_main():
             except Exception as e:
                 st.error("파일을 읽을 수 없습니다. 파일 형식을 확인해주세요.")
 
+
+# =============================================================================
+# 입력 영역 렌더링
+# =============================================================================
+def _render_input_area():
+    """채팅 입력 영역 렌더링. status_placeholder 반환."""
     # Prefill 확인 UI
     if st.session_state.prefill_prompt and not st.session_state.pending_input:
         st.info(f"📝 **선택된 예시:** {st.session_state.prefill_prompt}")
@@ -406,12 +365,9 @@ def render_main():
                 st.session_state.prefill_prompt = None
                 st.rerun()
 
-    # =========================================================================
-    # [UX] 상태 표시기를 위한 Placeholder 위치 (채팅 입력창 바로 위!)
-    # =========================================================================
+    # 상태 표시기 Placeholder
     st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
     status_placeholder = st.empty()
-
 
     # 채팅 입력창
     placeholder_text = "💬 자유롭게 대화를 입력하세요..."
@@ -426,375 +382,37 @@ def render_main():
         st.session_state.input_key += 1
         st.session_state.pending_input = user_input
         st.rerun()
-        
-    
-    # =========================================================================
-    # 2. 실행 로직 (Start or Resume) [맨 아래에서 실행, 렌더링은 Placeholder로]
-    # =========================================================================
+
+    return status_placeholder
+
+
+# =============================================================================
+# 메인 렌더링 (리팩토링됨)
+# =============================================================================
+def render_main():
+    """메인 영역 렌더링 (분리된 컴포넌트 조합)"""
+    # 1. 헤더
+    _render_header()
+
+    # 2. 시작 화면 (채팅 히스토리가 없을 때만)
+    if not st.session_state.chat_history:
+        _render_brainstorming_hero()
+
+    # 3. 채팅 히스토리 & 현재 상태
+    _render_chat_and_state()
+
+    # 4. 하단 입력 영역
+    st.markdown("---")
+    _render_file_upload()
+    status_placeholder = _render_input_area()
+
+    # 5. 워크플로우 실행 (분리된 모듈)
     if st.session_state.pending_input:
         pending_text = st.session_state.pending_input
         st.session_state.pending_input = None
-        
-        # 1. Resume Command 파싱
-        resume_cmd = None
 
-        if pending_text.startswith("FORM_DATA:"):
-            try:
-                form_data = json.loads(pending_text.replace("FORM_DATA:", ""))
-                resume_cmd = {"resume": form_data}
-            except (json.JSONDecodeError, ValueError):
-                from ui.validation import show_validation_error, ValidationErrorType
-                show_validation_error(ValidationErrorType.INVALID_FORMAT, "폼 데이터를 확인해주세요")
-        elif pending_text.startswith("OPTION:"):
-            try:
-                option_data = json.loads(pending_text.replace("OPTION:", ""))
-                resume_cmd = {"resume": {"selected_option": option_data}}
-            except (json.JSONDecodeError, ValueError):
-                from ui.validation import show_validation_error, ValidationErrorType
-                show_validation_error(ValidationErrorType.INVALID_FORMAT, "선택 데이터를 확인해주세요")
-        elif st.session_state.current_state and st.session_state.current_state.get("__interrupt__"):
-            resume_cmd = {"resume": {"text_input": pending_text}}
-        elif st.session_state.current_state and st.session_state.current_state.get("need_more_info"):
-            resume_cmd = {"resume": {"text_input": pending_text}}
-            
-        # 2. 워크플로우 실행 (FastAPI 백엔드 호출)
-        # [UX] 상태 표시기를 미리 확보한 위치(Placeholder)에 배치
-        with status_placeholder.container():
-            with st.status("🚀 작업을 수행하고 있습니다...", expanded=True) as status:
-                try:
-                    file_content = st.session_state.get("uploaded_content", None)
-                    current_refine_count = st.session_state.get("next_refine_count", 0)
-                    previous_plan = st.session_state.generated_plan
-
-                    import time
-
-                    # API 호출로 워크플로우 실행 (Background)
-                    status.write("🔄 작업 요청을 전송 중입니다...")
-                    if resume_cmd:
-                        # Resume 요청 (HITL 재개)
-                        response = httpx.post(
-                            f"{API_BASE_URL}/api/workflow/resume",
-                            json={
-                                "thread_id": st.session_state.thread_id,
-                                "resume_data": resume_cmd["resume"],
-                                "generation_preset": st.session_state.get("generation_preset", "balanced"),  # [FIX] 프리셋 전달
-                            },
-                            timeout=30.0
-                        )
-                    else:
-                        # 신규 실행
-                        response = httpx.post(
-                            f"{API_BASE_URL}/api/workflow/run",
-                            json={
-                                "user_input": pending_text,
-                                "file_content": file_content,
-                                "thread_id": st.session_state.thread_id,
-                                "generation_preset": st.session_state.get("generation_preset", "balanced"),
-                                "refine_count": current_refine_count,
-                                "previous_plan": previous_plan
-                            },
-                            timeout=30.0
-                        )
-
-                    response.raise_for_status()
-                    # 초기 응답은 RUNNING 상태임
-
-                    # --- Polling Loop with Progress Bar ---
-                    # 설정값
-                    MAX_POLL_DURATION = 600  # 최대 10분
-                    MAX_CONSECUTIVE_ERRORS = 10
-                    POLL_INTERVAL = 1.0
-                    INITIAL_WAIT_TIME = 5.0  # 초기 404 허용 시간 (워크플로우 시작 대기)
-
-                    # 단계별 진행률 매핑
-                    STEP_PROGRESS = {
-                        "retrieve": 10, "context": 10,
-                        "analyze": 25,
-                        "structure": 40,
-                        "write": 60,
-                        "review": 75,
-                        "refine": 85,
-                        "format": 95,
-                    }
-                    STEP_LABELS = {
-                        "retrieve": ("📚", "컨텍스트 수집"),
-                        "context": ("📚", "컨텍스트 수집"),
-                        "analyze": ("🔍", "요구사항 분석"),
-                        "structure": ("🏗️", "구조 설계"),
-                        "write": ("✍️", "콘텐츠 작성"),
-                        "review": ("🔎", "품질 검토"),
-                        "refine": ("✨", "내용 개선"),
-                        "format": ("📋", "최종 포맷팅"),
-                    }
-
-                    last_step_count = 0
-                    final_result = None
-                    start_time = time.time()
-                    execution_log = []  # 전체 로그 수집 (Progressive Disclosure용)
-                    consecutive_errors = 0
-
-                    # [UX] Progressive Disclosure 패턴: 진행률 + 현재 상태만 표시
-                    progress_bar = status.progress(0)
-                    current_progress = 0
-                    current_step_display = status.empty()  # 현재 단계 표시용
-
-                    while True:
-                        elapsed = int(time.time() - start_time)
-
-                        # 타임아웃 체크
-                        if elapsed > MAX_POLL_DURATION:
-                            raise TimeoutError(f"작업 시간이 초과되었습니다 ({MAX_POLL_DURATION}초)")
-
-                        # 1. 상태 조회
-                        try:
-                            status_res = httpx.get(
-                                f"{API_BASE_URL}/api/workflow/status/{st.session_state.thread_id}",
-                                timeout=10.0
-                            )
-
-                            # HTTP 상태 코드별 처리
-                            if status_res.status_code == 404:
-                                if elapsed < INITIAL_WAIT_TIME:
-                                    current_step_display.markdown("⏳ **초기화 중...** 워크플로우를 준비하고 있습니다")
-                                    time.sleep(POLL_INTERVAL)
-                                    continue
-                                raise ValueError("워크플로우를 찾을 수 없습니다")
-                            elif status_res.status_code >= 500:
-                                consecutive_errors += 1
-                                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                                    raise RuntimeError(f"서버 오류가 계속 발생합니다 ({consecutive_errors}회)")
-                                time.sleep(POLL_INTERVAL * 2)
-                                continue
-                            elif status_res.status_code != 200:
-                                consecutive_errors += 1
-                                time.sleep(POLL_INTERVAL)
-                                continue
-
-                            consecutive_errors = 0
-
-                        except httpx.RequestError as e:
-                            consecutive_errors += 1
-                            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                                raise ConnectionError(f"네트워크 연결 오류: {e}")
-                            time.sleep(POLL_INTERVAL)
-                            continue
-
-                        status_data = status_res.json()
-                        current_status = status_data.get("status", "running")
-                        step_history = status_data.get("step_history", [])
-                        current_step = status_data.get("current_step", "")
-
-                        # 2. [UX] 현재 단계만 업데이트 (Single Active State Indicator)
-                        for step_key, progress in STEP_PROGRESS.items():
-                            if current_step and step_key in current_step.lower():
-                                if progress > current_progress:
-                                    current_progress = progress
-                                    progress_bar.progress(min(current_progress / 100, 0.95))
-                                    icon, label = STEP_LABELS.get(step_key, ("▶️", current_step))
-                                    # 상단 라벨 업데이트
-                                    status.update(label=f"{icon} {label} ({elapsed}초)", state="running")
-                                    # 현재 단계 상세 표시
-                                    current_step_display.markdown(f"🟢 **진행 중:** {label} 단계")
-                                break
-
-                        # 3. 로그 수집만 (화면 출력 X - Progressive Disclosure)
-                        if len(step_history) > last_step_count:
-                            new_steps = step_history[last_step_count:]
-                            for step in new_steps:
-                                step_name = step.get("step", "Unknown")
-                                summary = step.get("summary", "")
-                                exec_time = step.get("execution_time", "")
-
-                                icon = "✔"
-                                for key, (ic, _) in STEP_LABELS.items():
-                                    if key in step_name.lower():
-                                        icon = ic
-                                        break
-
-                                execution_log.append({
-                                    "step": step_name,
-                                    "summary": summary,
-                                    "icon": icon,
-                                    "time": exec_time or f"{elapsed}s"
-                                })
-
-                            last_step_count = len(step_history)
-
-                        # 4. 종료 조건 확인
-                        if current_status in ["completed", "interrupted", "failed"]:
-                            final_result = status_data.get("result")
-                            if not final_result:
-                                time.sleep(0.5)
-                                retry_res = httpx.get(
-                                    f"{API_BASE_URL}/api/workflow/status/{st.session_state.thread_id}",
-                                    timeout=5.0
-                                )
-                                if retry_res.status_code == 200:
-                                    final_result = retry_res.json().get("result")
-                            if not final_result:
-                                raise Exception("작업이 완료되었으나 결과 데이터를 받아올 수 없습니다.")
-                            break
-
-                        time.sleep(POLL_INTERVAL)
-
-                    # --- Loop End ---
-
-                    # [UX] 완료 상태 표시 (Progressive Disclosure)
-                    progress_bar.progress(100)
-                    total_elapsed = int(time.time() - start_time)
-                    current_step_display.empty()  # 진행 중 표시 제거
-
-                    # Collapsible Activity Timeline
-                    if execution_log:
-                        # 최종 완료 메시지만 표시
-                        status.markdown(f"✅ **완료** — 총 {len(execution_log)}단계 실행됨")
-
-                        # 세부 로그는 접힌 상태로 제공
-                        with status.expander("📋 세부 진행 내역 보기", expanded=False):
-                            for log in execution_log:
-                                st.write(f"✔ **{log['step'].upper()}** — {log.get('summary', '')} `{log['time']}`")
-
-                    # API 응답 필드 매핑 (interrupt -> __interrupt__)
-                    if final_result.get("interrupt"):
-                        final_result["__interrupt__"] = final_result["interrupt"]
-
-                    status.update(label=f"✅ 완료! (총 {total_elapsed}초)", state="complete", expanded=False)
-
-                    # 3. 결과 State 저장
-                    st.session_state.current_state = final_result
-                    if current_refine_count > 0:
-                         final_result["refine_count"] = current_refine_count
-                         st.session_state.next_refine_count = 0
-
-                    # 4. 결과 처리 로직 (잡담 vs 기획서 vs 추가질문)
-                    analysis_res = final_result.get("analysis")
-                    generated_plan = final_result.get("final_output", "")
-                    
-                    # [FIX] 인터럽트 페이로드(Payload) 우선 확인 (Multi-HITL 지원)
-                    interrupt_data = final_result.get("__interrupt__")
-                    
-                    # 상태값 초기화
-                    need_more_info = final_result.get("need_more_info", False)
-                    options = final_result.get("options", [])
-                    option_question = final_result.get("option_question", "다음과 같이 기획 방향을 제안합니다.")
-                    
-                    # 인터럽트가 있으면 Payload 데이터로 덮어쓰기
-                    if interrupt_data:
-                        # Payload 구조: { "question": "...", "options": [...] }
-                        if "question" in interrupt_data:
-                            option_question = interrupt_data["question"]
-                        if "options" in interrupt_data:
-                            options = interrupt_data["options"]
-                        # 인터럽트는 항상 사용자 응답 대기 상태임
-                        need_more_info = True
-
-                    is_general = False
-                    if analysis_res and isinstance(analysis_res, dict):
-                        is_general = analysis_res.get("is_general_query", False)
-
-                    # [FIX] options가 있으면 무조건 기획 제안 모드로 처리 (옵션 우선!)
-                    if options and len(options) > 0 and not is_general:
-                        # B. 기획 제안 & 미리보기 표시
-                        # q = option_question # 위에서 설정됨
-
-                        preview_msg = ""
-                        # [FIX] Analyzer가 증폭한 컨셉 정보 항상 표시 (interrupt 유무와 무관)
-                        if analysis_res:
-                            p_topic = analysis_res.get("topic", "미정")
-                            p_purpose = analysis_res.get("purpose", "")
-                            p_features = analysis_res.get("key_features", [])
-
-                            preview_msg += f"**📌 제안 컨셉**: {p_topic}\n"
-                            preview_msg += f"**🎯 기획 의도**: {p_purpose}\n"
-                            if p_features:
-                                feats = ", ".join(p_features[:4])
-                                preview_msg += f"**💡 주요 기능**: {feats} 등\n"
-                            preview_msg += "\n"
-
-                        # Markdown 충돌 방지를 위해 option_question은 있는 그대로 출력 (Bold 제거)
-                        msg = f"🤔 {option_question}\n\n{preview_msg}"
-                        msg_content = msg
-                        for o in options:
-                            msg_content += f"- **{o.get('title')}**: {o.get('description')}\n"
-
-                        st.session_state.chat_history.append({"role": "assistant", "content": msg_content, "type": "options"})
-
-                    elif is_general:
-                        # A. 일반 대화 응답
-                        ans = analysis_res.get("general_answer", "무엇을 도와드릴까요?")
-                        st.session_state.chat_history.append({"role": "assistant", "content": ans, "type": "text"})
-                        st.session_state.generated_plan = None 
-
-                    elif generated_plan:
-                        # C. 기획서 완성
-                        st.session_state.generated_plan = generated_plan
-
-                        # 프리셋 및 토큰 사용량 정보 표시
-                        from utils.settings import get_preset
-                        preset_key = st.session_state.get("generation_preset", "balanced")
-                        preset = get_preset(preset_key)
-                        usage_info = f"\n\n---\n🤖 **사용 모델**: {preset.model_type} ({preset.name})"
-
-                        # [NEW] API 응답에서 토큰 사용량 추출
-                        token_usage = final_result.get("token_usage") or status_data.get("token_usage")
-                        if token_usage and token_usage.get("total_tokens", 0) > 0:
-                            usage_info += f"\n📊 **토큰 사용량**: {token_usage['total_tokens']:,}개 (입력: {token_usage['input_tokens']:,}, 출력: {token_usage['output_tokens']:,})"
-                            usage_info += f"\n💰 **예상 비용**: ${token_usage['estimated_cost_usd']:.4f} (약 {int(token_usage['estimated_cost_krw'])}원)"
-
-                        st.session_state.chat_history.append({
-                            "role": "assistant",
-                            "content": f"✅ 기획서가 완성되었습니다!{usage_info}",
-                            "type": "plan"
-                        })
-                        
-                        st.session_state.trigger_notification = True
-                        
-                        now_str = datetime.now().strftime("%H:%M:%S")
-                        if not st.session_state.plan_history or st.session_state.plan_history[-1]['content'] != generated_plan:
-                             st.session_state.plan_history.append({
-                                "version": len(st.session_state.plan_history) + 1, "timestamp": now_str, "content": generated_plan
-                             })
-
-                        chat_summary = final_result.get("chat_summary", "")
-                        if chat_summary:
-                             st.session_state.chat_history.append({"role": "assistant", "content": chat_summary, "type": "summary"})
-
-                        # [NEW] Mermaid 다이어그램 자동 생성 및 표시 (Supervisor 실행 결과 시각화)
-                        # Supervisor의 실행 계획(_plan) 정보를 기반으로 Mermaid 그래프 생성
-                        if final_result.get("_plan"):
-                            from agents.agent_config import export_plan_to_mermaid
-                            mermaid_code = export_plan_to_mermaid(final_result["_plan"])
-                            if mermaid_code:
-                                with st.expander("🔗 실행 계획 다이어그램 (Mermaid)", expanded=True):
-                                     from ui.components import render_scalable_mermaid
-                                     render_scalable_mermaid(mermaid_code, height=400)
-                                     st.caption("Supervisor가 수립하고 실행한 에이전트 협업 구조도입니다.")
-
-                    else:
-                        st.session_state.chat_history.append({"role": "assistant", "content": "작업이 완료되었습니다.", "type": "text"})
-
-                    st.rerun()
-                    
-                except Exception as e:
-                    import traceback
-                    from ui.validation import handle_exception_friendly, detect_error_type, ERROR_MESSAGES
-
-                    # 친화적인 에러 메시지 표시
-                    handle_exception_friendly(e, context="기획서 생성 중")
-
-                    # 상태 업데이트
-                    if st.session_state.current_state:
-                         if isinstance(st.session_state.current_state, dict):
-                             st.session_state.current_state.update({"error": str(e), "step_status": "FAILED"})
-
-                    # 채팅 히스토리에 친화적 메시지 추가
-                    error_type = detect_error_type(e)
-                    error_info = ERROR_MESSAGES.get(error_type, ERROR_MESSAGES[error_type.UNKNOWN])
-                    friendly_msg = f"{error_info['icon']} **{error_info['title']}**\n\n{error_info['message']}\n\n{error_info['hint']}"
-
-                    st.session_state.chat_history.append({
-                        "role": "assistant", "content": friendly_msg, "type": "error"
-                    })
+        from ui.workflow_runner import run_pending_workflow
+        run_pending_workflow(pending_text, status_placeholder)
 
 
 # =============================================================================
@@ -802,15 +420,12 @@ def render_main():
 # =============================================================================
 def main():
     """메인 함수"""
-    # 1. 리소스 초기화 (RAG, Config 등) - 실패해도 앱 실행 보장
+    # 1. 리소스 초기화
     init_resources()
-    
+
     # 2. 세션 초기화
     init_session_state()
-    
-    # [NEW] Modal Action 처리 (UI Component에서 넘어온 요청)
-    # [MOVED] Modal Action Logic Removed (Structure Approval Deprecated)
-    
+
     # 3. 메인 UI 렌더링
     render_main()
 
