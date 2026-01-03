@@ -54,3 +54,6 @@ PROJECT_PRESENTATION.md
 *_architecture.html
 .coverage
 htmlcov/
+
+# Bootcamp reference examples
+docs/guidelines/강의 자료/참조 예제/
