@@ -901,6 +901,31 @@ class NativeSupervisor:
             ctx["target_users"] = base_context.get("target_users", "")
             ctx["user_constraints"] = base_context.get("user_constraints", [])
             
+            # [NEW] Adaptive Implementation Mode
+            # 서비스 개요와 기술 스택 정보를 확인하여 IT vs Non-IT 판단
+            svc_overview = base_context.get("service_overview", "").lower()
+            tech_stack_info = base_context.get("tech_stack", "")
+            
+            is_tech_project = any(k in svc_overview for k in ["앱", "웹", "플랫폼", "ai", "서비스", "개발"])
+            if not is_tech_project and "오프라인" in svc_overview: 
+                 mode = "operation"
+            else: 
+                 mode = "tech"
+
+            # 강제 모드 설정 (tech_stack 내용으로 2차 판단)
+            if "없음" in tech_stack_info or "해당사항 없음" in tech_stack_info:
+                mode = "operation"
+
+            if mode == "tech":
+                ctx["focus_area"] = "IT System Architecture & API Specification"
+                if base_context.get("deep_analysis_mode", False):
+                    ctx["detail_level"] = "high (Include API Endpoints JSON and DB Schema)"
+            else:
+                ctx["focus_area"] = "Physical Operation Plan & Space Layout"
+                ctx["tech_stack"] = "N/A (Non-IT Project)" # 기술 스택 무시
+                if base_context.get("deep_analysis_mode", False):
+                    ctx["detail_level"] = "high (Include Staffing Schedule and Floor Plan Description)"
+            
         elif agent_id == "content":
             ctx["target_users"] = base_context.get("target_users", "")
             ctx["market_analysis"] = current_results.get("market_analysis", {})
