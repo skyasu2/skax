@@ -113,9 +113,9 @@ def run(state: PlanCraftState) -> PlanCraftState:
     preset_config = get_preset(active_preset)
 
     # 3. 프롬프트 구성 (시간 컨텍스트 주입 + 동적 설정 적용)
-    # [FIX] min_key_features를 프롬프트에 주입하여 Quality 모드에서 더 많은 기능 제안 유도
-    system_msg_content = get_time_context() + ANALYZER_SYSTEM_PROMPT.format(
-        min_key_features=preset_config.min_key_features
+    # [FIX] min_key_features를 프롬프트에 주입 (f-string 사용 시 JSON 중괄호 충돌 방지를 위해 replace 사용)
+    system_msg_content = get_time_context() + ANALYZER_SYSTEM_PROMPT.replace(
+        "{min_key_features}", str(preset_config.min_key_features)
     )
 
     # [FIX] 프롬프트 템플릿의 {review_data}, {current_analysis} 인자 전달
@@ -138,9 +138,6 @@ def run(state: PlanCraftState) -> PlanCraftState:
         # LLM 생성 및 실행
         # Analyzer는 창의적인 작업이므로 preset temperature 사용 (default: creative)
         temperature = preset_config.temperature
-        analyzer = _get_analyzer_llm(temperature=temperature)
-        
-        # LLM 생성 및 실행
         analyzer = _get_analyzer_llm(temperature=temperature)
         analysis_result = analyzer.invoke(messages)
         
