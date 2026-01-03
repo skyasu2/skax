@@ -211,6 +211,84 @@ class RoutingDecision(BaseModel):
 
 
 # =============================================================================
+# 규칙 기반 라우팅 (Deterministic Routing)
+# =============================================================================
+# [REFACTOR] LLM 판단 범위 축소: 구조적 판단은 코드로 고정
+
+# 선택적 에이전트 활성화 키워드
+TECH_KEYWORDS = frozenset([
+    "앱", "웹", "플랫폼", "개발", "ai", "블록체인", "기술", "시스템",
+    "아키텍처", "api", "서버", "클라우드", "모바일", "ios", "android",
+    "react", "node", "python", "aws", "gcp", "azure", "saas", "paas",
+    "머신러닝", "딥러닝", "데이터", "알고리즘", "소프트웨어", "하드웨어"
+])
+
+CONTENT_KEYWORDS = frozenset([
+    "커뮤니티", "sns", "마케팅", "콘텐츠", "브랜드", "홍보", "광고",
+    "인플루언서", "크리에이터", "미디어", "유튜브", "인스타", "틱톡",
+    "블로그", "뉴스레터", "소셜", "바이럴", "캠페인", "pr", "seo"
+])
+
+
+def detect_required_agents(
+    service_overview: str,
+    purpose: str = "기획서 작성"
+) -> RoutingDecision:
+    """
+    규칙 기반 에이전트 결정 (Deterministic)
+
+    구조적 판단을 코드로 고정하여 테스트 가능성과 일관성을 보장합니다.
+
+    Rules:
+        1. 기획서 목적: market, bm, financial, risk 필수
+        2. 아이디어 검증: market, bm만 필요
+        3. tech: 기술 관련 키워드 포함 시 추가
+        4. content: 마케팅/콘텐츠 관련 키워드 포함 시 추가
+
+    Args:
+        service_overview: 서비스 개요 텍스트
+        purpose: 분석 목적 ("기획서 작성" | "아이디어 검증" | ...)
+
+    Returns:
+        RoutingDecision: 결정론적 라우팅 결과
+
+    Example:
+        >>> decision = detect_required_agents("AI 기반 점심 추천 앱", "기획서 작성")
+        >>> assert "market" in decision.required_analyses
+        >>> assert "tech" in decision.required_analyses  # "AI", "앱" 키워드 감지
+    """
+    text_lower = service_overview.lower()
+    reasons = []
+
+    # 1. 필수 에이전트 결정 (목적 기반)
+    if "기획서" in purpose:
+        required = ["market", "bm", "financial", "risk"]
+        reasons.append("기획서 작성 목적 → 4대 필수 분석 포함")
+    else:
+        required = ["market", "bm"]
+        reasons.append("아이디어 검증 목적 → 시장/BM 분석만 수행")
+
+    # 2. 선택적 에이전트 (키워드 기반)
+    # tech 감지
+    tech_matches = [kw for kw in TECH_KEYWORDS if kw in text_lower]
+    if tech_matches:
+        required.append("tech")
+        reasons.append(f"기술 키워드 감지: {tech_matches[:3]}")
+
+    # content 감지
+    content_matches = [kw for kw in CONTENT_KEYWORDS if kw in text_lower]
+    if content_matches:
+        required.append("content")
+        reasons.append(f"콘텐츠 키워드 감지: {content_matches[:3]}")
+
+    return RoutingDecision(
+        required_analyses=required,
+        reasoning=" | ".join(reasons),
+        priority_order=required
+    )
+
+
+# =============================================================================
 # LangGraph Native Supervisor
 # =============================================================================
 
@@ -354,11 +432,35 @@ class NativeSupervisor:
     def decide_required_agents(
         self,
         service_overview: str,
-        purpose: str = "기획서 작성"
+        purpose: str = "기획서 작성",
+        use_llm_routing: bool = False  # [REFACTOR] 기본값 False로 변경
     ) -> RoutingDecision:
-        """동적 라우팅: 필요한 에이전트 결정"""
+        """
+        필요한 에이전트 결정 (규칙 기반 기본, LLM 옵션)
+
+        [REFACTOR] LLM 판단 범위 축소:
+        - 기본: 규칙 기반 결정론적 라우팅 (테스트 가능, 일관성 보장)
+        - 옵션: use_llm_routing=True 시 LLM 기반 동적 라우팅
+
+        Args:
+            service_overview: 서비스 개요
+            purpose: 분석 목적
+            use_llm_routing: True면 LLM 사용 (기본 False)
+
+        Returns:
+            RoutingDecision: 라우팅 결정
+        """
         logger.info("[NativeSupervisor] 🧭 라우팅 결정 시작...")
-        
+
+        # 규칙 기반 라우팅 (기본)
+        if not use_llm_routing:
+            decision = detect_required_agents(service_overview, purpose)
+            logger.info(f"[NativeSupervisor] 규칙 기반 라우팅: {decision.required_analyses}")
+            logger.info(f"[NativeSupervisor] 결정 이유: {decision.reasoning}")
+            return decision
+
+        # LLM 기반 라우팅 (옵션 - 고급 사용 시)
+        logger.info("[NativeSupervisor] LLM 기반 라우팅 사용")
         messages = [
             SystemMessage(content=self.ROUTER_SYSTEM_PROMPT),
             HumanMessage(content=f"""## 서비스 개요
@@ -370,19 +472,16 @@ class NativeSupervisor:
 위 내용을 바탕으로 어떤 분석이 필요한지 결정하세요.
 """)
         ]
-        
+
         try:
             decision = self.router_llm.invoke(messages)
-            logger.info(f"[NativeSupervisor] 라우팅 결정: {decision.required_analyses}")
+            logger.info(f"[NativeSupervisor] LLM 라우팅 결정: {decision.required_analyses}")
             logger.info(f"[NativeSupervisor] 결정 이유: {decision.reasoning}")
             return decision
         except Exception as e:
-            logger.error(f"[NativeSupervisor] 라우팅 실패, 전체 분석 수행: {e}")
-            return RoutingDecision(
-                required_analyses=["market", "bm", "financial", "risk"],
-                reasoning="라우팅 실패로 전체 분석 수행",
-                priority_order=["market", "bm", "financial", "risk"]
-            )
+            logger.warning(f"[NativeSupervisor] LLM 라우팅 실패, 규칙 기반으로 전환: {e}")
+            # LLM 실패 시 규칙 기반으로 Fallback
+            return detect_required_agents(service_overview, purpose)
     
     
     def run(
@@ -395,25 +494,45 @@ class NativeSupervisor:
         web_search_results: List[Dict[str, Any]] = None,
         purpose: str = "기획서 작성",
         force_all: bool = False,
-        user_constraints: List[str] = None  # [NEW]
+        user_constraints: List[str] = None,
+        use_llm_routing: bool = False  # [NEW] 규칙 기반 라우팅이 기본
     ) -> Dict[str, Any]:
-        """전문 에이전트 실행 (Plan-and-Execute DAG)"""
+        """
+        전문 에이전트 실행 (Plan-and-Execute DAG)
+
+        Args:
+            service_overview: 서비스 개요
+            target_market: 타겟 시장
+            target_users: 타겟 사용자
+            tech_stack: 기술 스택
+            development_scope: 개발 범위
+            web_search_results: 웹 검색 결과
+            purpose: 분석 목적
+            force_all: True면 모든 필수 에이전트 실행
+            user_constraints: 사용자 제약 조건
+            use_llm_routing: True면 LLM 기반 라우팅 (기본 False)
+
+        Returns:
+            Dict: 에이전트 실행 결과
+        """
         logger.info("=" * 60)
         logger.info("[NativeSupervisor] 전문 에이전트 오케스트레이션 시작 (DAG)")
-        
+
         results = {}
-        
+
         if force_all:
             required = ["market", "bm", "financial", "risk"]
             reasoning = "강제 전체 분석"
         else:
-            decision = self.decide_required_agents(service_overview, purpose)
+            decision = self.decide_required_agents(
+                service_overview, purpose, use_llm_routing=use_llm_routing
+            )
             required = list(decision.required_analyses)
             reasoning = decision.reasoning
 
-            # [FIX] 기획서 목적일 때 financial/risk 필수 포함
-            # LLM Router가 조건부로 판단해도 기획서에는 필수 섹션임
-            if "기획서" in purpose:
+            # [NOTE] 규칙 기반 라우팅에서는 이미 기획서 필수 에이전트가 포함됨
+            # LLM 라우팅 사용 시에만 추가 검증 필요
+            if use_llm_routing and "기획서" in purpose:
                 must_have = ["market", "bm", "financial", "risk"]
                 missing = [a for a in must_have if a not in required]
                 if missing:
