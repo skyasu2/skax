@@ -145,6 +145,28 @@ def run(state: PlanCraftState) -> PlanCraftState:
     last_draft_dict = None
     last_error = None
 
+    # [NEW] Quality 모드일 경우: 분할 작성 (Chunk Writing)
+    if preset.name == "quality" and structure:
+        logger.info("[Writer] 👑 Quality Mode: Chunk Writing 시작 (섹션별 상세 작성)")
+        try:
+            final_draft_dict = _write_in_chunks(
+                writer_llm, 
+                messages, 
+                structure, 
+                logger
+            )
+            # Chunk Writing 결과는 이미 Quality가 확보되었다고 가정하고 loop break
+            # 단, 기본적인 포맷 검증은 한 번 수행
+            issues = validate_draft(final_draft_dict, preset, specialist_context, refine_count, logger)
+            if issues:
+                logger.warning(f"[Writer] Chunk Writing 검증 이슈(무시됨): {issues}")
+            
+            return update_state(state, draft=final_draft_dict, current_step="write")
+        except Exception as e:
+            logger.error(f"[Writer] Chunk Writing 실패: {e}, Fallback to Standard Mode")
+            # 실패 시 아래 표준 모드로 진행 (Fallback)
+
+    # [Standard Mode] 통으로 작성 (Fast/Balanced or Quality Fallback)
     for current_try in range(max_retries):
         try:
             logger.info(f"[Writer] 초안 작성 시도 ({current_try + 1}/{max_retries})...")
@@ -187,4 +209,81 @@ def run(state: PlanCraftState) -> PlanCraftState:
         return update_state(state, draft=last_draft_dict, current_step="write")
     else:
         return update_state(state, error=f"Writer 실패: {last_error}")
+
+
+def _write_in_chunks(llm, base_messages, structure_obj, logger):
+    """
+    [Quality Mode 전용] 섹션을 나누어 작성한 후 병합합니다.
+    
+    Args:
+        llm: Writer LLM
+        base_messages: 기본 시스템/유저 메시지
+        structure_obj: Structurer 출력 객체 (sections 리스트 포함)
+        logger: 로거
+        
+    Returns:
+        dict: 합쳐진 DraftResult 딕셔너리
+    """
+    import copy
+    
+    sections = structure_obj.get("sections", []) if isinstance(structure_obj, dict) else getattr(structure_obj, "sections", [])
+    if not sections:
+        raise ValueError("구조에 섹션 정보가 없습니다.")
+
+    full_draft = {
+        "title": getattr(structure_obj, "title", "Business Plan"),
+        "sections": [],
+        "key_features": [] # 나중에 첫 청크에서 가져옴
+    }
+    
+    # 청크 사이즈: 3개 섹션씩
+    chunk_size = 3
+    total_sections = len(sections)
+    
+    # 사용자 프롬프트(base_messages[-1])에서 기본 지시사항 추출
+    base_user_content = base_messages[-1]["content"] if base_messages else ""
+    
+    for i in range(0, total_sections, chunk_size):
+        chunk_sections = sections[i : i + chunk_size]
+        chunk_titles = [s.get("title", s) if isinstance(s, dict) else str(s) for s in chunk_sections]
+        
+        logger.info(f"[Writer Chunk] 섹션 {i+1}~{min(i+chunk_size, total_sections)} 작성 중: {chunk_titles}")
+        
+        chunk_instruction = f"""
+\n=====================================================================
+🧩 **[Section Writing Phase {i//chunk_size + 1}]**
+전체 비즈니스 기획서 중 아래 섹션들만 집중적으로 작성하세요.
+절대 다른 섹션을 건너뛰거나 합치지 마세요.
+
+**작성 대상 섹션**:
+{chr(10).join([f'- {t}' for t in chunk_titles])}
+
+이전 섹션 내용과 문맥이 이어지도록 자연스럽게 작성하세요.
+=====================================================================
+"""
+        # 메시지 복사 후 지시사항 추가
+        current_messages = copy.deepcopy(base_messages)
+        # 기존 유저 메시지에 청크 지시 추가
+        current_messages[-1]["content"] = base_user_content + chunk_instruction
+        
+        # LLM 호출
+        result = llm.invoke(current_messages)
+        result_dict = ensure_dict(result)
+        
+        # 결과 병합
+        generated_sections = result_dict.get("sections", [])
+        
+        # 첫 번째 청크에서 메타데이터(Key Features 등) 가져오기
+        if i == 0:
+            full_draft["title"] = result_dict.get("title", full_draft["title"])
+            full_draft["key_features"] = result_dict.get("key_features", [])
+            full_draft["executive_summary"] = result_dict.get("executive_summary", "")
+            
+        full_draft["sections"].extend(generated_sections)
+        
+        # (선택) 다음 청크를 위한 컨텍스트 업데이트 로직이 필요할 수 있으나, 
+        # 현재는 독립적으로 작성하되 전체 구조를 LLM이 알고 있으므로 넘어감.
+        
+    logger.info(f"[Writer Chunk] 병합 완료: 총 {len(full_draft['sections'])}개 섹션")
+    return full_draft
 
