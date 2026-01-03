@@ -123,6 +123,26 @@ from graph.interrupt_types import (
     ApprovalInterruptPayload,
     InterruptOption as TypedInterruptOption,
     normalize_options,  # [NEW] 옵션 정규화 유틸리티
+    # [개선 1] Strict Validation
+    ValidationMode,
+    set_validation_mode,
+    get_validation_mode,
+    HITLValidationError,
+    validate_or_warn,
+    # [개선 2] Chain Visualization
+    InterruptChain,
+    InterruptChainEvent,
+    get_or_create_chain,
+    get_chain,
+    clear_chain,
+    # [개선 3] Resume Value Schema
+    BaseResumeValue,
+    OptionResumeValue,
+    FormResumeValue,
+    ConfirmResumeValue,
+    ApprovalResumeValue,
+    validate_resume_value,
+    RESUME_VALUE_SCHEMAS,
 )
 
 def _format_resume_summary(response: Dict[str, Any]) -> str:
@@ -383,19 +403,27 @@ def handle_user_response(state: PlanCraftState, response: Dict[str, Any]) -> Pla
     current_history = state.get("step_history", []) or []
     updated_history = current_history + [resume_history_item]
 
-    # 0. [NEW] 입력 유효성 검증 (Pydantic Guard)
+    # 0. [개선 1/3] 입력 유효성 검증 (Strict Validation + Resume Schema)
     # 폼 데이터가 아닌 경우에만 ResumeInput 스키마 검증 수행
     if not state.get("input_schema_name"):
         try:
-            # Pydantic 모델로 변환하여 검증 (실패 시 예외 발생)
-            validated = ResumeInput(**response)
+            # [개선 3] 타입별 Resume Value Schema 사용
+            validated_resume = validate_resume_value(
+                interrupt_type=pause_type,
+                data=response,
+                payload=None  # 원본 payload가 없으면 기본 검증
+            )
             # 검증된 데이터를 dict로 변환하여 사용 (타입 안전성 확보)
-            response = validated.model_dump(exclude_unset=True)
+            response = validated_resume.model_dump(exclude_unset=True)
             print(f"[HITL] Resume Input Validated: {response}")
+        except HITLValidationError as e:
+            # [개선 1] Strict 모드에서는 에러 전파
+            print(f"[ERROR] Resume Validation Failed (STRICT): {e}")
+            # graceful degradation: 에러 상태 반환
+            return update_state(state, error=f"입력 검증 실패: {e.reason}")
         except Exception as e:
-            print(f"[ERROR] Resume Input Validation Failed: {e}")
-            # 검증 실패 시에도 흐름을 끊지 않고 원본 데이터를 사용하거나(로깅용),
-            # 필요한 경우 에러 처리를 할 수 있음. 여기서는 경고만 출력.
+            # 기타 예외는 경고만 출력 (하위 호환성)
+            print(f"[WARN] Resume Input Validation Failed: {e}")
 
     # 1. 폼 데이터 처리 (input_schema_name이 있었던 경우)
     if state.get("input_schema_name") and isinstance(response, dict):
@@ -871,4 +899,24 @@ __all__ = [
     "reset_pause_state",
     "get_pause_state_checklist",
     "validate_resume_readiness",
+    # [개선 1] Strict Validation
+    "ValidationMode",
+    "set_validation_mode",
+    "get_validation_mode",
+    "HITLValidationError",
+    "validate_or_warn",
+    # [개선 2] Chain Visualization
+    "InterruptChain",
+    "InterruptChainEvent",
+    "get_or_create_chain",
+    "get_chain",
+    "clear_chain",
+    # [개선 3] Resume Value Schema
+    "BaseResumeValue",
+    "OptionResumeValue",
+    "FormResumeValue",
+    "ConfirmResumeValue",
+    "ApprovalResumeValue",
+    "validate_resume_value",
+    "RESUME_VALUE_SCHEMAS",
 ]

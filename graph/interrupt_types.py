@@ -108,6 +108,82 @@ from typing_extensions import Self
 
 
 # =============================================================================
+# Validation Mode & Exceptions (개선 1: Strict Validation)
+# =============================================================================
+
+class ValidationMode(str, Enum):
+    """
+    검증 모드 설정
+
+    STRICT: 검증 실패 시 ValueError 발생 (운영 환경 권장)
+    LENIENT: 검증 실패 시 경고 출력 후 기본값 사용 (개발/테스트용)
+    """
+    STRICT = "strict"
+    LENIENT = "lenient"
+
+
+# 전역 검증 모드 설정 (환경변수 또는 설정에서 변경 가능)
+import os
+_VALIDATION_MODE = ValidationMode(os.getenv("HITL_VALIDATION_MODE", "strict"))
+
+
+def set_validation_mode(mode: ValidationMode):
+    """검증 모드 설정"""
+    global _VALIDATION_MODE
+    _VALIDATION_MODE = mode
+
+
+def get_validation_mode() -> ValidationMode:
+    """현재 검증 모드 반환"""
+    return _VALIDATION_MODE
+
+
+class HITLValidationError(ValueError):
+    """
+    HITL 검증 오류
+
+    Strict 모드에서 검증 실패 시 발생합니다.
+    graceful degradation 또는 fail-fast 처리에 사용됩니다.
+
+    Attributes:
+        field: 검증 실패한 필드명
+        reason: 실패 사유
+        original_value: 원본 값 (디버깅용)
+
+    Example:
+        try:
+            validate_resume_value(response)
+        except HITLValidationError as e:
+            logger.error(f"Resume 검증 실패: {e.field} - {e.reason}")
+            # graceful degradation: 기본값 사용
+            # 또는 fail-fast: 에러 전파
+    """
+    def __init__(self, field: str, reason: str, original_value: Any = None):
+        self.field = field
+        self.reason = reason
+        self.original_value = original_value
+        super().__init__(f"[{field}] {reason}")
+
+
+def validate_or_warn(field: str, reason: str, original_value: Any = None) -> None:
+    """
+    검증 모드에 따라 예외 발생 또는 경고 출력
+
+    Args:
+        field: 검증 실패한 필드명
+        reason: 실패 사유
+        original_value: 원본 값
+
+    Raises:
+        HITLValidationError: STRICT 모드에서 검증 실패 시
+    """
+    if _VALIDATION_MODE == ValidationMode.STRICT:
+        raise HITLValidationError(field, reason, original_value)
+    else:
+        print(f"[WARN] HITL Validation: [{field}] {reason}")
+
+
+# =============================================================================
 # InterruptType Enum - 타입 안전한 인터럽트 유형 정의
 # =============================================================================
 
@@ -201,6 +277,9 @@ def normalize_options(options: List[Any]) -> List[InterruptOption]:
     Returns:
         List[InterruptOption]: 정규화된 옵션 리스트
 
+    Raises:
+        HITLValidationError: STRICT 모드에서 변환 불가 시
+
     Example:
         # 혼합된 형태도 처리 가능
         options = normalize_options([
@@ -210,12 +289,17 @@ def normalize_options(options: List[Any]) -> List[InterruptOption]:
         ])
     """
     normalized = []
-    for opt in options:
+    for i, opt in enumerate(options):
         try:
             normalized.append(InterruptOption.from_any(opt))
         except ValueError as e:
-            print(f"[WARN] 옵션 변환 실패: {e}")
-            # 실패 시 기본 옵션으로 대체
+            # [개선 1] Strict Validation 적용
+            validate_or_warn(
+                field=f"options[{i}]",
+                reason=f"옵션 변환 실패: {e}",
+                original_value=opt
+            )
+            # LENIENT 모드에서만 도달: 기본 옵션으로 대체
             normalized.append(InterruptOption(title=str(opt), description=""))
     return normalized
 
@@ -1031,3 +1115,428 @@ def create_option_payload_compat(
     )
 
     return payload.to_dict()
+
+
+# =============================================================================
+# Resume Value Schema (개선 3: Pydantic 기반 Resume 값 검증)
+# =============================================================================
+
+class BaseResumeValue(BaseModel):
+    """
+    Resume 값 베이스 클래스
+
+    모든 Resume 타입이 상속하는 기반 클래스입니다.
+    UI/API에서 자동 검증 및 폼 생성에 활용됩니다.
+    """
+    model_config = ConfigDict(extra="allow")  # 추가 필드 허용
+
+
+class OptionResumeValue(BaseResumeValue):
+    """
+    옵션 선택 Resume 값
+
+    JSON Schema:
+        ```json
+        {
+            "selected_option": {"title": "웹 앱", "description": "브라우저 기반"},
+            "text_input": null
+        }
+        ```
+    """
+    selected_option: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="선택된 옵션 (title, description, value 포함)"
+    )
+    text_input: Optional[str] = Field(
+        default=None,
+        description="직접 입력 텍스트 (allow_custom=True 시)"
+    )
+
+    @model_validator(mode="after")
+    def validate_has_selection(self) -> Self:
+        """옵션 선택 또는 직접 입력 중 하나는 있어야 함"""
+        if not self.selected_option and not self.text_input:
+            validate_or_warn(
+                field="OptionResumeValue",
+                reason="selected_option 또는 text_input 중 하나는 필수입니다",
+                original_value=self.model_dump()
+            )
+        return self
+
+
+class FormResumeValue(BaseResumeValue):
+    """
+    폼 입력 Resume 값
+
+    동적 필드를 허용하며, 스키마에 정의된 필수 필드를 검증합니다.
+
+    JSON Schema (예시):
+        ```json
+        {
+            "project_name": "AI 헬스케어",
+            "budget": 50000000,
+            "deadline": "2024-06-01"
+        }
+        ```
+    """
+    # 동적 필드는 extra="allow"로 처리됨
+
+    @classmethod
+    def validate_against_schema(
+        cls,
+        data: Dict[str, Any],
+        required_fields: List[str],
+        field_types: Dict[str, str] = None
+    ) -> "FormResumeValue":
+        """
+        스키마 기반 검증
+
+        Args:
+            data: 폼 데이터
+            required_fields: 필수 필드 목록
+            field_types: 필드별 타입 힌트
+
+        Returns:
+            검증된 FormResumeValue
+
+        Raises:
+            HITLValidationError: STRICT 모드에서 필수 필드 누락 시
+        """
+        # 필수 필드 검증
+        for field in required_fields:
+            if field not in data or data[field] is None or data[field] == "":
+                validate_or_warn(
+                    field=field,
+                    reason=f"필수 필드 누락 또는 비어있음",
+                    original_value=data.get(field)
+                )
+
+        # 타입 검증
+        if field_types:
+            type_validators = {
+                "str": lambda v: isinstance(v, str),
+                "int": lambda v: isinstance(v, int) or (isinstance(v, str) and v.isdigit()),
+                "float": lambda v: isinstance(v, (int, float)),
+                "bool": lambda v: isinstance(v, bool),
+                "email": lambda v: isinstance(v, str) and "@" in v and "." in v,
+            }
+            for field, expected_type in field_types.items():
+                if field in data and data[field] is not None:
+                    validator = type_validators.get(expected_type)
+                    if validator and not validator(data[field]):
+                        validate_or_warn(
+                            field=field,
+                            reason=f"타입 불일치 (기대: {expected_type})",
+                            original_value=data[field]
+                        )
+
+        return cls(**data)
+
+
+class ConfirmResumeValue(BaseResumeValue):
+    """
+    확인 Resume 값
+
+    JSON Schema:
+        ```json
+        {"confirmed": true}
+        ```
+    """
+    confirmed: bool = Field(description="확인 여부")
+
+
+class ApprovalResumeValue(BaseResumeValue):
+    """
+    승인 Resume 값
+
+    JSON Schema:
+        ```json
+        {
+            "approved": true,
+            "selected_option": {"title": "승인", "value": "approve"},
+            "rejection_reason": ""
+        }
+        ```
+    """
+    approved: Optional[bool] = Field(default=None, description="승인 여부")
+    selected_option: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="선택된 옵션 (approve/reject)"
+    )
+    rejection_reason: Optional[str] = Field(
+        default="",
+        description="반려 사유 (rejection_feedback_enabled=True 시)"
+    )
+
+    @model_validator(mode="after")
+    def validate_approval_state(self) -> Self:
+        """승인 상태 검증"""
+        # approved 플래그 또는 selected_option 중 하나는 있어야 함
+        has_approved_flag = self.approved is not None
+        has_selection = self.selected_option and self.selected_option.get("value")
+
+        if not has_approved_flag and not has_selection:
+            validate_or_warn(
+                field="ApprovalResumeValue",
+                reason="approved 또는 selected_option.value 중 하나는 필수입니다",
+                original_value=self.model_dump()
+            )
+        return self
+
+    def is_approved(self) -> bool:
+        """승인 여부 반환"""
+        if self.approved is True:
+            return True
+        if self.selected_option and self.selected_option.get("value") == "approve":
+            return True
+        return False
+
+
+# Resume Value Registry (타입별 스키마 매핑)
+RESUME_VALUE_SCHEMAS: Dict[InterruptType, Type[BaseResumeValue]] = {
+    InterruptType.OPTION: OptionResumeValue,
+    InterruptType.OPTION_SELECTOR: OptionResumeValue,
+    InterruptType.FORM: FormResumeValue,
+    InterruptType.CONFIRM: ConfirmResumeValue,
+    InterruptType.APPROVAL: ApprovalResumeValue,
+}
+
+
+def validate_resume_value(
+    interrupt_type: Union[InterruptType, str],
+    data: Dict[str, Any],
+    payload: BaseInterruptPayload = None
+) -> BaseResumeValue:
+    """
+    Resume 값을 타입별 스키마로 검증
+
+    Args:
+        interrupt_type: 인터럽트 타입
+        data: Resume 데이터
+        payload: 원본 Payload (Form 검증 시 필수 필드 정보 사용)
+
+    Returns:
+        검증된 Resume 값 객체
+
+    Raises:
+        HITLValidationError: STRICT 모드에서 검증 실패 시
+
+    Example:
+        >>> resume = validate_resume_value(
+        ...     InterruptType.OPTION,
+        ...     {"selected_option": {"title": "웹 앱"}}
+        ... )
+        >>> print(resume.selected_option["title"])
+        "웹 앱"
+    """
+    if isinstance(interrupt_type, str):
+        interrupt_type = InterruptType(interrupt_type)
+
+    schema_class = RESUME_VALUE_SCHEMAS.get(interrupt_type, BaseResumeValue)
+
+    # Form 타입은 payload에서 필수 필드 정보를 가져와 검증
+    if interrupt_type == InterruptType.FORM and payload:
+        if isinstance(payload, FormInterruptPayload):
+            return FormResumeValue.validate_against_schema(
+                data,
+                required_fields=payload.required_fields,
+                field_types=payload.field_types
+            )
+
+    return schema_class(**data)
+
+
+# =============================================================================
+# Interrupt Chain Visualization (개선 2: UI Timeline)
+# =============================================================================
+
+class InterruptChainEvent(BaseModel):
+    """
+    인터럽트 체인 이벤트
+
+    인터럽트/Resume 이벤트를 추적하여 타임라인 시각화에 사용합니다.
+    """
+    event_type: str = Field(description="이벤트 타입 (PAUSE | RESUME)")
+    interrupt_type: str = Field(description="인터럽트 타입")
+    node_ref: str = Field(default="", description="노드 참조")
+    event_id: str = Field(default="", description="이벤트 ID")
+    timestamp: str = Field(default="", description="발생 시각")
+    summary: str = Field(default="", description="이벤트 요약")
+    data: Dict[str, Any] = Field(default_factory=dict, description="이벤트 데이터")
+
+
+class InterruptChain(BaseModel):
+    """
+    인터럽트 체인 (전체 HITL 세션 추적)
+
+    여러 인터럽트/Resume 이벤트를 체인으로 연결하여
+    전체 HITL 흐름을 시각화합니다.
+    """
+    chain_id: str = Field(description="체인 ID (thread_id 기반)")
+    events: List[InterruptChainEvent] = Field(default_factory=list)
+    started_at: Optional[str] = Field(default=None)
+    completed_at: Optional[str] = Field(default=None)
+
+    def add_pause_event(
+        self,
+        payload: BaseInterruptPayload,
+        node_ref: str = ""
+    ):
+        """인터럽트 발생 이벤트 추가"""
+        import datetime
+
+        event = InterruptChainEvent(
+            event_type="PAUSE",
+            interrupt_type=payload.type.value if hasattr(payload.type, 'value') else str(payload.type),
+            node_ref=node_ref or payload.node_ref or "",
+            event_id=payload.event_id or "",
+            timestamp=datetime.datetime.now().isoformat(),
+            summary=f"[PAUSE] {payload.question[:50]}...",
+            data={"question": payload.question}
+        )
+        self.events.append(event)
+
+        if not self.started_at:
+            self.started_at = event.timestamp
+
+    def add_resume_event(
+        self,
+        interrupt_type: str,
+        response: Dict[str, Any],
+        node_ref: str = ""
+    ):
+        """Resume 이벤트 추가"""
+        import datetime
+
+        # Resume 요약 생성
+        summary = self._format_resume_summary(response)
+
+        event = InterruptChainEvent(
+            event_type="RESUME",
+            interrupt_type=interrupt_type,
+            node_ref=node_ref,
+            event_id=response.get("event_id", ""),
+            timestamp=datetime.datetime.now().isoformat(),
+            summary=f"[RESUME] {summary}",
+            data=response
+        )
+        self.events.append(event)
+
+    def complete(self):
+        """체인 완료 처리"""
+        import datetime
+        self.completed_at = datetime.datetime.now().isoformat()
+
+    def _format_resume_summary(self, response: Dict[str, Any]) -> str:
+        """Resume 응답 요약"""
+        selected = response.get("selected_option")
+        text_input = response.get("text_input")
+        confirmed = response.get("confirmed")
+        approved = response.get("approved")
+
+        if selected:
+            title = selected.get("title", "") if isinstance(selected, dict) else str(selected)
+            return f"선택: {title}"
+        elif text_input:
+            return f"입력: {text_input[:30]}..."
+        elif confirmed is not None:
+            return "확인" if confirmed else "취소"
+        elif approved is not None:
+            return "승인" if approved else "반려"
+        return "응답"
+
+    def to_mermaid_timeline(self) -> str:
+        """
+        Mermaid 타임라인 다이어그램 생성
+
+        Returns:
+            Mermaid 타임라인 문자열
+
+        Example Output:
+            ```mermaid
+            timeline
+                title HITL Chain: thread_abc123
+                section 인터럽트 흐름
+                    10:30 : [PAUSE] 서비스 유형 선택
+                    10:31 : [RESUME] 선택: 웹 앱
+                    10:32 : [PAUSE] 상세 정보 입력
+                    10:35 : [RESUME] 입력: AI 헬스케어...
+            ```
+        """
+        lines = [
+            "```mermaid",
+            "timeline",
+            f"    title HITL Chain: {self.chain_id[:20]}",
+            "    section 인터럽트 흐름"
+        ]
+
+        for event in self.events:
+            # 타임스탬프에서 시간 추출
+            time_part = event.timestamp.split("T")[1][:5] if "T" in event.timestamp else ""
+            lines.append(f"        {time_part} : {event.summary}")
+
+        lines.append("```")
+        return "\n".join(lines)
+
+    def to_mermaid_sequence(self) -> str:
+        """
+        Mermaid 시퀀스 다이어그램 생성
+
+        Returns:
+            Mermaid 시퀀스 다이어그램 문자열
+
+        Example Output:
+            ```mermaid
+            sequenceDiagram
+                participant U as User
+                participant S as System
+
+                S->>U: [option_pause] 서비스 유형 선택
+                U->>S: 선택: 웹 앱
+                S->>U: [form_pause] 상세 정보 입력
+                U->>S: 입력: AI 헬스케어
+            ```
+        """
+        lines = [
+            "```mermaid",
+            "sequenceDiagram",
+            "    participant U as User",
+            "    participant S as System",
+            ""
+        ]
+
+        for event in self.events:
+            node = event.node_ref or "system"
+            if event.event_type == "PAUSE":
+                # 시스템이 사용자에게 질문
+                question = event.data.get("question", "")[:40]
+                lines.append(f"    S->>U: [{node}] {question}")
+            else:
+                # 사용자가 시스템에 응답
+                summary = event.summary.replace("[RESUME] ", "")
+                lines.append(f"    U->>S: {summary}")
+
+        lines.append("```")
+        return "\n".join(lines)
+
+
+# 전역 체인 저장소 (thread_id → InterruptChain)
+_INTERRUPT_CHAINS: Dict[str, InterruptChain] = {}
+
+
+def get_or_create_chain(thread_id: str) -> InterruptChain:
+    """스레드별 인터럽트 체인 가져오기 또는 생성"""
+    if thread_id not in _INTERRUPT_CHAINS:
+        _INTERRUPT_CHAINS[thread_id] = InterruptChain(chain_id=thread_id)
+    return _INTERRUPT_CHAINS[thread_id]
+
+
+def get_chain(thread_id: str) -> Optional[InterruptChain]:
+    """스레드별 인터럽트 체인 가져오기"""
+    return _INTERRUPT_CHAINS.get(thread_id)
+
+
+def clear_chain(thread_id: str):
+    """스레드별 인터럽트 체인 삭제"""
+    if thread_id in _INTERRUPT_CHAINS:
+        del _INTERRUPT_CHAINS[thread_id]

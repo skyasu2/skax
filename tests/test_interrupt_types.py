@@ -425,12 +425,40 @@ class TestNormalizeOptions:
         options = normalize_options([])
         assert options == []
 
-    def test_normalize_invalid_fallback(self):
-        """변환 불가 항목은 문자열로 대체"""
-        options = normalize_options([123, "문자열"])
-        assert len(options) == 2
-        assert options[0].title == "123"
-        assert options[1].title == "문자열"
+    def test_normalize_invalid_fallback_lenient(self):
+        """LENIENT 모드: 변환 불가 항목은 문자열로 대체"""
+        from graph.interrupt_types import (
+            set_validation_mode, get_validation_mode, ValidationMode
+        )
+        # 원래 모드 저장
+        original_mode = get_validation_mode()
+        try:
+            # LENIENT 모드로 설정
+            set_validation_mode(ValidationMode.LENIENT)
+            options = normalize_options([123, "문자열"])
+            assert len(options) == 2
+            assert options[0].title == "123"
+            assert options[1].title == "문자열"
+        finally:
+            # 원래 모드 복원
+            set_validation_mode(original_mode)
+
+    def test_normalize_invalid_strict_raises(self):
+        """STRICT 모드: 변환 불가 항목은 예외 발생"""
+        from graph.interrupt_types import (
+            set_validation_mode, get_validation_mode, ValidationMode, HITLValidationError
+        )
+        import pytest
+        # 원래 모드 저장
+        original_mode = get_validation_mode()
+        try:
+            # STRICT 모드로 설정
+            set_validation_mode(ValidationMode.STRICT)
+            with pytest.raises(HITLValidationError):
+                normalize_options([123, "문자열"])
+        finally:
+            # 원래 모드 복원
+            set_validation_mode(original_mode)
 
 
 # =============================================================================
