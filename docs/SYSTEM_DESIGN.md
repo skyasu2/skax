@@ -1,6 +1,6 @@
 # 🏗️ PlanCraft System Design Document
 
-**Version**: 2.3
+**Version**: 2.4
 **Date**: 2026-01-03
 **Framework**: LangGraph, LangChain, Streamlit
 **Standards**: MCP (Model Context Protocol), A2A (Agent-to-Agent)
@@ -366,6 +366,105 @@ class PlanCraftState(TypedDict):
 ### 5.3 Quality Assurance
 *   **Strict JSON Schema**: Pydantic을 사용하여 모든 에이전트의 출력을 검증.
 *   **Dynamic Routing**: 품질 점수에 따라 `Complete`, `Refine`, `Restart` 경로 자동 분기.
+
+### 5.4 Prompt Engineering 전략
+
+PlanCraft의 모든 프롬프트는 **설계 기술(Engineering)**로 관리됩니다. "요령"이 아닌 체계적인 설계 원칙을 적용합니다.
+
+#### 5.4.1 프롬프트 구조화 원칙
+
+모든 프롬프트는 **Role / Task / Context / Output** 4요소로 분리됩니다:
+
+| 요소 | 목적 | 예시 (Analyzer) |
+|------|------|----------------|
+| **Role** | 페르소나 설정으로 응답 품질 향상 | "10년 경력의 시니어 기획 컨설턴트" |
+| **Task** | 수행할 작업을 단계별로 명시 | "Step 1: 유형 판단 → Step 2: 컨셉 증폭" |
+| **Context** | 배경 정보 및 참고 자료 제공 | RAG 결과, 웹 검색 결과, 이전 분석 결과 |
+| **Output** | JSON 스키마로 출력 형식 고정 | `{ "topic": "", "need_more_info": false }` |
+
+```
+📌 왜 이렇게 설계했는가?
+LLM은 확률 기반 생성기입니다. 명확한 구조 없이는 일관된 출력이 불가능합니다.
+Role/Task/Output 분리로 "같은 입력 → 다른 답변" 문제를 해결합니다.
+```
+
+#### 5.4.2 프롬프트 패턴 적용
+
+| 패턴 | 적용 에이전트 | 선택 이유 |
+|------|--------------|----------|
+| **Few-shot** | Analyzer | 입력 유형별 예시 3개로 분류 정확도 향상 |
+| **Chain-of-Thought** | Writer, Reviewer | 복잡한 추론(섹션 작성, 품질 평가)에 단계별 사고 유도 |
+| **Zero-shot** | Formatter | 단순 변환 작업은 예시 없이 직접 지시 |
+
+```python
+# Few-shot 예시 (analyzer_prompt.py)
+### 예시 1: 잡담 ("안녕")
+### 예시 2: 빈약한 요청 ("다이어트 앱") → 제안 모드
+### 예시 3: 승인 ("좋아 진행해") → 확정 모드
+```
+
+#### 5.4.3 Structured Output 적용
+
+모든 주요 에이전트는 **Pydantic + `with_structured_output()`** 조합으로 출력을 검증합니다:
+
+```python
+# 적용 예시 (agents/analyzer.py)
+from pydantic import BaseModel
+
+class AnalysisResult(BaseModel):
+    topic: str
+    purpose: str
+    need_more_info: bool
+    # ... 필드 정의
+
+# LLM 호출 시 스키마 강제
+llm.with_structured_output(AnalysisResult)
+```
+
+**적용 이유:**
+- 후처리 비용 감소 (파싱 오류 제거)
+- Agent/Workflow 연계 안정성 확보
+- 타입 안전성으로 런타임 오류 방지
+
+| 에이전트 | Output Schema | 핵심 필드 |
+|---------|---------------|----------|
+| Analyzer | `AnalysisResult` | topic, need_more_info, options |
+| Structurer | `StructureResult` | sections, total_sections |
+| Writer | `DraftResult` | sections[].content |
+| Reviewer | `JudgeResult` | overall_score, verdict, action_items |
+
+#### 5.4.4 Prompt Drift 방지 전략
+
+반복 호출 시 지시가 무력화되는 "Prompt Drift" 문제를 다음과 같이 해결합니다:
+
+| 전략 | 구현 방식 |
+|------|----------|
+| **System Prompt 고정** | 매 호출마다 동일한 System Prompt 주입 |
+| **상태 최소화** | 필요한 Context만 전달 (전체 히스토리 X) |
+| **출력 검증** | Pydantic으로 응답 구조 강제 검증 |
+| **Self-Correction** | Writer의 자체 검증 루프로 품질 보장 |
+
+#### 5.4.5 프롬프트 관리 원칙
+
+```
+prompts/
+├── analyzer_prompt.py      # 요구사항 분석
+├── structurer_prompt.py    # 구조 설계
+├── writer_prompt.py        # 콘텐츠 작성
+├── reviewer_prompt.py      # 품질 심사
+├── refiner_prompt.py       # 개선 전략
+├── discussion_prompt.py    # 에이전트 토론
+├── formatter_prompt.py     # 최종 포맷팅
+└── specialist_prompts/     # 전문 에이전트별
+    ├── market_prompt.py
+    ├── bm_prompt.py
+    └── ...
+```
+
+**관리 원칙:**
+- 프롬프트는 **코드처럼 버전 관리** (Git)
+- 각 파일에 **목적과 사용법 주석** 포함
+- **변경 시 테스트 필수** (동일 입력 반복 테스트)
 
 ---
 
