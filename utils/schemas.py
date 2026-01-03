@@ -23,7 +23,7 @@ Structured Output을 통해 LLM 응답의 일관성과 타입 안전성을 보�
     analysis_dict = analysis.model_dump()
 """
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ValidationInfo, FieldValidationInfo
+from pydantic import BaseModel, Field, field_validator, model_validator, ValidationInfo
 from typing import List, Optional, Self, Literal, Dict, Any
 
 
@@ -288,7 +288,7 @@ class ResumeInput(BaseModel):
 
     @field_validator('selected_option', 'text_input')
     @classmethod
-    def check_at_least_one(cls, v: Optional[Any], info: FieldValidationInfo) -> Optional[Any]:
+    def check_at_least_one(cls, v: Optional[Any], info: ValidationInfo) -> Optional[Any]:
         # Pydantic v2에서는 validator가 필드별로 호출되므로, 다른 필드의 값을 직접 참조하기 어려움.
         # 이 검증은 model_validator에서 하는 것이 더 적합함.
         # 여기서는 단순히 값을 반환하고, 실제 "하나 이상 존재" 로직은 model_validator에서 처리하거나
