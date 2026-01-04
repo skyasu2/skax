@@ -18,7 +18,7 @@ class WorkflowRunRequest(BaseModel):
     """POST /api/workflow/run request"""
     user_input: str = Field(..., min_length=1, max_length=10000, description="User input text")
     file_content: Optional[str] = Field(None, max_length=100000, description="Uploaded file content")
-    generation_preset: Literal["fast", "balanced", "quality"] = Field(
+    generation_preset: Literal["fast", "speed", "balanced", "quality"] = Field(
         default="balanced", description="Generation mode"
     )
     thread_id: Optional[str] = Field(None, description="Session ID (auto-generated if not provided)")
@@ -39,7 +39,7 @@ class WorkflowResumeRequest(BaseModel):
     """POST /api/workflow/resume request (HITL resume)"""
     thread_id: str = Field(..., description="Session ID")
     resume_data: Dict[str, Any] = Field(..., description="User response data")
-    generation_preset: Literal["fast", "balanced", "quality"] = Field(
+    generation_preset: Literal["fast", "speed", "balanced", "quality"] = Field(
         default="balanced", description="Generation mode"
     )
 
