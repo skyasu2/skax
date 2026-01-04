@@ -1,0 +1,398 @@
+{
+  "app.py": {
+    "size": 1580
+  },
+  "requirements.txt": {
+    "size": 1701
+  },
+  ".env.example": {
+    "size": 2473
+  },
+  "ui/components.py": {
+    "size": 1037
+  },
+  "ui/dialogs.py": {
+    "size": 434
+  },
+  "ui/dynamic_form.py": {
+    "size": 4886
+  },
+  "ui/layout.py": {
+    "size": 4273
+  },
+  "ui/mermaid.py": {
+    "size": 6887
+  },
+  "ui/refinement.py": {
+    "size": 4806
+  },
+  "ui/styles.py": {
+    "size": 18954
+  },
+  "ui/validation.py": {
+    "size": 10713
+  },
+  "ui/workflow_runner.py": {
+    "size": 22323
+  },
+  "ui/__init__.py": {
+    "size": 150
+  },
+  "ui/modules/badges.py": {
+    "size": 2450
+  },
+  "ui/modules/chat.py": {
+    "size": 361
+  },
+  "ui/modules/interaction.py": {
+    "size": 8607
+  },
+  "ui/modules/mermaid.py": {
+    "size": 6842
+  },
+  "ui/modules/notification.py": {
+    "size": 1185
+  },
+  "ui/modules/progress.py": {
+    "size": 13793
+  },
+  "ui/modules/__init__.py": {
+    "size": 30
+  },
+  "ui/modules/dialogs/analysis.py": {
+    "size": 2229
+  },
+  "ui/modules/dialogs/devtools.py": {
+    "size": 22922
+  },
+  "ui/modules/dialogs/plan.py": {
+    "size": 5259
+  },
+  "ui/modules/dialogs/__init__.py": {
+    "size": 30
+  },
+  "ui/tabs/chat_view.py": {
+    "size": 2811
+  },
+  "ui/tabs/controls.py": {
+    "size": 4914
+  },
+  "ui/tabs/hero.py": {
+    "size": 3626
+  },
+  "ui/tabs/__init__.py": {
+    "size": 27
+  },
+  "agents/agent_config.py": {
+    "size": 39851
+  },
+  "agents/analyzer.py": {
+    "size": 9564
+  },
+  "agents/formatter.py": {
+    "size": 6569
+  },
+  "agents/refiner.py": {
+    "size": 5074
+  },
+  "agents/reviewer.py": {
+    "size": 3884
+  },
+  "agents/specialist_tools.py": {
+    "size": 6555
+  },
+  "agents/structurer.py": {
+    "size": 8651
+  },
+  "agents/supervisor.py": {
+    "size": 43471
+  },
+  "agents/writer.py": {
+    "size": 13211
+  },
+  "agents/writer_helpers.py": {
+    "size": 601
+  },
+  "agents/__init__.py": {
+    "size": 955
+  },
+  "agents/helpers/executors.py": {
+    "size": 5242
+  },
+  "agents/helpers/prompt_builder.py": {
+    "size": 8794
+  },
+  "agents/helpers/validator.py": {
+    "size": 3199
+  },
+  "agents/helpers/__init__.py": {
+    "size": 34
+  },
+  "agents/specialists/bm_agent.py": {
+    "size": 9395
+  },
+  "agents/specialists/content_strategist.py": {
+    "size": 9994
+  },
+  "agents/specialists/financial_agent.py": {
+    "size": 10597
+  },
+  "agents/specialists/market_agent.py": {
+    "size": 10727
+  },
+  "agents/specialists/risk_agent.py": {
+    "size": 9553
+  },
+  "agents/specialists/tech_architect.py": {
+    "size": 9640
+  },
+  "agents/specialists/__init__.py": {
+    "size": 1102
+  },
+  "graph/hitl_config.py": {
+    "size": 18142
+  },
+  "graph/interrupt_types.py": {
+    "size": 61033
+  },
+  "graph/interrupt_utils.py": {
+    "size": 36570
+  },
+  "graph/state.py": {
+    "size": 20132
+  },
+  "graph/subgraphs.py": {
+    "size": 23662
+  },
+  "graph/workflow.py": {
+    "size": 53500
+  },
+  "graph/__init__.py": {
+    "size": 481
+  },
+  "graph/nodes/analyzer_node.py": {
+    "size": 1781
+  },
+  "graph/nodes/common.py": {
+    "size": 1691
+  },
+  "graph/nodes/discussion_node.py": {
+    "size": 1239
+  },
+  "graph/nodes/fetch_web.py": {
+    "size": 2740
+  },
+  "graph/nodes/formatter_node.py": {
+    "size": 5264
+  },
+  "graph/nodes/refiner_node.py": {
+    "size": 919
+  },
+  "graph/nodes/reviewer_node.py": {
+    "size": 1209
+  },
+  "graph/nodes/structurer_node.py": {
+    "size": 1175
+  },
+  "graph/nodes/writer_node.py": {
+    "size": 1303
+  },
+  "graph/nodes/__init__.py": {
+    "size": 0
+  },
+  "api/main.py": {
+    "size": 4165
+  },
+  "api/__init__.py": {
+    "size": 33
+  },
+  "api/routers/workflow.py": {
+    "size": 4959
+  },
+  "api/routers/__init__.py": {
+    "size": 101
+  },
+  "api/schemas/workflow.py": {
+    "size": 4202
+  },
+  "api/schemas/__init__.py": {
+    "size": 333
+  },
+  "api/services/workflow_service.py": {
+    "size": 9403
+  },
+  "api/services/__init__.py": {
+    "size": 100
+  },
+  "utils/checkpointer.py": {
+    "size": 2344
+  },
+  "utils/check_aoai_connection.py": {
+    "size": 2504
+  },
+  "utils/config.py": {
+    "size": 6151
+  },
+  "utils/context_builder.py": {
+    "size": 7666
+  },
+  "utils/decorators.py": {
+    "size": 2879
+  },
+  "utils/error_handler.py": {
+    "size": 5804
+  },
+  "utils/example_selector.py": {
+    "size": 5972
+  },
+  "utils/exceptions.py": {
+    "size": 523
+  },
+  "utils/file_logger.py": {
+    "size": 10368
+  },
+  "utils/idea_generator.py": {
+    "size": 10731
+  },
+  "utils/llm.py": {
+    "size": 6860
+  },
+  "utils/logging_config.py": {
+    "size": 3182
+  },
+  "utils/prompt_examples.py": {
+    "size": 11962
+  },
+  "utils/retry.py": {
+    "size": 13484
+  },
+  "utils/schemas.py": {
+    "size": 13228
+  },
+  "utils/settings.py": {
+    "size": 15341
+  },
+  "utils/streamlit_callback.py": {
+    "size": 7474
+  },
+  "utils/time_context.py": {
+    "size": 3321
+  },
+  "utils/time_travel.py": {
+    "size": 12961
+  },
+  "utils/tracing.py": {
+    "size": 10561
+  },
+  "utils/__init__.py": {
+    "size": 340
+  },
+  "prompts/analyzer_prompt.py": {
+    "size": 7757
+  },
+  "prompts/business_plan_prompt.py": {
+    "size": 11056
+  },
+  "prompts/discussion_prompt.py": {
+    "size": 3094
+  },
+  "prompts/formatter_prompt.py": {
+    "size": 2148
+  },
+  "prompts/refiner_prompt.py": {
+    "size": 1431
+  },
+  "prompts/reviewer_prompt.py": {
+    "size": 8962
+  },
+  "prompts/structurer_prompt.py": {
+    "size": 6796
+  },
+  "prompts/writer_prompt.py": {
+    "size": 23446
+  },
+  "prompts/__init__.py": {
+    "size": 18
+  },
+  "prompts/specialist_prompts/bm_prompt.py": {
+    "size": 3562
+  },
+  "prompts/specialist_prompts/financial_prompt.py": {
+    "size": 3381
+  },
+  "prompts/specialist_prompts/market_prompt.py": {
+    "size": 3851
+  },
+  "prompts/specialist_prompts/risk_prompt.py": {
+    "size": 3240
+  },
+  "prompts/specialist_prompts/__init__.py": {
+    "size": 661
+  },
+  "rag/embedder.py": {
+    "size": 324
+  },
+  "rag/query_transform.py": {
+    "size": 8803
+  },
+  "rag/reranker.py": {
+    "size": 4854
+  },
+  "rag/retriever.py": {
+    "size": 10578
+  },
+  "rag/vectorstore.py": {
+    "size": 8149
+  },
+  "rag/__init__.py": {
+    "size": 599
+  },
+  "rag/documents/Business_Model_Cases.md": {
+    "size": 5855
+  },
+  "rag/documents/Standard_KPI_Dictionary.md": {
+    "size": 4482
+  },
+  "rag/documents/TAM_SAM_SOM_\uac00\uc774\ub4dc.md": {
+    "size": 5757
+  },
+  "rag/documents/User_Journey_\uac00\uc774\ub4dc.md": {
+    "size": 6532
+  },
+  "rag/documents/\uae30\ud68d\uc11c_\uc791\uc131\uac00\uc774\ub4dc.md": {
+    "size": 6306
+  },
+  "rag/documents/\uc88b\uc740\uc608\uc2dc.md": {
+    "size": 9440
+  },
+  "rag/documents/\uccb4\ud06c\ub9ac\uc2a4\ud2b8.md": {
+    "size": 7341
+  },
+  "rag/faiss_index/index.faiss": {
+    "size": 344109
+  },
+  "rag/faiss_index/index.pkl": {
+    "size": 35119
+  },
+  "tools/file_utils.py": {
+    "size": 2752
+  },
+  "tools/mcp_client.py": {
+    "size": 16234
+  },
+  "tools/search_client.py": {
+    "size": 5528
+  },
+  "tools/web_client.py": {
+    "size": 12034
+  },
+  "tools/web_search.py": {
+    "size": 8185
+  },
+  "tools/web_search_executor.py": {
+    "size": 7713
+  },
+  "tools/__init__.py": {
+    "size": 304
+  }
+}
