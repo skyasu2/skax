@@ -145,6 +145,7 @@ from graph.nodes.reviewer_node import run_reviewer_node
 from graph.nodes.refiner_node import run_refiner_node
 from graph.nodes.formatter_node import run_formatter_node
 from graph.nodes.discussion_node import run_discussion_node
+from graph.nodes.common import update_step_history
 
 # =============================================================================
 # LangSmith 트레이싱 활성화 (Observability)
@@ -156,48 +157,7 @@ Config.setup_langsmith()
 # Helper: 실행 이력 기록 및 로깅 통합
 # =============================================================================
 
-def _update_step_history(state: PlanCraftState, step_name: str, status: str, summary: str = "", start_time: float = 0.0, event_type: str = "AI_ACTION") -> PlanCraftState:
-    """Step 실행 결과를 state의 history에 추가하고 로깅합니다."""
-    # (기존 코드 생략...)
-    
-    # ... Helper 함수 구현 유지 ...
-    from graph.state import update_state
-    
-    # 시간 측정
-    import time
-    if not start_time:  # 0.0 or None
-        start_time = time.time() # fallback
-        
-    execution_time = f"{time.time() - start_time:.2f}s"
-    
-    # 로그 기록
-    logger = get_file_logger()
-    log_msg = f"[{step_name.upper()}] {status} ({event_type})"
-    if summary:
-        log_msg += f" - {summary}"
-    logger.info(log_msg)
-    
-    # History 항목 생성
-    history_item = {
-        "step": step_name,
-        "status": status,
-        "summary": summary,
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "execution_time": execution_time,
-        "event_type": event_type  # [NEW] AI / HUMAN 구분
-    }
-    
-    # State 업데이트 (불변성 유지)
-    current_history = state.get("step_history", []) or []
-    new_history = current_history + [history_item]
-    
-    return update_state(
-        state, 
-        current_step=step_name,
-        step_status=status,
-        step_history=new_history,
-        last_error=None if status == "SUCCESS" else state.get("last_error")
-    )
+
 
 
 # =============================================================================
@@ -409,78 +369,12 @@ def retrieve_context(state: PlanCraftState) -> PlanCraftState:
     feature_label = f" ({', '.join(features)})" if features else ""
     summary = f"검색된 문서: {doc_count}건{feature_label}"
 
-    return _update_step_history(new_state, "retrieve", status, summary)
+    return update_step_history(new_state, "retrieve", status, summary)
 
 
 # ... (상단 생략)
 
-@trace_node("context", tags=["web", "search", "tavily"])
-@handle_node_error
-def _deprecated_fetch_web_context(state: PlanCraftState) -> PlanCraftState:
-    """
-    조건부 웹 정보 수집 노드
 
-    Side-Effect: 외부 웹 API 호출 (Tavily Search)
-    - 실패 시 재시도 안전함 (조회 전용, 멱등성 보장)
-    - 중복 호출 시 동일 결과 반환 (검색 결과 캐싱 없음)
-
-    LangSmith: run_name="📚 컨텍스트 수집", tags=["rag", "retrieval", "web", "search", "tavily"]
-    """
-    from tools.web_search_executor import execute_web_search
-    from graph.state import update_state
-
-    user_input = state.get("user_input", "")
-    rag_context = state.get("rag_context")
-    
-    # 1. 웹 검색 실행 (Executor 위임)
-    result = execute_web_search(user_input, rag_context)
-
-    # [DEBUG] 웹 검색 결과 상세 로그
-    print(f"[FETCH_WEB DEBUG] urls={len(result.get('urls', []))}, sources={len(result.get('sources', []))}, context_len={len(result.get('context') or '')}, error={result.get('error')}")
-
-    # 2. 상태 업데이트
-    existing_context = state.get("web_context")
-    existing_urls = state.get("web_urls") or []
-    existing_sources = state.get("web_sources") or []
-
-    new_context_str = result["context"]
-    new_urls = result["urls"]
-    new_sources = result["sources"]
-    error = result["error"]
-
-    final_context = existing_context
-    if new_context_str:
-        final_context = f"{final_context}\n\n{new_context_str}" if final_context else new_context_str
-
-    final_urls = list(dict.fromkeys(existing_urls + new_urls))
-
-    # web_sources 병합 (중복 URL 제거)
-    final_sources = existing_sources.copy()
-    for src in new_sources:
-        if not any(s.get("url") == src.get("url") for s in final_sources):
-            final_sources.append(src)
-
-    if error:
-        new_state = update_state(
-            state,
-            web_context=None,
-            web_urls=[],
-            error=f"웹 조회 오류: {error}"
-        )
-    else:
-        new_state = update_state(
-            state,
-            web_context=final_context,
-            web_urls=final_urls,
-            web_sources=final_sources,
-            current_step="fetch_web"
-        )
-
-    status = "FAILED" if new_state.get("error") else "SUCCESS"
-    url_count = len(new_state.get("web_urls") or [])
-    summary = f"웹 정보 수집: {url_count}개 URL 참조"
-    
-    return _update_step_history(new_state, "fetch_web", status, summary, new_state.get("error"))
 
 
 def should_ask_user(state: PlanCraftState) -> AnalyzerRoutes:
@@ -552,7 +446,7 @@ def general_response_node(state: PlanCraftState) -> PlanCraftState:
         final_output=answer
     )
     
-    return _update_step_history(
+    return update_step_history(
         new_state,
         "general_response",
         "SUCCESS",
@@ -563,295 +457,7 @@ def general_response_node(state: PlanCraftState) -> PlanCraftState:
 # Agent 래퍼 함수 (TypedDict 호환)
 # =============================================================================
 
-@trace_node("analyze", tags=["critical"])
-@handle_node_error
-def _deprecated_run_analyzer_node(state: PlanCraftState) -> PlanCraftState:
-    """
-    분석 Agent 실행 노드
 
-    Side-Effect: LLM 호출 (Azure OpenAI)
-    - 멱등성: 동일 입력에 유사한 결과 (LLM 특성상 약간의 변동 있음)
-    - 재시도 안전: 상태 변경 없이 분석 결과만 반환
-
-    LangSmith 트레이싱:
-        - run_name: "🔍 요구사항 분석"
-        - tags: ["agent", "llm", "analysis", "critical"]
-    """
-    from agents.analyzer import run
-    from graph.state import update_state
-    
-    # [PHASE 1] Reviewer에서 복귀한 경우 restart_count 증가
-    current_restart_count = state.get("restart_count", 0)
-    has_review = state.get("review") is not None
-    
-    if has_review:
-        # Reviewer를 거친 후 다시 Analyzer로 온 경우 = 재분석
-        current_restart_count += 1
-        print(f"[ROUTING] Analyzer 재진입 (restart_count: {current_restart_count})")
-    
-    new_state = run(state)
-    
-    # restart_count 업데이트
-    new_state = update_state(new_state, restart_count=current_restart_count)
-    
-    analysis = new_state.get("analysis")
-    topic = "N/A"
-    if analysis:
-        topic = analysis.get("topic") if isinstance(analysis, dict) else getattr(analysis, "topic", "N/A")
-    
-    return _update_step_history(
-        new_state, 
-        "analyze", 
-        "SUCCESS", 
-        summary=f"주제 분석: {topic}" + (f" (재분석 #{current_restart_count})" if has_review else "")
-    )
-
-@trace_node("structure")
-@require_state_keys(["analysis"])
-@handle_node_error
-def _deprecated_run_structurer_node(state: PlanCraftState) -> PlanCraftState:
-    """
-    구조화 Agent 실행 노드
-
-    Side-Effect: LLM 호출 (Azure OpenAI)
-    - 기획서 목차/섹션 구조 설계
-    - 재시도 안전: 구조만 생성, 외부 상태 변경 없음
-
-    LangSmith: run_name="🏗️ 구조 설계", tags=["agent", "llm", "planning"]
-    """
-    from agents.structurer import run
-
-    new_state = run(state)
-    structure = new_state.get("structure")
-    count = 0
-    if structure:
-        sections = structure.get("sections") if isinstance(structure, dict) else getattr(structure, "sections", [])
-        count = len(sections) if sections else 0
-    
-    return _update_step_history(
-        new_state, 
-        "structure", 
-        "SUCCESS", 
-        summary=f"섹션 {count}개 구조화"
-    )
-
-@trace_node("write", tags=["slow"])
-@require_state_keys(["structure"])
-@handle_node_error
-def _deprecated_run_writer_node(state: PlanCraftState) -> PlanCraftState:
-    """
-    작성 Agent 실행 노드
-
-    Side-Effect: LLM 호출 (Azure OpenAI)
-    - 섹션별 상세 콘텐츠 작성 (가장 오래 걸리는 단계)
-    - 재시도 안전: 콘텐츠만 생성, 외부 상태 변경 없음
-
-    LangSmith: run_name="✍️ 콘텐츠 작성", tags=["agent", "llm", "generation", "slow"]
-    """
-    from agents.writer import run
-
-    new_state = run(state)
-    draft = new_state.get("draft")
-    draft_len = 0
-    if draft:
-        sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
-        if sections:
-             # SectionContent 객체 or dict
-             draft_len = sum(len(s.get("content", "") if isinstance(s, dict) else s.content) for s in sections)
-    
-    return _update_step_history(
-        new_state, "write", "SUCCESS", summary=f"초안 작성 완료 ({draft_len}자)"
-    )
-
-@trace_node("review", tags=["evaluation"])
-@handle_node_error
-def _deprecated_run_reviewer_node(state: PlanCraftState) -> PlanCraftState:
-    """
-    검토 Agent 실행 노드
-
-    Side-Effect: LLM 호출 (Azure OpenAI)
-    - 품질 평가 및 verdict 결정 (PASS/REVISE/FAIL)
-    - 재시도 안전: 평가 결과만 반환, 외부 상태 변경 없음
-
-    LangSmith: run_name="🔎 품질 검토", tags=["agent", "llm", "evaluation"]
-    """
-    from agents.reviewer import run
-
-    new_state = run(state)
-    review = new_state.get("review")
-    verdict = "N/A"
-    score = 0
-    if review:
-        if isinstance(review, dict):
-            verdict = review.get("verdict", "N/A")
-            score = review.get("overall_score", 0)
-        else:
-            verdict = getattr(review, "verdict", "N/A")
-            score = getattr(review, "overall_score", 0)
-
-    return _update_step_history(
-        new_state, "review", "SUCCESS", summary=f"심사 결과: {verdict} ({score}점)"
-    )
-
-@trace_node("discuss", tags=["subgraph", "collaboration"])
-@handle_node_error
-def _deprecated_run_discussion_node(state: PlanCraftState) -> PlanCraftState:
-    """
-    에이전트 간 대화 노드 (Reviewer ↔ Writer)
-
-    Side-Effect: 다중 LLM 호출 (SubGraph 내부)
-    - Reviewer가 피드백을 제시하고 Writer가 개선 계획을 설명
-    - 최대 DISCUSSION_MAX_ROUNDS 라운드 진행
-    - 재시도 안전: 대화 기록만 생성, 외부 상태 변경 없음
-
-    LangSmith: run_name="💬 에이전트 토론", tags=["agent", "llm", "collaboration", "subgraph"]
-    """
-    from graph.subgraphs import run_discussion_subgraph
-
-    new_state = run_discussion_subgraph(state)
-    round_count = new_state.get("discussion_round", 0)
-    consensus = new_state.get("consensus_reached", False)
-
-    return _update_step_history(
-        new_state,
-        "discussion",
-        "SUCCESS",
-        summary=f"에이전트 대화 {round_count}라운드, 합의: {'완료' if consensus else '미완료'}"
-    )
-
-
-@trace_node("refine")
-@handle_node_error
-def _deprecated_run_refiner_node(state: PlanCraftState) -> PlanCraftState:
-    """
-    개선 Agent 실행 노드 (Strategy Planner)
-
-    Side-Effect: LLM 호출 (Azure OpenAI)
-    - Reviewer 피드백 기반 개선 전략 수립
-    - 재시도 안전: 전략만 생성, 외부 상태 변경 없음
-
-    LangSmith: run_name="✨ 개선 적용", tags=["agent", "llm", "refinement"]
-    """
-    from agents.refiner import run
-
-    new_state = run(state)
-    refine_count = new_state.get("refine_count", 0)
-
-    return _update_step_history(
-        new_state,
-        "refine",
-        "SUCCESS",
-        summary=f"기획서 개선 완료 (Round {refine_count})"
-    )
-
-@trace_node("format", tags=["output", "final"])
-@handle_node_error
-def _deprecated_run_formatter_node(state: PlanCraftState) -> PlanCraftState:
-    """
-    포맷팅 Agent 실행 노드
-
-    LangSmith: run_name="📋 최종 포맷팅", tags=["agent", "output", "final"]
-
-    Side-Effect: LLM 호출 (Azure OpenAI)
-
-    처리 단계:
-    1. Draft → Final Output 변환 (마크다운 조합)
-    2. 웹 출처 링크 추가 (참고 자료 섹션)
-    3. Formatter Agent 호출 (chat_summary 생성)
-    4. refine_count 리셋 (사용자 수정 기회 3회 부여)
-
-    재시도 안전: 포맷팅만 수행, 외부 상태 변경 없음
-    """
-    from graph.state import update_state
-    from agents.formatter import run as formatter_run
-    from graph.nodes.analyzer_node import run_analyzer_node
-    from graph.nodes.fetch_web import fetch_web_context
-
-    # =========================================================================
-    # 1단계: Draft -> Final Output 변환
-    # =========================================================================
-    draft = state.get("draft")
-    structure = state.get("structure")
-    final_md = ""
-
-    if draft:
-        # Title 추출
-        title = "기획서"
-        if structure:
-            title = structure.get("title") if isinstance(structure, dict) else getattr(structure, "title", "기획서")
-
-        final_md = f"# {title}\n\n"
-
-        # Sections 추출
-        sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
-
-        for sec in sections:
-            if isinstance(sec, dict):
-                name = sec.get("name", "")
-                content = sec.get("content", "")
-            else:
-                name = sec.name
-                content = sec.content
-            final_md += f"## {name}\n\n{content}\n\n"
-
-        # 웹 검색 출처 추가
-        # [UPDATE] Writer가 생성한 참고 자료 섹션 제거 후 링크 포함된 섹션으로 교체
-        import re
-        web_sources = state.get("web_sources") or []
-        web_urls = state.get("web_urls") or []
-        web_context = state.get("web_context") or ""
-
-        # Writer가 생성한 참고 자료 섹션 제거 (링크 없는 텍스트만 있는 경우)
-        # 패턴: ## 참고 자료 또는 ## 참고자료 부터 다음 ## 또는 문서 끝까지
-        reference_pattern = r'\n*#{1,2}\s*참고\s*자료.*?(?=\n#{1,2}\s|\Z)'
-        final_md = re.sub(reference_pattern, '', final_md, flags=re.DOTALL)
-
-        # 웹 소스가 있으면 링크 포함된 참고 자료 섹션 추가
-        if web_sources:
-            final_md += "---\n\n## 📚 참고 자료\n\n"
-            final_md += "> 본 기획서 작성 시 다음 자료를 참고하였습니다.\n\n"
-            for i, source in enumerate(web_sources, 1):
-                title = source.get("title", "")
-                url = source.get("url", "")
-                # 제목이 비어있거나 URL과 동일한 경우 도메인명 추출
-                if not title or title == url:
-                    from urllib.parse import urlparse
-                    parsed = urlparse(url)
-                    title = parsed.netloc.replace("www.", "") if parsed.netloc else "출처"
-                final_md += f"{i}. [{title}]({url})\n"
-            final_md += "\n"
-        elif web_urls:
-            # Fallback: URL만 있는 경우 도메인명 추출
-            final_md += "---\n\n## 📚 참고 자료\n\n"
-            final_md += "> 본 기획서 작성 시 다음 자료를 참고하였습니다.\n\n"
-            for i, url in enumerate(web_urls, 1):
-                from urllib.parse import urlparse
-                parsed = urlparse(url)
-                domain = parsed.netloc.replace("www.", "") if parsed.netloc else "출처"
-                final_md += f"{i}. [{domain}]({url})\n"
-            final_md += "\n"
-        elif web_context and "웹 검색 결과" in web_context:
-            final_md += "---\n\n## 📚 참고 자료\n\n"
-            final_md += "> 본 기획서는 웹 검색을 통해 수집한 최신 정보를 반영하였습니다.\n\n"
-        else:
-            # [FIX] 웹 검색 결과가 없어도 RAG 기반 출처 표시
-            rag_context = state.get("rag_context")
-            if rag_context:
-                final_md += "---\n\n## 📚 참고 자료\n\n"
-                final_md += "> 본 기획서는 PlanCraft 내부 기획 가이드를 참고하여 작성되었습니다.\n\n"
-                final_md += "- PlanCraft 기획서 작성 가이드\n"
-                final_md += "- 사용자 여정 가이드\n"
-                final_md += "- 서비스 기획 베스트 프랙티스\n\n"
-
-    # =========================================================================
-    # 2단계: Formatter Agent 호출 (chat_summary 생성 + refine_count=0 리셋)
-    # =========================================================================
-    state_with_output = update_state(state, final_output=final_md, current_step="format")
-    new_state = formatter_run(state_with_output)
-
-    return _update_step_history(
-        new_state, "format", "SUCCESS", summary="최종 포맷팅 및 교정 완료"
-    )
 
 
 # =============================================================================
