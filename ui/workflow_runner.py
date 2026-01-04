@@ -126,6 +126,17 @@ def execute_workflow_api(
             timeout=30.0
         )
 
+    if response.is_error:
+        print(f"[API ERROR] Status: {response.status_code}, Body: {response.text}")
+        try:
+            error_detail = response.json()
+            if "detail" in error_detail:
+                from utils.file_logger import logger
+                logger.error(f"Validation Detail: {error_detail['detail']}")
+                st.error(f"요청 데이터 오류 (Validation Error): {error_detail['detail']}")
+        except Exception:
+            pass
+
     response.raise_for_status()
     return response
 
