@@ -1,9 +1,24 @@
 CUSTOM_CSS = """
 <style>
     /* =================================================================
+       Google Fonts - Pretendard (한글 최적화 모던 폰트)
+       ================================================================= */
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+
+    /* =================================================================
        CSS Variables (Design Tokens)
        ================================================================= */
     :root {
+        /* Typography */
+        --font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --font-size-xs: 0.75rem;
+        --font-size-sm: 0.875rem;
+        --font-size-md: 1rem;
+        --font-size-lg: 1.125rem;
+        --font-size-xl: 1.25rem;
+        --font-weight-normal: 400;
+        --font-weight-medium: 500;
+        --font-weight-bold: 600;
         /* Primary Colors */
         --color-primary: #667eea;
         --color-primary-dark: #764ba2;
@@ -34,6 +49,12 @@ CUSTOM_CSS = """
     /* =================================================================
        Layout
        ================================================================= */
+    
+    /* Global Font Application */
+    html, body, .stApp, .stMarkdown, p, span, div, button, input, textarea, select {
+        font-family: var(--font-family) !important;
+    }
+
     .block-container {
         padding-top: 4rem;
         padding-bottom: 8rem;
@@ -45,6 +66,178 @@ CUSTOM_CSS = """
         padding: 1rem 1.5rem;
         margin: 0.5rem 0;
         box-shadow: var(--shadow-sm);
+    }
+
+    /* =================================================================
+       Skeleton Loading Animation (로딩 스켈레톤)
+       ================================================================= */
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+
+    .skeleton {
+        background: linear-gradient(
+            90deg,
+            #f0f0f0 25%,
+            #e0e0e0 50%,
+            #f0f0f0 75%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.5s ease-in-out infinite;
+        border-radius: var(--radius-sm);
+    }
+
+    .skeleton-text {
+        height: 1rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+    }
+
+    .skeleton-title {
+        height: 1.5rem;
+        width: 60%;
+        margin-bottom: 1rem;
+    }
+
+    .skeleton-card {
+        height: 120px;
+        margin: 1rem 0;
+    }
+
+    /* =================================================================
+       Fade-In / Slide-Up Animations (진입 애니메이션)
+       ================================================================= */
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+        from { 
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .animate-fade-in {
+        animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    .animate-slide-up {
+        animation: slideUp 0.4s ease-out forwards;
+    }
+
+    .animate-slide-in-right {
+        animation: slideInRight 0.3s ease-out forwards;
+    }
+
+    /* Staggered animation for lists */
+    .animate-stagger > * {
+        opacity: 0;
+        animation: slideUp 0.4s ease-out forwards;
+    }
+    .animate-stagger > *:nth-child(1) { animation-delay: 0.05s; }
+    .animate-stagger > *:nth-child(2) { animation-delay: 0.1s; }
+    .animate-stagger > *:nth-child(3) { animation-delay: 0.15s; }
+    .animate-stagger > *:nth-child(4) { animation-delay: 0.2s; }
+    .animate-stagger > *:nth-child(5) { animation-delay: 0.25s; }
+
+    /* Chat messages animation */
+    .stChatMessage {
+        animation: slideUp 0.3s ease-out;
+    }
+
+    /* Card hover lift effect */
+    .hover-lift {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    /* =================================================================
+       Error State Styling (에러 상태 개선)
+       ================================================================= */
+    .error-container {
+        background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%);
+        border: 1px solid #ffcccc;
+        border-left: 4px solid #e53e3e;
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        margin: 1rem 0;
+    }
+
+    .error-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .error-title {
+        font-size: var(--font-size-lg);
+        font-weight: var(--font-weight-bold);
+        color: #c53030;
+        margin-bottom: 0.5rem;
+    }
+
+    .error-message {
+        color: #742a2a;
+        font-size: var(--font-size-sm);
+        line-height: 1.5;
+    }
+
+    .error-retry-btn {
+        margin-top: 1rem;
+        background: #e53e3e !important;
+        color: white !important;
+        border: none !important;
+    }
+
+    .error-retry-btn:hover {
+        background: #c53030 !important;
+    }
+
+    /* =================================================================
+       Empty State Styling (빈 상태)
+       ================================================================= */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1.5rem;
+        color: var(--color-text-muted);
+    }
+
+    .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state-title {
+        font-size: var(--font-size-lg);
+        font-weight: var(--font-weight-medium);
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state-description {
+        font-size: var(--font-size-sm);
+        max-width: 300px;
+        margin: 0 auto;
     }
 
     /* =================================================================
