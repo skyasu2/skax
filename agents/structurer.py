@@ -97,7 +97,7 @@ def run(state: PlanCraftState) -> PlanCraftState:
     ).with_structured_output(StructureResult)
 
     # 2. 프롬프트 구성 (시간 컨텍스트 주입)
-    # [FIX] min_sections를 프롬프트에 동적 전달
+    # min_sections를 프롬프트에 동적 전달
     user_msg_content = STRUCTURER_USER_PROMPT.format(
             analysis=analysis_str,
             context=context if context else "없음",

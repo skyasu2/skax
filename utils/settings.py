@@ -21,7 +21,7 @@ class GenerationPreset(BaseModel):
     name: str = Field(description="프리셋 이름")
     icon: str = Field(description="UI 표시 아이콘")
     description: str = Field(description="프리셋 설명")
-    model_type: str = Field(default="gpt-4o", description="사용할 LLM 모델 타입")  # [NEW] 모델 타입 추가
+    model_type: str = Field(default="gpt-4o", description="사용할 LLM 모델 타입")
     temperature: float = Field(description="LLM 창의성 (0.0~1.0)")
     max_refine_loops: int = Field(description="최대 개선 루프 횟수")
     max_restart_count: int = Field(description="최대 재분석 횟수")
@@ -29,7 +29,7 @@ class GenerationPreset(BaseModel):
     discussion_enabled: bool = Field(default=True, description="에이전트 토론 활성화")
     # [NEW] 방안 D: 핵심 검증 보장
     min_sections: int = Field(default=9, description="최소 생성 섹션 수")
-    min_key_features: int = Field(default=5, description="최소 핵심 기능 수")  # [NEW] 핵심 기능 개수 제어
+    min_key_features: int = Field(default=5, description="최소 핵심 기능 수")
     structurer_max_retries: int = Field(default=2, description="Structurer 검증 재시도 (고정)")
     # [NEW] 시각적 요소 설정 (다이어그램, 그래프)
     include_diagrams: int = Field(default=0, description="포함할 Mermaid 다이어그램 개수")
@@ -107,8 +107,8 @@ GENERATION_PRESETS = {
         max_restart_count=2,
         writer_max_retries=3,
         discussion_enabled=True,
-        min_sections=13,  # [TUNE] 고품질: 13개 섹션 (양적 풍성함)
-        min_key_features=7,  # [NEW] 고품질: 7개 기능 (풍성함)
+        min_sections=13,  # 고품질: 13개 섹션 (양적 풍성함)
+        min_key_features=7,  # 고품질: 7개 기능 (풍성함)
         structurer_max_retries=2,  # 구조 검증은 고정
         include_diagrams=2,  # 고품질 모드: 다이어그램 2개 (증가)
         include_charts=2,    # 그래프 2개
@@ -117,7 +117,7 @@ GENERATION_PRESETS = {
         use_multi_query=True,
         use_query_expansion=True,
         use_context_reorder=True,
-        deep_analysis_mode=True,  # [NEW] 심층 분석 활성화
+        deep_analysis_mode=True,  # 심층 분석 활성화
     ),
 }
 

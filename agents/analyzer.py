@@ -124,12 +124,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
     preset_config = get_preset(active_preset)
 
     # 3. 프롬프트 구성 (시간 컨텍스트 주입 + 동적 설정 적용)
-    # [FIX] min_key_features를 프롬프트에 주입 (f-string 사용 시 JSON 중괄호 충돌 방지를 위해 replace 사용)
+    # min_key_features를 프롬프트에 주입 (f-string 사용 시 JSON 중괄호 충돌 방지를 위해 replace 사용)
     system_msg_content = get_time_context() + ANALYZER_SYSTEM_PROMPT.replace(
         "{min_key_features}", str(preset_config.min_key_features)
     )
 
-    # [FIX] 프롬프트 템플릿의 {review_data}, {current_analysis} 인자 전달
+    # 프롬프트 템플릿의 {review_data}, {current_analysis} 인자 전달
     user_msg_content = ANALYZER_USER_PROMPT.format(
         user_input=user_input,
         previous_plan=previous_plan if previous_plan else "없음",
