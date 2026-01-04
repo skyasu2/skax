@@ -404,6 +404,55 @@ CUSTOM_CSS = """
     }
 
     /* =================================================================
+       Accessibility - Keyboard Focus Styles (접근성 강화)
+       ================================================================= */
+    
+    /* 모든 버튼에 명확한 포커스 링 */
+    .stButton > button:focus-visible,
+    div[data-testid="stButton"] button:focus-visible {
+        outline: 3px solid var(--color-primary) !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 4px var(--color-primary-shadow) !important;
+    }
+    
+    /* 입력 필드 포커스 */
+    .stTextInput input:focus-visible,
+    .stTextArea textarea:focus-visible {
+        outline: 2px solid var(--color-primary) !important;
+        outline-offset: 1px !important;
+        border-color: var(--color-primary) !important;
+    }
+    
+    /* Expander 포커스 */
+    .stExpander summary:focus-visible {
+        outline: 2px solid var(--color-primary) !important;
+        outline-offset: 2px !important;
+        border-radius: var(--radius-sm);
+    }
+    
+    /* 링크 포커스 */
+    a:focus-visible {
+        outline: 2px solid var(--color-primary) !important;
+        outline-offset: 2px !important;
+        text-decoration: underline;
+    }
+    
+    /* Skip to content (스크린 리더용) */
+    .skip-link {
+        position: absolute;
+        top: -40px;
+        left: 0;
+        background: var(--color-primary);
+        color: white;
+        padding: 8px;
+        z-index: 9999;
+        transition: top 0.3s;
+    }
+    .skip-link:focus {
+        top: 0;
+    }
+
+    /* =================================================================
        Chat Input (Fixed Bottom)
        ================================================================= */
     .stChatInput {

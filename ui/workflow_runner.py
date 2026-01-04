@@ -420,11 +420,28 @@ def run_pending_workflow(pending_text: str, status_placeholder):
 
                 # API 호출
                 status.write("🔄 작업 요청을 전송 중입니다...")
+                
+                # [NEW] 스켈레톤 로딩 표시
+                skeleton_placeholder = status.empty()
+                skeleton_placeholder.markdown("""
+                <div style="margin: 1rem 0;">
+                    <div class="skeleton skeleton-title" style="height: 1.2rem; width: 60%; margin-bottom: 0.5rem; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite; border-radius: 4px;"></div>
+                    <div class="skeleton skeleton-text" style="height: 0.8rem; width: 80%; margin-bottom: 0.3rem; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite; border-radius: 4px;"></div>
+                    <div class="skeleton skeleton-text" style="height: 0.8rem; width: 70%; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite; border-radius: 4px;"></div>
+                </div>
+                <style>
+                    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+                </style>
+                """, unsafe_allow_html=True)
+                
                 execute_workflow_api(
                     pending_text, resume_cmd, thread_id,
                     generation_preset, file_content,
                     current_refine_count, previous_plan
                 )
+                
+                # 스켈레톤 제거
+                skeleton_placeholder.empty()
 
                 # 진행률 UI
                 progress_bar = status.progress(0)
