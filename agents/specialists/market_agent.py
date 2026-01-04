@@ -99,39 +99,35 @@ class MarketAgent:
         from langgraph.prebuilt import create_react_agent
         from langchain_core.messages import SystemMessage, HumanMessage
         
-        logger.info(f"[{self.name}] 시장 분석 시작 (Active Search Enabled)")
+        logger.info(f"[{self.name}] 시장 분석 시작 (Context-based Only)")
         
         # 1. 초기 컨텍스트 구성
-        web_context = ""
-        if web_search_results:
+        # 이미 text로 포맷팅된 web_context가 들어올 수도 있고, list[dict]가 들어올 수도 있음
+        web_context_str = ""
+        if isinstance(web_search_results, str):
+            web_context_str = web_search_results
+        elif isinstance(web_search_results, list):
             for result in web_search_results[:5]:
-                web_context += f"- {result.get('title', '')}: {result.get('content', '')[:300]}\n"
+                web_context_str += f"- {result.get('title', '')}: {result.get('content', '')[:500]}\n"
         
-        # 2. 검색 도구 준비 (Tavily)
-        # [Rate Limit] 최대 2개 결과, 에이전트 루프에서 횟수 제한 유도
-        search_tool = TavilySearchResults(max_results=2)
-        tools = [search_tool]
-
-        # 3. React 에이전트 생성 (일회성)
-        # 검색 능력을 가진 에이전트로 업그레이드
-        agent_executor = create_react_agent(self.llm, tools)
-
-        # 4. 프롬프트 구성
+        # 2. 프롬프트 구성
         user_prompt_content = MARKET_USER_PROMPT.format(
             service_overview=service_overview,
             target_market=target_market,
-            web_context=web_context or "(초기 검색 결과 없음)"
+            web_context=web_context_str or "(초기 검색 결과 없음)"
         )
 
-        # [Instruction] 검색 활용 지침 추가
+        # [Instruction] 순수 분석 지침 (Active Search 제거됨)
+        # 비용 최적화: Tavily 중복 호출 방지를 위해 제공된 Context만 사용
         extended_system_prompt = MARKET_SYSTEM_PROMPT + """
 \n
-### [Active Research Instructions]
-1. You have access to a web search tool (`tavily_search_results_json`).
-2. If the initial context is insufficient for exact numbers (TAM/SAM/SOM) or competitor details, **USE THE SEARCH TOOL**.
-3. **LIMIT**: usage of search tool to **MAXIMUM 2 TIMES** to save time.
-4. If you act as a searcher, query for specific latest data (e.g., "AI education market size 2025").
-5. Finally, you MUST output the JSON format as defined above.
+### [Analysis Instructions]
+1. Relies solely on the **'Strategic Market Research' (web_context)** provided above.
+2. The provided context already contains high-quality market data (Market Size, Trends, Competitors).
+3. **DO NOT hallucinate facts.** If exact numbers (TAM/SAM) are missing in the context:
+   - Make a **logical estimation** based on similar industry averages found in the context.
+   - Explicitly mention "(Estimated)" next to the number.
+4. Output must be in strictly **JSON format**.
 """
         
         messages = [
@@ -140,12 +136,11 @@ class MarketAgent:
         ]
         
         try:
-            # 5. 실행
-            result_state = agent_executor.invoke({"messages": messages})
-            last_message = result_state["messages"][-1]
-            content = last_message.content
+            # 3. 실행 (Direct LLM Call)
+            response = self.llm.invoke(messages)
+            content = response.content if hasattr(response, 'content') else str(response)
 
-            # 6. JSON 파싱
+            # 4. JSON 파싱
             import json
             import re
             
@@ -165,7 +160,7 @@ class MarketAgent:
                 json_str = re.sub(r'[^}]*$', '', json_str) # 마지막 } 뒷부분 제거
                 result = json.loads(json_str)
             
-            logger.info(f"[{self.name}] 시장 분석 완료 (Active Search 활용함)")
+            logger.info(f"[{self.name}] 시장 분석 완료")
             return result
             
         except Exception as e:
