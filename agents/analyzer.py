@@ -1,5 +1,16 @@
 """
-PlanCraft Agent - Analyzer Agent
+PlanCraft Agent - Analyzer Agent (분석가)
+
+사용자의 초기 입력을 분석하여 기획의 방향성(Topic, Purpose)을 설정하고,
+필수적인 핵심 기능(Key Features)과 제약사항(Constraints)을 도출하는 에이전트입니다.
+
+[Key Capabilities]
+1. 모드별 기능 제어:
+   - GenerationPreset에 따라 최소 핵심 기능 개수(min_key_features)를 동적으로 조정합니다.
+   - Fast(3개) / Balanced(5개) / Quality(7개)
+2. HITL (Human-in-the-Loop) 상호작용:
+   - 입력이 빈약할 경우(Situation B) 사용자의 승인을 얻기 위한 제안 모드로 작동합니다.
+   - 입력이 구체적일 경우(Situation C) 바로 구조화 단계로 넘어가는 Fast Track을 지원합니다.
 """
 from datetime import datetime
 from langchain_core.messages import SystemMessage, HumanMessage

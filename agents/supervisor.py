@@ -1,26 +1,17 @@
 """
-PlanCraft - LangGraph 네이티브 Supervisor (개선된 버전)
+PlanCraft - LangGraph Native Supervisor (오케스트레이터)
 
-베스트 프랙티스 적용:
-1. Tool 기반 Handoff 패턴
-2. 동적 라우팅 (LLM이 필요한 에이전트 결정)
-3. create_react_agent 활용
-4. 명시적 상태 관리
+전문 에이전트(Specialists)들의 작업을 조율하고 관리하는 지휘자 역할을 수행합니다.
+모든 전문 에이전트를 무조건 실행하지 않고, 기획 주제에 따라 필요한 전문가만 선별하여 투입합니다.
 
-아키텍처:
-    User Input
-        ↓
-    Supervisor (Router)
-        ↓ (동적 결정)
-    ┌───┴───┬───────┬───────┐
-    ↓       ↓       ↓       ↓ (Tech, Content 포함)
-  Market   BM   Tech   Content
-    ↓       ↓       ↓       ↓
-    └───────┴───┬───┴───────┘
-                ↓
-    Result Integration
-        ↓
-    Writer Context
+[Key Architecture]
+1. 동적 라우팅 (Dynamic Routing):
+   - 입력된 주제를 분석하여 '시장 분석'이 필요한지, '기술 설계'가 필요한지 등을 AI가 실시간으로 판단합니다.
+   - 예: "단순 아이디어" -> Market Agent 생략 가능, "플랫폼 구축" -> Tech Agent 필수 호출.
+2. 비동기 병렬 실행 (Async Parallel Execution):
+   - 의존성이 없는 작업들(예: 시장 분석 vs 기술 검토)은 동시에 실행하여 전체 대기 시간을 단축합니다.
+3. 데이터 통합 (Context Aggregation):
+   - 각 전문가가 산출한 데이터를 취합하여 Writer가 활용할 수 있는 단일 컨텍스트로 가공합니다.
 """
 
 from typing import Dict, Any, List, Optional, Literal, TYPE_CHECKING

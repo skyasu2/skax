@@ -1,5 +1,16 @@
 """
-PlanCraft Agent - Writer Agent
+PlanCraft Agent - Writer Agent (작가)
+
+실질적인 기획서 본문을 작성하는 핵심 에이전트입니다.
+구조화된 목차를 바탕으로 각 섹션에 들어갈 내용을 채우며, 전문 에이전트들의 분석 결과를 종합합니다.
+
+[Key Capabilities]
+1. 적응형 작성 전략 (Adaptive Writing Strategy):
+   - Fast/Balanced: 속도를 위해 한 번에 전체를 작성하는 Single-shot 방식을 사용합니다.
+   - Quality: 내용 손실(Context Loss)을 막기 위해 3개 섹션 단위로 나누어 작성하는 Chunk Writing 방식을 사용합니다.
+2. 능동적 데이터 통합:
+   - RAG(Vector DB) 및 실시간 웹 검색(Active Search) 결과를 본문에 자연스럽게 녹여냅니다.
+   - Mermaid 다이어그램 및 시각 자료 코드를 생성하여 문서의 가독성을 높입니다.
 """
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm

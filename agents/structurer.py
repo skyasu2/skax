@@ -1,5 +1,15 @@
 """
-PlanCraft Agent - Structurer Agent
+PlanCraft Agent - Structurer Agent (구조 설계자)
+
+분석된 기획 의도를 바탕으로 전체 문서의 뼈대(목차 구조)를 설계하는 에이전트입니다.
+단순한 나열이 아닌, 논리적 흐름(수미상관)을 고려하여 섹션을 배치합니다.
+
+[Key Capabilities]
+1. 프리셋 기반 확장:
+   - 사용자가 선택한 모드(Fast/Balanced/Quality)에 맞춰 섹션의 깊이(Depth)와 넓이(Breadth)를 조절합니다.
+   - Quality 모드 시 13개 이상의 심층 섹션을 의무적으로 생성합니다.
+2. 자기 교정 (Self-Correction):
+   - 생성된 목차가 기준 미달(섹션 수 부족 등)일 경우, 스스로 피드백을 생성하여 재설계합니다(Retry).
 """
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
