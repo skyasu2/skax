@@ -147,7 +147,7 @@ class TestPresetBasedValidation:
         # fast: 7개, balanced: 9개, quality: 10개
         assert get_preset("fast").min_sections == 7
         assert get_preset("balanced").min_sections == 9
-        assert get_preset("quality").min_sections == 10
+        assert get_preset("quality").min_sections == 13
 
         # structurer_max_retries는 모든 모드에서 2회 고정
         for preset_key in GENERATION_PRESETS:

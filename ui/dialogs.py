@@ -183,8 +183,8 @@ def show_history_dialog():
 @st.dialog("🛠️ Dev Tools", width="large")
 def render_dev_tools():
     """개발자 도구 (모달)"""
-    tab_test, tab_graph, tab_history, tab_schema = st.tabs(
-        ["🧪 Agent Unit Test", "📊 Workflow Graph", "🕰️ State History", "📐 Schema Viewer"]
+    tab_test, tab_all_tests, tab_graph, tab_history, tab_schema = st.tabs(
+        ["🧪 Agent Unit Test", "✅ Run ALL Tests", "📊 Workflow Graph", "🕰️ State History", "📐 Schema Viewer"]
     )
     
     # =========================================================================
@@ -278,6 +278,83 @@ def render_dev_tools():
                         st.error(f"❌ 테스트 실패: {str(e)}")
                         st.exception(e)
     
+    # =========================================================================
+    # Tab 1.5: Run ALL Tests
+    # =========================================================================
+    with tab_all_tests:
+        st.markdown("### 🚀 시스템 전체 테스트 (System Integration Test)")
+        st.info("터미널 없이 전체 테스트를 실행하고, 리포트를 즉시 확인합니다.")
+        
+        col_run, col_status = st.columns([1, 2])
+        with col_run:
+            if st.button("▶️ 전체 테스트 실행", type="primary", use_container_width=True):
+                with st.status("테스트 실행 중...", expanded=True) as status:
+                    import subprocess
+                    import platform
+                    
+                    st.write("🔍 환경 감지 중...")
+                    system_os = platform.system()
+                    script_cmd = ["bash", "run_tests.sh"] if system_os != "Windows" else ["run_tests.bat"] # Fallback for Windows local test
+                    
+                    if system_os == "Windows" and not os.path.exists("run_tests.bat"):
+                         # Windows인데 bat 없으면 sh 시도 (Git Bash 등 환경)
+                         script_cmd = ["bash", "run_tests.sh"]
+
+                    st.write(f"🏃 명령어 실행: `{' '.join(script_cmd)}`")
+                    
+                    try:
+                        # 실행
+                        result = subprocess.run(
+                            script_cmd, 
+                            capture_output=True, 
+                            text=True, 
+                            encoding='utf-8',
+                            errors='replace' # 인코딩 에러 방지
+                        )
+                        
+                        if result.returncode == 0:
+                            status.update(label="✅ 테스트 완료!", state="complete", expanded=False)
+                            st.success("테스트가 성공적으로 완료되었습니다.")
+                        else:
+                            status.update(label="⚠️ 테스트 실패 (일부 에러)", state="error", expanded=False)
+                            st.error("테스트 실행 중 오류가 발생했습니다.")
+                            with st.expander("에러 로그 보기"):
+                                st.code(result.stderr)
+                                
+                        # 리포트 로드
+                        report_path = "reports/test_report.html"
+                        if os.path.exists(report_path):
+                            st.session_state["show_test_report"] = True
+                            st.rerun()
+                        else:
+                            st.warning("리포트 파일이 생성되지 않았습니다.")
+                            
+                    except Exception as e:
+                        status.update(label="❌ 실행 오류", state="error")
+                        st.error(f"실행 중 예외 발생: {str(e)}")
+
+        with col_status:
+            if os.path.exists("reports/test_report.html"):
+                timestamp = os.path.getmtime("reports/test_report.html")
+                dt = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                st.caption(f"📅 최근 리포트: {dt}")
+            else:
+                st.caption("리포트 없음")
+
+        st.divider()
+
+        # HTML 리포트 뷰어
+        report_path = "reports/test_report.html"
+        if os.path.exists(report_path):
+            with open(report_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            st.markdown("#### 📄 Test Report Result")
+            import streamlit.components.v1 as components
+            # 높이를 넉넉하게 주어 스크롤 없이 볼 수 있게 함
+            components.html(html_content, height=800, scrolling=True)
+        else:
+            st.info("테스트를 실행하면 여기에 리포트가 표시됩니다.")
+
     # =========================================================================
     # Tab 2: Workflow Graph
     # =========================================================================

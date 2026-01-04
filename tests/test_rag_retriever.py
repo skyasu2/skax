@@ -45,7 +45,7 @@ class TestRetrieverBasic:
         retriever = Retriever(k=5)
         assert retriever.k == 5
 
-    @patch('rag.retriever.get_vectorstore')
+    @patch('rag.retriever.load_vectorstore')
     def test_get_relevant_documents_returns_list(self, mock_vectorstore):
         """검색 결과가 리스트로 반환되는지 검증"""
         from rag.retriever import Retriever
@@ -63,7 +63,7 @@ class TestRetrieverBasic:
 
         assert isinstance(results, list)
 
-    @patch('rag.retriever.get_vectorstore')
+    @patch('rag.retriever.load_vectorstore')
     def test_retriever_respects_k_limit(self, mock_vectorstore):
         """k 파라미터로 결과 개수가 제한되는지 검증"""
         from rag.retriever import Retriever
@@ -94,7 +94,7 @@ class TestQueryTransform:
         assert expand_query is not None
         assert generate_multi_queries is not None
 
-    @patch('rag.query_transform.get_llm')
+    @patch('utils.llm.get_llm')
     def test_expand_query_short_input(self, mock_llm):
         """짧은 입력에 대한 쿼리 확장 검증"""
         from rag.query_transform import expand_query
@@ -114,7 +114,7 @@ class TestQueryTransform:
         """Multi-Query가 리스트를 반환하는지 검증"""
         from rag.query_transform import generate_multi_queries
 
-        with patch('rag.query_transform.get_llm') as mock_llm:
+        with patch('utils.llm.get_llm') as mock_llm:
             mock_instance = MagicMock()
             mock_instance.invoke.return_value.content = "1. 쿼리1\n2. 쿼리2\n3. 쿼리3"
             mock_llm.return_value = mock_instance
@@ -154,7 +154,7 @@ class TestIntegration:
         from rag import Retriever
         assert Retriever is not None
 
-    @patch('rag.retriever.get_vectorstore')
+    @patch('rag.retriever.load_vectorstore')
     def test_retriever_handles_empty_query(self, mock_vectorstore):
         """빈 쿼리 처리 검증"""
         from rag.retriever import Retriever
