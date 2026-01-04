@@ -87,7 +87,13 @@ class Config:
     # Tavily MCP 서버 설정 (웹 검색)
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
     MCP_TAVILY_COMMAND = os.getenv("MCP_TAVILY_COMMAND", "npx")
+    MCP_TAVILY_COMMAND = os.getenv("MCP_TAVILY_COMMAND", "npx")
     MCP_TAVILY_SERVER = os.getenv("MCP_TAVILY_SERVER", "tavily-mcp")
+    
+    # =========================================================================
+    # Backend API 설정
+    # =========================================================================
+    API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000/api/v1")
     
     @classmethod
     def setup_langsmith(cls) -> bool:

@@ -11,10 +11,11 @@ from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
 
 import httpx
-import streamlit as st
+
+from utils.config import Config
 
 # API Base URL
-API_BASE_URL = "http://127.0.0.1:8000/api/v1"
+API_BASE_URL = Config.API_BASE_URL
 
 # 단계별 진행률 매핑
 STEP_PROGRESS = {
