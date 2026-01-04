@@ -1,4 +1,12 @@
 #!/bin/bash
+
+# [Auto-Activate Venv]
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
+    source venv/bin/activate
+fi
+
 echo "[TEST] Running All Tests and Generating Report..."
 
 # Create reports directory if not exists
