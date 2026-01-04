@@ -50,9 +50,21 @@ CUSTOM_CSS = """
        Layout
        ================================================================= */
     
-    /* Global Font Application */
-    html, body, .stApp, .stMarkdown, p, span, div, button, input, textarea, select {
+    /* Global Font Application (아이콘 폰트 제외) */
+    html, body, .stApp, .stMarkdown, p, h1, h2, h3, h4, h5, h6 {
         font-family: var(--font-family) !important;
+    }
+    
+    /* 폼 요소에도 적용 (아이콘 제외) */
+    button:not(.material-icons):not([class*="icon"]), 
+    input, textarea, select, label {
+        font-family: var(--font-family) !important;
+    }
+    
+    /* span, div는 아이콘일 수 있으므로 !important 제거 */
+    span:not(.material-icons):not([class*="icon"]):not([data-testid*="icon"]),
+    div:not([class*="icon"]) {
+        font-family: var(--font-family);
     }
 
     .block-container {
