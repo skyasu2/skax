@@ -133,43 +133,50 @@ def _generate_search_query_with_llm(user_input: str) -> str:
             truncated_input = sanitized_input
 
         system_prompt = (
-            "당신은 전문적인 '웹 검색 키워드 추출기'입니다. 주어진 텍스트에서 기획서 작성에 필요한 핵심 주제를 파악하여 검색 쿼리를 생성하세요.\n\n"
-            "## 지침\n"
-            "1. 사용자의 **가장 최근 요구사항**에 집중하세요. (텍스트 중간의 '---' 구분선 등이 있다면 그 뒤의 내용을 우선함)\n"
-            "2. '기획서', '작성', '도와줘', '추천해줘' 같은 **일반적인 명령어는 모두 제거**하세요.\n"
-            "3. 오직 **[핵심 주제] + [시장 규모/트렌드/통계/사례]** 형태의 구체적인 키워드 조합으로 변환하세요.\n"
-            "4. 주제를 파악할 수 없거나 무의미한 입력(단순 인사, 부호 등)이면 'NO_QUERY'라고만 답하세요.\n\n"
-            "## 예시\n"
-            "- 입력: '은퇴한 노부부를 위한 실버타운 플랫폼 기획해줘'\n"
-            "- 출력: 프리미엄 실버타운 매칭 플랫폼 시장 규모 트렌드\n\n"
-            "- 입력: '유튜브 숏폼 자동 편집기 만들어줘'\n"
-            "- 출력: AI 숏폼 자동 편집 SaaS 시장 분석 경쟁사\n\n"
-            "- 입력: 'ㅋㅋㅋ 안녕'\n"
-            "- 출력: NO_QUERY"
+            "당신은 전문적인 '전략적 웹 검색 설계자'입니다. 기획서 작성을 위한 **가장 효과적인 검색 쿼리 3개**를 설계하세요.\n\n"
+            "## 전략적 검색 원칙 (MECE)\n"
+            "1. **시장성 검증**: 시장 규모, 성장률, 최신 트렌드, 통계\n"
+            "2. **BM/수익성**: 수익 모델, 가격 정책, 비용 구조, 성공/실패 사례\n"
+            "3. **실현 가능성**: 법적 규제, 기술적 제약, 경쟁 현황\n\n"
+            "## 출력 형식 (JSON Only)\n"
+            "반드시 아래 JSON 형식으로만 출력하세요. 설명은 필요 없습니다.\n"
+            "```json\n"
+            "[\n"
+            "  \"키워드 + 2026 시장 규모 및 트렌드 통계\",\n"
+            "  \"키워드 + 수익 모델 및 운영 사례\",\n"
+            "  \"키워드 + 문제점 및 법적 규제 이슈\"\n"
+            "]\n"
+            "```"
         )
-        
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": truncated_input}
+            {"role": "user", "content": f"주제: {truncated_input}"}
         ]
-        
+
         response = llm.invoke(messages)
-        query = response.content.strip()
+        content = response.content.strip()
         
-        # 쿼리가 유효하지 않으면 빈 문자열 반환 (검색 스킵 유도)
-        if query == "NO_QUERY" or not query or len(query) < 2:
-            return ""
+        # JSON 파싱 시도
+        import json
+        try:
+            # 마크다운 코드블록 제거
+            if "```" in content:
+                content = content.replace("```json", "").replace("```", "")
             
-        # 최신 연도 보정
-        current_year = datetime.now().year
-        if str(current_year) not in query and str(current_year+1) not in query:
-             query += f" {current_year}"
-             
-        return query
+            queries = json.loads(content)
+            if isinstance(queries, list) and len(queries) > 0:
+                print(f"[WebSearch] Strategic Queries Generated: {queries}")
+                return queries[:3] # 최대 3개
+        except Exception:
+            print(f"[WARN] 쿼리 생성 JSON 파싱 실패, 일반 텍스트로 처리: {content}")
+            return [content] # 실패 시 원본 반환
+            
+        return [content] # 기본값
 
     except Exception as e:
-        print(f"[WARN] LLM 쿼리 생성 실패: {e}, Regex Fallback 사용")
-        return _generate_search_query_regex(user_input)
+        print(f"[WARN] 검색 쿼리 생성 실패: {e}")
+        return [user_input[:50]]  # 실패 시 원본 리스트로 반환
 
 
 def _generate_search_query_regex(user_input: str) -> str:

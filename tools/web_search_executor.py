@@ -59,16 +59,17 @@ def execute_web_search(user_input: str, rag_context: str = "") -> dict:
             print(f"[WebSearch] Decision: should_search={decision['should_search']}, reason={decision.get('reason', 'N/A')}")
 
             if decision["should_search"]:
-                base_query = decision["search_query"]
-                print(f"[WebSearch] Generated Query: '{base_query}'")
-
-                if base_query:
-                    queries = [base_query]
-                    if "트렌드" in base_query:
-                        queries.append(base_query.replace("트렌드", "시장 규모 통계"))
-                    else:
-                        queries.append(f"{base_query} 시장 규모 및 경쟁사")
+                search_queries = decision["search_query"]
+                
+                # 리스트가 아니면 리스트로 변환 (하위 호환)
+                if isinstance(search_queries, str):
+                    queries = [search_queries]
+                else:
+                    queries = search_queries
                     
+                print(f"[WebSearch] Executing Queries: {queries}")
+
+                if queries:
                     # [Optimization] 다중 쿼리 병렬 실행
                     def run_query(idx, q):
                         try:
