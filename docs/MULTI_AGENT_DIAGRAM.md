@@ -164,35 +164,49 @@ graph LR
 
 ---
 
-## 📊 4. Supervisor + Specialist 패턴
+## 📊 4. Supervisor + Specialist (2-Stage Search)
+
+> **2단계 검색 구조 (Active Search)**:
+> 1. Supervisor 단계에서 '넓은 초기 검색' 수행
+> 2. Market Agent 내부에서 '정밀 보강 검색(ReAct)' 수행 (최대 2회)
 
 ```mermaid
 %%{init: {'theme': 'base'}}%%
 
 graph TB
-    SUPERVISOR[🎖️ Supervisor<br/>Plan-and-Execute]
+    subgraph STAGE1["Stage 1: Broad Search"]
+        SUP[🎖️ Supervisor]
+        WEB_CTX[🌐 Initial Web Context<br/>(Executor Result)]
+        SUP --> WEB_CTX
+    end
+
+    subgraph STAGE2["Stage 2: Active Deep Search"]
+        MARKET[📈 Market Agent<br/>(ReAct Agent)]
+        
+        WEB_CTX --> MARKET
+        
+        MARKET -->|1. 분석| CHECK{정보 부족?}
+        CHECK -->|Yes| SEARCH[🔍 Tavily Active Search]
+        SEARCH -->|Result| MARKET
+        
+        CHECK -->|No / Limit| OUTPUT[📋 Market Analysis<br/>JSON]
+        
+        style SEARCH fill:#ff9f1c,color:#fff
+    end
     
-    SUPERVISOR -->|"1. 시장 분석 필요"| MARKET[📈 Market Agent]
-    SUPERVISOR -->|"2. 수익 모델 필요"| BM[💼 BM Agent]
-    SUPERVISOR -->|"3. 리스크 필요"| RISK[⚠️ Risk Agent]
-    SUPERVISOR -->|"4. 기술 설계 필요"| TECH[🛠️ Tech Agent]
-    SUPERVISOR -->|"5. 콘텐츠 전략 필요"| CONTENT[📝 Content Agent]
+    SUPERVISOR --> MARKET
     
-    MARKET -->|결과| MERGE[📦 Result Merger]
-    BM -->|결과| MERGE
-    RISK -->|결과| MERGE
-    TECH -->|결과| MERGE
-    CONTENT -->|결과| MERGE
+    MARKET -->|Result| MERGE[📦 Result Merger]
     
-    MERGE --> WRITER[✍️ Writer<br/>통합 작성]
-    
-    style SUPERVISOR fill:#8957e5,color:#fff
-    style MERGE fill:#3fb950,color:#fff
+    style SUP fill:#8957e5,color:#fff
+    style MARKET fill:#d29922,color:#fff
 ```
 
 ---
 
-## 📊 5. Human-in-the-Loop (HITL) 흐름
+## 📊 5. Human-in-the-Loop (HITL) 상세 흐름
+
+> **Side-Effect Free 원칙**: `interrupt` 이전에 DB 저장을 절대 하지 않음!
 
 ```mermaid
 %%{init: {'theme': 'base'}}%%
@@ -205,14 +219,24 @@ sequenceDiagram
     
     U->>A: "AI 앱 만들어줘"
     A->>A: 분석 (모호함 감지)
-    A->>H: interrupt(options)
-    H-->>U: "어떤 방향으로 진행할까요?"
-    Note over H: ⏸️ 워크플로우 일시정지
     
-    U->>H: resume(선택: "헬스케어 AI")
-    H->>A: 선택 결과 전달
-    A->>A: 재분석 (명확해짐)
-    A->>W: 기획서 작성 진행
+    rect rgb(255, 240, 240)
+        Note over A, H: 🛑 SIDE-EFFECT BARRIER 🛑<br/>(No DB Save, No API Call)
+        A->>H: interrupt(payload)
+    end
+    
+    H-->>U: "어떤 방향으로 진행할까요?" (UI)
+    Note over H: ⏸️ 워크플로우 일시정지 (Wait)
+    
+    U->>H: resume(command={"resume": "옵션A"})
+    
+    rect rgb(240, 255, 240)
+        Note over H, A: ✅ RESUME & RE-EXECUTE
+        H->>A: Payload 전달 (State Update)
+        A->>A: 재분석 (명확해짐)
+        A->>W: 기획서 작성 진행
+    end
+    
     W-->>U: 📋 완성된 기획서
 ```
 
@@ -286,207 +310,42 @@ flowchart LR
 
 ---
 
-## � 8. 서비스 플로우 (End-to-End Flow)
+## 📊 9. MCP (Model Context Protocol) Architecture
 
-### 8.1 전체 요청-응답 흐름 (Flow Chart)
-
-```mermaid
-%%{init: {'theme': 'base'}}%%
-
-flowchart TB
-    subgraph USER["👤 사용자"]
-        INPUT[/"💬 기획서 요청 입력"/]
-        OUTPUT[/"📋 최종 기획서 확인"/]
-    end
-    
-    subgraph UI["🖥️ Streamlit UI"]
-        CHAT[채팅 인터페이스]
-        PROGRESS[진행률 표시]
-        RENDER[마크다운 렌더링]
-    end
-    
-    subgraph API["🔌 FastAPI Backend"]
-        ENDPOINT["/api/v1/workflow/run"]
-        STATUS["/api/v1/workflow/status"]
-        RESUME["/api/v1/workflow/resume"]
-    end
-    
-    subgraph WORKFLOW["🧠 LangGraph Workflow"]
-        INIT[State 초기화]
-        
-        subgraph CONTEXT["📚 Context 수집"]
-            RAG_SEARCH[FAISS RAG 검색<br/>내부 가이드라인]
-            WEB_SEARCH[Tavily 웹 검색<br/>실시간 시장 데이터]
-        end
-        
-        ANALYZE[🔍 요구사항 분석]
-        
-        HITL_CHECK{추가 정보<br/>필요?}
-        HITL_PAUSE[⏸️ interrupt<br/>사용자 대기]
-        
-        STRUCTURE[📐 목차 설계]
-        
-        subgraph SPECIALIST["🎯 전문가 분석"]
-            MARKET_A[시장 분석]
-            BM_A[수익 모델]
-            RISK_A[리스크]
-            TECH_A[기술 설계]
-        end
-        
-        WRITE[✍️ 콘텐츠 작성]
-        REVIEW[🔎 품질 검토]
-        
-        REVIEW_CHECK{품질 OK?}
-        REFINE[✨ 개선]
-        
-        FORMAT[📄 최종 포맷팅]
-    end
-    
-    subgraph LLM["🤖 Azure OpenAI"]
-        GPT4O[GPT-4o / GPT-4o-mini]
-    end
-    
-    %% Flow
-    INPUT --> CHAT
-    CHAT --> ENDPOINT
-    ENDPOINT --> INIT
-    
-    INIT --> RAG_SEARCH
-    RAG_SEARCH --> WEB_SEARCH
-    WEB_SEARCH --> ANALYZE
-    
-    ANALYZE --> HITL_CHECK
-    HITL_CHECK -->|Yes| HITL_PAUSE
-    HITL_PAUSE -->|resume| RESUME
-    RESUME --> ANALYZE
-    HITL_CHECK -->|No| STRUCTURE
-    
-    STRUCTURE --> SPECIALIST
-    MARKET_A & BM_A & RISK_A & TECH_A --> WRITE
-    
-    WRITE --> REVIEW
-    REVIEW --> REVIEW_CHECK
-    REVIEW_CHECK -->|score<9| REFINE
-    REFINE --> STRUCTURE
-    REVIEW_CHECK -->|score≥9| FORMAT
-    
-    FORMAT --> STATUS
-    STATUS --> PROGRESS
-    PROGRESS --> RENDER
-    RENDER --> OUTPUT
-    
-    ANALYZE & STRUCTURE & WRITE & REVIEW --> GPT4O
-    GPT4O --> ANALYZE & STRUCTURE & WRITE & REVIEW
-    
-    style INPUT fill:#58a6ff,color:#fff
-    style OUTPUT fill:#3fb950,color:#fff
-    style HITL_PAUSE fill:#db61a2,color:#fff
-    style GPT4O fill:#8957e5,color:#fff
-```
-
-### 8.2 서비스 플로우 시퀀스 (Sequence Diagram)
+> **Client Mode Implementation**:
+> PlanCraft App이 `mcp-client` 역할을 수행하며, 표준 입출력(stdio)을 통해
+> 외부 MCP 서버(Tavily, Fetch 등)와 통신합니다.
 
 ```mermaid
 %%{init: {'theme': 'base'}}%%
-sequenceDiagram
-    autonumber
 
-    participant U as 👤 User
-    participant UI as 🖥️ Streamlit UI
-    participant API as 🔌 FastAPI
-    participant LG as 🧠 LangGraph
-    participant RAG as 📚 FAISS RAG
-    participant WEB as 🌐 Tavily
-    participant SUP as � Supervisor
-    participant S as 🎯 Specialists
-    participant LLM as 🤖 Azure OpenAI
-
-    %% ===== Request Start =====
-    U->>UI: 기획서 생성 요청
-    UI->>API: POST /workflow/run
-    API->>LG: 워크플로우 실행
-
-    %% ===== Context Collection =====
-    LG->>RAG: 내부 문서 검색
-    LG->>WEB: 웹 검색
-    RAG-->>LG: RAG Context
-    WEB-->>LG: Web Context
-
-    %% ===== Analysis =====
-    LG->>LLM: 요구사항 분석
-    LLM-->>LG: 분석 결과
-
-    %% ===== HITL Check =====
-    LG->>LG: 추가 정보 필요 여부 판단
-    alt 추가 정보 필요
-        LG-->>API: interrupt 발생
-        API-->>UI: 상태 스트리밍 (SSE)
-        UI-->>U: 추가 정보 요청
-        U->>UI: 정보 입력
-        UI->>API: POST /workflow/resume
-        API->>LG: resume
+graph LR
+    subgraph APP["🖥️ PlanCraft Application (Client)"]
+        CLIENT[MCP Client Module<br/>(mcp_client.py)]
     end
-
-    %% ===== Structuring =====
-    LG->>LLM: 목차 설계
-    LLM-->>LG: 구조화 결과
-
-    %% ===== Specialist Analysis =====
-    LG->>SUP: Specialist 실행 요청
-    par 병렬 분석
-        SUP->>S: Market 분석
-        SUP->>S: BM 설계
-        SUP->>S: Risk 분석
-        SUP->>S: Tech 설계
+    
+    subgraph MCP_SERVERS["🔌 MCP Servers (Providers)"]
+        direction TB
+        
+        subgraph TAVILY["🔍 tavily-mcp"]
+            NPX[npx @tavily-ai/mcp-server]
+        end
+        
+        subgraph FETCH["🌐 fetch-mcp"]
+            UVX[uvx mcp-server-fetch]
+        end
     end
-    S-->>SUP: 분석 결과
-    SUP-->>LG: 통합 결과 전달
-
-    %% ===== Writing =====
-    LG->>LLM: 콘텐츠 작성
-    LLM-->>LG: 초안 생성
-
-    %% ===== Review Loop =====
-    LG->>LLM: 품질 검토
-    LLM-->>LG: 리뷰 점수
-
-    alt 점수 미달 (score < 9)
-        LG->>LLM: 개선 요청
-        LLM-->>LG: 개선 결과
-        LG->>LLM: 구조 재조정
-        LLM-->>LG: 수정된 구조
-    else 점수 통과 (score ≥ 9)
-        LG->>LLM: 최종 포맷팅
-        LLM-->>LG: 완성 문서
-    end
-
-    %% ===== Result Streaming =====
-    LG-->>API: 실행 상태 / 결과
-    API-->>UI: SSE 스트리밍
-    UI-->>U: 실시간 진행 상태 표시
-    UI-->>U: 최종 기획서 출력
+    
+    CLIENT <==>|stdio / JSON-RPC| NPX
+    CLIENT <==>|stdio / JSON-RPC| UVX
+    
+    NPX -->|API Call| WEB[Tavily API]
+    UVX -->|HTTP GET| SITE[Target Website]
+    
+    style CLIENT fill:#0969da,color:#fff
+    style TAVILY fill:#d29922,color:#fff
+    style FETCH fill:#1f883d,color:#fff
 ```
-
----
-
-## �📋 Agent 역할 정리
-
-| Agent | 역할 | 입력 | 출력 |
-|-------|------|------|------|
-| **Analyzer** | 사용자 요구사항 분석 | user_input | AnalysisResult |
-| **Structurer** | 기획서 목차 설계 | analysis | StructureResult |
-| **Writer** | 섹션별 콘텐츠 작성 | structure + context | DraftResult |
-| **Reviewer** | 품질 평가 (PASS/REVISE/FAIL) | draft | JudgeResult |
-| **Refiner** | 피드백 기반 개선 | draft + review | Refined Structure |
-| **Formatter** | 최종 마크다운 생성 | draft | final_output |
-
-| Specialist | 전문 분야 |
-|------------|----------|
-| **Market Agent** | 시장 규모 (TAM/SAM/SOM), 경쟁사 분석 |
-| **BM Agent** | 수익 모델, 가격 정책, BEP 분석 |
-| **Risk Agent** | 법적/기술적/운영 리스크, SWOT |
-| **Tech Agent** | 기술 스택, 시스템 아키텍처 |
-| **Content Agent** | 마케팅 전략, 브랜딩, User Journey |
 
 ---
 
