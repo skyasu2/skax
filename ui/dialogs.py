@@ -302,6 +302,15 @@ def render_dev_tools():
 
                     st.write(f"🏃 명령어 실행: `{' '.join(script_cmd)}`")
                     
+                    # [FIX] 이전 리포트 삭제 (Clean Run 보장)
+                    report_path = "reports/test_report.html"
+                    if os.path.exists(report_path):
+                        try:
+                            os.remove(report_path)
+                            st.caption("🗑️ 이전 리포트 파일을 삭제했습니다.")
+                        except Exception as e:
+                            st.warning(f"이전 리포트 삭제 실패: {e}")
+
                     try:
                         # 실행 (타임아웃 설정 추가)
                         result = subprocess.run(
