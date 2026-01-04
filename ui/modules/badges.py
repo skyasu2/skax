@@ -37,17 +37,15 @@ def render_plan_badges(state: dict):
     if state.get("rag_context"):
         features.append(("📚 RAG Knowledge", "#fff8e1", "#fbc02d"))   # 노랑
 
-    # 4. 렌더링 (HTML)
+    # 4. 렌더링 (HTML) - 들여쓰기로 인한 코드블록 인식 방지를 위해 한 줄로 작성하거나 공백 제거
     badges_html = f"""
-    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;">
-        <span style="background-color: #f1f3f5; color: #495057; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid #dee2e6;">{type_badge}</span>
-        <span style="background-color: {mode_bg}; color: {mode_fg}; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid {mode_bg};">{mode_text}</span>
-    """
+<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;">
+    <span style="background-color: #f1f3f5; color: #495057; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid #dee2e6;">{type_badge}</span>
+    <span style="background-color: {mode_bg}; color: {mode_fg}; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid {mode_bg};">{mode_text}</span>"""
     
     for feat_text, bg, fg in features:
         badges_html += f"""
-        <span style="background-color: {bg}; color: {fg}; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid {bg};">{feat_text}</span>
-        """
+    <span style="background-color: {bg}; color: {fg}; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid {bg};">{feat_text}</span>"""
         
-    badges_html += "</div>"
+    badges_html += "\n</div>"
     st.markdown(badges_html, unsafe_allow_html=True)
