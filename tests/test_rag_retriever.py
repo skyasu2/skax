@@ -55,7 +55,15 @@ class TestRetrieverBasic:
         mock_doc = MagicMock()
         mock_doc.page_content = "테스트 문서 내용"
         mock_doc.metadata = {"source": "test.md"}
+        
+        # [FIX] 모든 검색 메서드가 리스트를 반환하도록 설정
         mock_store.similarity_search.return_value = [mock_doc]
+        mock_store.max_marginal_relevance_search.return_value = [mock_doc]
+        
+        mock_retriever = MagicMock()
+        mock_retriever.get_relevant_documents.return_value = [mock_doc]
+        mock_store.as_retriever.return_value = mock_retriever
+        
         mock_vectorstore.return_value = mock_store
 
         retriever = Retriever(k=3)
@@ -160,7 +168,14 @@ class TestIntegration:
         from rag.retriever import Retriever
 
         mock_store = MagicMock()
+        # [FIX] 모든 검색 메서드가 리스트를 반환하도록 설정
         mock_store.similarity_search.return_value = []
+        mock_store.max_marginal_relevance_search.return_value = []
+        # as_retriever 사용 시에도 대응
+        mock_retriever = MagicMock()
+        mock_retriever.get_relevant_documents.return_value = []
+        mock_store.as_retriever.return_value = mock_retriever
+        
         mock_vectorstore.return_value = mock_store
 
         retriever = Retriever(k=3)
