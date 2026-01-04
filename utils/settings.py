@@ -188,6 +188,11 @@ def get_preset(preset_key: str = None) -> GenerationPreset:
         >>> print(preset.temperature)  # 1.0
     """
     key = preset_key or DEFAULT_PRESET
+
+    # [FIX] Alias 처리: speed -> fast
+    if key == "speed":
+        key = "fast"
+
     return GENERATION_PRESETS.get(key, GENERATION_PRESETS[DEFAULT_PRESET])
 
 
