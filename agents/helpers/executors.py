@@ -1,0 +1,130 @@
+"""
+External Executors Helper
+"""
+from graph.state import PlanCraftState, update_state
+from utils.settings import settings
+
+def execute_web_search(user_input: str, rag_context: str, web_context: str, logger) -> str:
+    """
+    실시간 웹 검색 수행
+
+    Args:
+        user_input: 사용자 입력
+        rag_context: RAG 컨텍스트
+        web_context: 기존 웹 컨텍스트
+        logger: 로거 인스턴스
+
+    Returns:
+        str: 업데이트된 웹 컨텍스트
+    """
+    try:
+        from tools.web_search import should_search_web
+        from tools.search_client import get_search_client
+
+        search_decision = should_search_web(user_input, rag_context)
+
+        if search_decision.get("should_search") and search_decision.get("search_query"):
+            query = search_decision["search_query"]
+            logger.info(f"[Writer] 실시간 웹 검색 수행: '{query}'")
+
+            search_client = get_search_client()
+            search_result = search_client.search(query)
+
+            if "[Web Search Failed]" not in search_result:
+                if not web_context:
+                    web_context = ""
+                web_context += f"\n\n[Writer Search Result]\nKeyword: {query}\n{search_result}"
+                logger.info("[Writer] 웹 데이터가 컨텍스트에 추가되었습니다.")
+            else:
+                logger.warning(f"[Writer] 검색 실패 또는 스킵됨: {search_result}")
+
+    except ImportError:
+        logger.error("[Writer] 검색 모듈 로드 실패")
+    except Exception as e:
+        logger.error(f"[Writer] 웹 검색 중 오류 발생: {str(e)}")
+
+    return web_context
+
+
+def execute_specialist_agents(state: PlanCraftState, user_input: str,
+                                web_context: str, refine_count: int, logger) -> tuple:
+    """
+    전문 에이전트(Supervisor) 실행
+
+    Args:
+        state: 현재 상태
+        user_input: 사용자 입력
+        web_context: 웹 컨텍스트
+        refine_count: 개선 횟수
+        logger: 로거 인스턴스
+
+    Returns:
+        Tuple[str, PlanCraftState]: (specialist_context, updated_state)
+    """
+    specialist_context = ""
+    use_specialist_agents = state.get("use_specialist_agents", True)
+
+    if use_specialist_agents and refine_count == 0:
+        try:
+            from agents.supervisor import PlanSupervisor
+
+            logger.info("[Writer] 🤖 전문 에이전트 분석 시작 (Supervisor)...")
+
+            analysis_dict = state.get("analysis", {})
+            if hasattr(analysis_dict, "model_dump"):
+                analysis_dict = analysis_dict.model_dump()
+            elif not isinstance(analysis_dict, dict):
+                analysis_dict = {}
+
+            target_market = analysis_dict.get("target_market", "일반 시장")
+            target_users = analysis_dict.get("target_user", "일반 사용자")
+            tech_stack = analysis_dict.get("tech_stack", "React Native + Node.js + PostgreSQL")
+            user_constraints = analysis_dict.get("user_constraints", [])
+
+            web_search_list = []
+            if web_context:
+                for line in web_context.split("\n"):
+                    if line.strip():
+                        web_search_list.append({"title": "", "content": line[:500]})
+
+            supervisor = PlanSupervisor()
+            # [NEW] 프리셋의 deep_analysis_mode 확인
+            deep_mode = False
+            if hasattr(settings, "quality_preset") and hasattr(state, "get"):
+                 pass
+
+            # 호출 시그니처 변경 없이 state에서 가져오거나 기본값 사용
+            # * Supervisor.run에 deep_analysis_mode를 전달할 수 있도록 수정 필요
+            
+            specialist_results = supervisor.run(
+                service_overview=user_input,
+                target_market=target_market,
+                target_users=target_users,
+                tech_stack=tech_stack,
+                development_scope="MVP 3개월",
+                web_search_results=web_search_list,
+                user_constraints=user_constraints,
+                deep_analysis_mode=state.get("deep_analysis_mode", False) # [NEW]
+            )
+
+            specialist_context = specialist_results.get("integrated_context", "")
+
+            if specialist_context:
+                logger.info("[Writer] ✓ 전문 에이전트 분석 완료!")
+
+            state = update_state(state, specialist_analysis=specialist_results)
+
+        except ImportError as e:
+            logger.warning(f"[Writer] Supervisor 모듈 로드 실패: {e}")
+        except Exception as e:
+            logger.error(f"[Writer] 전문 에이전트 분석 중 오류: {e}")
+
+    elif refine_count > 0:
+        previous_specialist = state.get("specialist_analysis")
+        if previous_specialist:
+            from agents.supervisor import PlanSupervisor
+            supervisor = PlanSupervisor()
+            specialist_context = supervisor._integrate_results(previous_specialist)
+            logger.info("[Writer] 이전 전문 에이전트 분석 결과 재사용")
+
+    return specialist_context, state
