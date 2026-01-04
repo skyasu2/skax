@@ -100,6 +100,20 @@ PlanCraft는 LangGraph가 조율하는 **계층적 다중 에이전트 아키텍
 - **에러 범주화**: 재시도 가능(네트워크/LLM) 에러와 불가능(검증 실패) 에러를 구분하여 처리합니다.
 - **폴백(Fallback) 메커니즘**: `Market Agent` 실패 시 파이프라인을 중단하는 대신, 기본 휴리스틱 데이터를 사용하여 흐름을 유지합니다.
 
+### 5. MCP (Model Context Protocol) 아키텍처
+
+PlanCraft는 최신 **MCP 표준(v1.0)**을 준수하는 **Client Mode** 구현체를 탑재했습니다.
+
+> **MCP Client Mode란?**
+> - 앱(PlanCraft)이 `mcp-client`가 되어 외부의 표준 MCP 서버들과 통신하는 구조입니다.
+> - 전통적인 API 연동 방식과 달리, 서버의 도구(Tool) 목록을 동적으로 조회(`list_tools`)하고 실행(`call_tool`)합니다.
+
+- **구성 요소**:
+    - **Client**: `mcp_client.py` (FastAPI 앱 내장)
+    - **Servers**: `tavily-mcp` (검색), `fetch-mcp` (콘텐츠 수집)
+- **통신 방식**: 표준 입출력(stdio) 파이프를 통한 JSON-RPC 통신.
+- **장점**: 코드 수정 없이 다른 MCP 호환 서버(예: Slack, PostgreSQL, Filesystem)를 플러그앤플레이로 연결할 수 있는 확장성을 확보했습니다.
+
 ---
 
 ## 5. 향후 로드맵 제안
