@@ -104,7 +104,9 @@ class TechArchitectAgent:
         self,
         service_overview: str,
         target_users: str = "",
-        user_constraints: List[str] = None
+        user_constraints: List[str] = None,
+        focus_area: str = "IT System Architecture & API Specification",  # [FIX] 추가된 인자
+        detail_level: str = "standard"  # [FIX] 심층 분석용 추가 인자
     ) -> Dict[str, Any]:
         """
         기술 아키텍처를 설계합니다.
@@ -113,6 +115,8 @@ class TechArchitectAgent:
             service_overview: 서비스 개요
             target_users: 타겟 사용자
             user_constraints: 사용자 제약사항 (기술 스택 지정 등)
+            focus_area: 집중 분석 영역
+            detail_level: 분석 깊이 ("standard" 또는 "high")
 
         Returns:
             TechArchitecture dict
