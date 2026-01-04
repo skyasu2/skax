@@ -160,7 +160,7 @@ def _render_header():
 # =============================================================================
 def _render_brainstorming_hero():
     """시작 화면 브레인스토밍 UI"""
-    st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='animate-fade-in' style='margin-top: 0.5rem;'>", unsafe_allow_html=True)
 
     # 세션 상태 초기화
     if "idea_category" not in st.session_state:
@@ -219,7 +219,7 @@ def _render_brainstorming_hero():
                 st.session_state.prefill_prompt = prompt
 
     st.markdown("""
-    <div style="
+    <div class="animate-slide-up hover-lift" style="
         background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         border-left: 4px solid #667eea;
         border-radius: 8px;
@@ -233,7 +233,9 @@ def _render_brainstorming_hero():
         </p>
     </div>
     """, unsafe_allow_html=True)
-
+    
+    # Close animation wrapper
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # =============================================================================
 # 채팅 히스토리 & 상태 렌더링
