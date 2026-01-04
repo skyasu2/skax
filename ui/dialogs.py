@@ -285,127 +285,113 @@ def render_dev_tools():
         st.markdown("### 🚀 시스템 전체 테스트 (System Integration Test)")
         st.info("터미널 없이 전체 테스트를 실행하고, 리포트를 즉시 확인합니다.")
         
+        reports_dir = "reports"
+        os.makedirs(reports_dir, exist_ok=True)
+        
+        # 리포트 목록 가져오기 (최신순)
+        def get_report_list():
+            if not os.path.exists(reports_dir):
+                return []
+            files = [f for f in os.listdir(reports_dir) if f.startswith("test_report_") and f.endswith(".html")]
+            files.sort(reverse=True)  # 최신순 정렬
+            return files[:10]  # 최대 10개
+        
+        # 오래된 리포트 정리 (10개 초과 시 삭제)
+        def cleanup_old_reports():
+            files = [f for f in os.listdir(reports_dir) if f.startswith("test_report_") and f.endswith(".html")]
+            files.sort(reverse=True)
+            for old_file in files[10:]:  # 10개 초과 삭제
+                try:
+                    os.remove(os.path.join(reports_dir, old_file))
+                except:
+                    pass
+        
         col_run, col_status = st.columns([1, 2])
         with col_run:
             if st.button("▶️ 전체 테스트 실행", type="primary", use_container_width=True):
-                with st.status("테스트 실행 중...", expanded=True) as status:
-                    import subprocess
-                    import sys
-                    
-                    st.write("🔍 환경 감지 중...")
-                    st.write(f"📌 Python: `{sys.executable}`")
-                    st.write(f"📁 작업 디렉토리: `{os.getcwd()}`")
-                    
-                    # [Step 1] pytest-html 설치 확인
-                    st.write("📦 pytest-html 설치 확인 중...")
-                    check_result = subprocess.run(
-                        [sys.executable, "-m", "pip", "show", "pytest-html"],
-                        capture_output=True, text=True
+                import subprocess
+                import sys
+                
+                # 타임스탬프 기반 리포트 파일명
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                report_filename = f"test_report_{timestamp}.html"
+                report_path = os.path.join(reports_dir, report_filename)
+                
+                # pytest 명령어
+                pytest_cmd = [
+                    sys.executable, "-m", "pytest",
+                    "tests/",
+                    f"--html={report_path}",
+                    "--self-contained-html",
+                    "-v", "--tb=short"
+                ]
+                
+                # [백그라운드 실행] Popen 사용
+                try:
+                    process = subprocess.Popen(
+                        pytest_cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        cwd=os.getcwd()
                     )
-                    if check_result.returncode != 0:
-                        st.warning("⚠️ pytest-html이 설치되지 않았습니다. 설치 중...")
-                        install_result = subprocess.run(
-                            [sys.executable, "-m", "pip", "install", "pytest-html"],
-                            capture_output=True, text=True
-                        )
-                        if install_result.returncode == 0:
-                            st.success("✅ pytest-html 설치 완료!")
-                        else:
-                            st.error(f"설치 실패: {install_result.stderr}")
-                            status.update(label="❌ 설치 오류", state="error")
-                            st.stop()
-                    else:
-                        st.caption("✅ pytest-html 설치됨")
+                    st.session_state["test_running"] = True
+                    st.session_state["test_pid"] = process.pid
+                    st.session_state["latest_report"] = report_filename
+                    st.success(f"🚀 테스트가 백그라운드에서 시작되었습니다!")
+                    st.caption(f"PID: {process.pid} | 리포트: {report_filename}")
+                    st.info("완료 후 페이지를 새로고침하면 결과가 표시됩니다.")
                     
-                    # [Step 2] 이전 리포트 삭제
-                    report_path = "reports/test_report.html"
-                    if os.path.exists(report_path):
-                        try:
-                            os.remove(report_path)
-                            st.caption("🗑️ 이전 리포트 파일을 삭제했습니다.")
-                        except Exception as e:
-                            st.warning(f"이전 리포트 삭제 실패: {e}")
-                    
-                    # reports 디렉토리 생성
-                    os.makedirs("reports", exist_ok=True)
-                    
-                    # [Step 3] pytest 실행
-                    pytest_cmd = [
-                        sys.executable, "-m", "pytest",
-                        "tests/",
-                        "--html=reports/test_report.html",
-                        "--self-contained-html",
-                        "-v",
-                        "--tb=short"
-                    ]
-                    
-                    st.write(f"🏃 명령어 실행:")
-                    st.code(" ".join(pytest_cmd))
-
-                    try:
-                        result = subprocess.run(
-                            pytest_cmd, 
-                            capture_output=True, 
-                            text=True, 
-                            encoding='utf-8',
-                            errors='replace',
-                            timeout=300,  # 5분 타임아웃
-                            cwd=os.getcwd()
-                        )
-                        
-                        # [항상 출력 표시]
-                        st.write(f"🔢 Exit Code: `{result.returncode}`")
-                        
-                        output_text = result.stdout or "(출력 없음)"
-                        error_text = result.stderr or ""
-                        
-                        with st.expander("📋 테스트 출력 로그", expanded=True):
-                            st.code(output_text[-8000:] if len(output_text) > 8000 else output_text)
-                        
-                        if error_text:
-                            with st.expander("⚠️ 에러/경고 로그", expanded=False):
-                                st.code(error_text[-3000:] if len(error_text) > 3000 else error_text)
-                        
-                        if result.returncode == 0:
-                            status.update(label="✅ 테스트 완료!", state="complete", expanded=False)
-                            st.success("테스트가 성공적으로 완료되었습니다.")
-                        else:
-                            status.update(label="⚠️ 테스트 실패", state="error", expanded=False)
-                            st.error(f"테스트 실행 중 일부 실패가 있습니다. (Exit Code: {result.returncode})")
-                                
-                        # 리포트 로드 트리거
-                        if os.path.exists(report_path):
-                            st.session_state["show_test_report"] = True
-                            st.success(f"📄 리포트 생성됨: `{report_path}`")
-                        else:
-                            st.warning("리포트 파일이 생성되지 않았습니다.")
-                            
-                    except subprocess.TimeoutExpired:
-                         status.update(label="⏰ 시간 초과", state="error")
-                         st.error("테스트 실행 시간이 초과되었습니다 (5분).")
-                    except Exception as e:
-                        status.update(label="❌ 실행 오류", state="error")
-                        st.error(f"실행 중 예외 발생: {str(e)}")
+                    # 오래된 리포트 정리
+                    cleanup_old_reports()
+                except Exception as e:
+                    st.error(f"테스트 시작 실패: {str(e)}")
 
         with col_status:
-            if os.path.exists("reports/test_report.html"):
-                timestamp = os.path.getmtime("reports/test_report.html")
-                dt = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                st.caption(f"📅 최근 리포트: {dt}")
+            report_list = get_report_list()
+            if report_list:
+                st.success(f"✅ 저장된 리포트: {len(report_list)}개")
+            elif st.session_state.get("test_running"):
+                st.warning("⏳ 테스트 실행 중... (완료되면 새로고침)")
             else:
                 st.caption("리포트 없음")
 
         st.divider()
 
-        # HTML 리포트 뷰어
-        report_path = "reports/test_report.html"
-        if os.path.exists(report_path):
-            with open(report_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-            st.markdown("#### 📄 Test Report Result")
-            import streamlit.components.v1 as components
-            # 높이를 넉넉하게 주어 스크롤 없이 볼 수 있게 함
-            components.html(html_content, height=800, scrolling=True)
+        # 리포트 목록 및 뷰어
+        report_list = get_report_list()
+        if report_list:
+            st.session_state["test_running"] = False
+            
+            st.markdown("#### 📋 Test Report History (최근 10개)")
+            
+            col_sel, col_btn = st.columns([3, 1])
+            with col_sel:
+                selected_report = st.selectbox(
+                    "리포트 선택",
+                    report_list,
+                    format_func=lambda x: f"📄 {x.replace('test_report_', '').replace('.html', '').replace('_', ' ')}"
+                )
+            
+            if selected_report:
+                report_path = os.path.join(reports_dir, selected_report)
+                abs_path = os.path.abspath(report_path)
+                
+                with col_btn:
+                    st.write("") # Spacer
+                    if st.button("🌐 브라우저로 보기", type="primary"):
+                        import webbrowser
+                        webbrowser.open(f"file://{abs_path}")
+                        st.toast("브라우저에서 리포트를 열었습니다!", icon="🎉")
+
+                # 간단한 미리보기 (선택 사항)
+                with st.expander("🔽 여기서 미리보기 (Embedded View)"):
+                    try:
+                        with open(report_path, "r", encoding="utf-8") as f:
+                            html_content = f.read()
+                        import streamlit.components.v1 as components
+                        components.html(html_content, height=800, scrolling=True)
+                    except Exception as e:
+                        st.error(f"리포트 로드 실패: {e}")
         else:
             st.info("테스트를 실행하면 여기에 리포트가 표시됩니다.")
 
