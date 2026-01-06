@@ -199,6 +199,7 @@ class JudgeResult(BaseModel):
     strengths: List[str] = Field(default_factory=list, description="잘된 점들")
     weaknesses: List[str] = Field(default_factory=list, description="약한 점들")
     action_items: List[str] = Field(default_factory=list, description="구체적 수정 지시")
+    target_sections: List[str] = Field(default_factory=list, description="수정이 필요한 섹션 이름 또는 ID 목록")
     reasoning: str = Field(default="", description="판정 이유")
 
     @field_validator('verdict')

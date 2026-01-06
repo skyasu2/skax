@@ -22,6 +22,9 @@ REFINER_USER_PROMPT = """
 - 피드백 요약: {feedback}
 - 주요 지적사항:
 {issues}
+- 수정 대상 섹션: {target_sections}
+- 구체적 지시사항(Action Items):
+{action_items}
 
 [현재 초안 요약]
 목차 및 주요 내용 길이:

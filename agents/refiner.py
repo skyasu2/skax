@@ -87,6 +87,8 @@ def run(state: PlanCraftState) -> PlanCraftState:
             score=score,
             feedback=feedback,
             issues=issues if issues else "(없음)",
+            target_sections=", ".join(review_dict.get("target_sections", [])) or "(모든 섹션 검토)",
+            action_items="\n".join([f"- {i}" for i in review_dict.get("action_items", [])]) or "(없음)",
             draft_summary=draft_summary
         )}
     ]

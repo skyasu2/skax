@@ -149,6 +149,7 @@ REVIEWER_SYSTEM_PROMPT = """당신은 **기획서 품질 심사관(Judge)**입�
     "strengths": ["잘된 점"],
     "weaknesses": ["약한 점"],
     "action_items": ["구체적으로 이렇게 수정해라"],
+    "target_sections": ["수정이 필요한 섹션 이름 또는 ID"],
     "reasoning": "이 판정을 내린 이유 (1-2문장)"
 }
 ```
