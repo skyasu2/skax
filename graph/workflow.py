@@ -96,6 +96,9 @@ ReviewerRoutes = Literal["discussion", "refine", "format", "analyze"]
 # Refiner 분기 후 가능한 목적지
 RefinerRoutes = Literal["structure", "format"]
 
+# Dynamic Q&A 분기 후 가능한 목적지
+DynamicQARoutes = Literal["request_specialist", "write"]
+
 # option_pause_node의 Command 반환 타입
 OptionPauseCommand = Command[Literal["analyze"]]
 
@@ -128,6 +131,10 @@ class RouteKey(str, Enum):
 
     # Refiner 분기
     RETRY = "retry"
+
+    # Dynamic Q&A 분기 (Writer ↔ Specialist)
+    REQUEST_SPECIALIST = "request_specialist"
+    WRITE = "write"
 from agents import analyzer, structurer, writer, reviewer, refiner, formatter
 from utils.config import Config
 from utils.tracing import trace_node
@@ -148,6 +155,13 @@ from graph.nodes.discussion_node import run_discussion_node
 from graph.nodes.common import update_step_history
 from graph.nodes.hitl_node import option_pause_node
 from graph.nodes.utility_nodes import general_response_node
+
+# [NEW] Dynamic Q&A Nodes (Writer ↔ Specialist 동적 질의응답)
+from graph.nodes.dynamic_qa import (
+    analyze_data_gaps,
+    should_request_specialist,
+    collect_specialist_responses,
+)
 
 # =============================================================================
 # LangSmith 트레이싱 활성화 (Observability)
@@ -482,7 +496,11 @@ def create_workflow() -> StateGraph:
     workflow.add_node("general_response", general_response_node)
     
     workflow.add_node("structure", run_structurer_node)
-    
+
+    # [NEW] Dynamic Q&A: Writer 작성 전 데이터 갭 분석
+    workflow.add_node("data_gap_analysis", analyze_data_gaps)
+    workflow.add_node("collect_specialist_responses", collect_specialist_responses)
+
     workflow.add_node("write", run_writer_node)
     workflow.add_node("review", run_reviewer_node)
     workflow.add_node("discussion", run_discussion_node)  # [NEW] 에이전트 간 대화
@@ -510,10 +528,50 @@ def create_workflow() -> StateGraph:
     workflow.add_edge("general_response", END)
 
 
-    # [UPDATE] Structure -> Write (Direct connection)
-    workflow.add_edge("structure", "write")
-    
-    # write 노드는 structure에서 직접 연결됨
+    # [UPDATE] Structure -> Data Gap Analysis -> Write (Dynamic Q&A)
+    workflow.add_edge("structure", "data_gap_analysis")
+
+    # [NEW] Data Gap Analysis 후 조건부 분기
+    def should_request_more_data(state: PlanCraftState) -> DynamicQARoutes:
+        """
+        데이터 갭 분석 후 Specialist 추가 요청 여부 결정
+
+        Return Type: DynamicQARoutes = Literal["request_specialist", "write"]
+
+        ┌─────────────────────────────────────────────────────────────────────────┐
+        │                     판정표 (Decision Table)                             │
+        ├────────────────────────────┬─────────────────┬──────────────────────────┤
+        │ 조건                       │ 반환값          │ 다음 노드                │
+        ├────────────────────────────┼─────────────────┼──────────────────────────┤
+        │ has_gaps=True & !can_proceed│ REQUEST_SPECIALIST│ 추가 데이터 요청      │
+        │ 그 외                      │ WRITE           │ 바로 작성 진행           │
+        └────────────────────────────┴─────────────────┴──────────────────────────┘
+        """
+        gap_analysis = state.get("data_gap_analysis", {})
+        pending_requests = state.get("pending_specialist_requests", [])
+
+        # 데이터 갭이 있고, 요청이 있고, 가정으로 진행 불가능할 때만 요청
+        if (gap_analysis.get("has_gaps") and
+            pending_requests and
+            not gap_analysis.get("can_proceed_with_assumptions")):
+            logger = get_file_logger()
+            logger.info(f"[ROUTING] 데이터 갭 감지, Specialist 추가 요청: {len(pending_requests)}건")
+            return RouteKey.REQUEST_SPECIALIST
+
+        return RouteKey.WRITE
+
+    workflow.add_conditional_edges(
+        "data_gap_analysis",
+        should_request_more_data,
+        {
+            RouteKey.REQUEST_SPECIALIST: "collect_specialist_responses",
+            RouteKey.WRITE: "write"
+        }
+    )
+
+    # Specialist 응답 수집 후 Write로 진행
+    workflow.add_edge("collect_specialist_responses", "write")
+
     workflow.add_edge("write", "review")
 
     # [UPDATE] Review 후 스마트 분기: 점수 기반 최적화 라우팅

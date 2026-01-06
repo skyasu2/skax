@@ -265,6 +265,11 @@ class PlanCraftState(TypedDict, total=False):
     specialist_analysis: Optional[dict]  # {market_analysis, business_model, financial_plan, risk_analysis}
     use_specialist_agents: bool  # 전문 에이전트 사용 여부 (기본 True)
 
+    # [NEW] Dynamic Q&A (Writer ↔ Specialist 동적 질의응답)
+    data_gap_analysis: Optional[dict]  # DataGapAnalysis 결과
+    pending_specialist_requests: List[dict]  # 대기 중인 Specialist 요청
+    specialist_responses: List[dict]  # Specialist 응답 (수집용)
+
 
 
 # =============================================================================
@@ -334,7 +339,12 @@ def create_initial_state(
         # Interrupt & Routing
         "confirmed": None,
         "uploaded_content": None,
-        "routing_decision": None
+        "routing_decision": None,
+
+        # Dynamic Q&A
+        "data_gap_analysis": None,
+        "pending_specialist_requests": [],
+        "specialist_responses": [],
     }
 
 

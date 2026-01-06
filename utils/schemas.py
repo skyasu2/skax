@@ -301,3 +301,71 @@ class ResumeInput(BaseModel):
         if self.selected_option is None and self.text_input is None:
             raise ValueError("selected_option 또는 text_input 중 하나는 반드시 제공되어야 합니다.")
         return self
+
+
+# =============================================================================
+# Discussion & Consensus 스키마 (Multi-Agent Collaboration)
+# =============================================================================
+
+class ConsensusResult(BaseModel):
+    """
+    LLM 기반 합의 판정 결과
+
+    Reviewer-Writer 대화에서 실제로 합의가 이루어졌는지 LLM이 판단합니다.
+    키워드 기반이 아닌 의미론적 분석으로 더 정확한 합의 감지가 가능합니다.
+    """
+    consensus_reached: bool = Field(description="합의 도달 여부")
+    confidence: float = Field(ge=0.0, le=1.0, description="합의 판정 신뢰도 (0.0~1.0)")
+    agreed_items: List[str] = Field(default_factory=list, description="합의된 개선 사항 목록")
+    unresolved_items: List[str] = Field(default_factory=list, description="미해결 사항 목록")
+    reasoning: str = Field(default="", description="합의 판정 이유")
+    suggested_next_action: str = Field(
+        default="continue",
+        description="다음 액션 제안: continue(대화 계속), finalize(합의 완료), escalate(사용자 개입 필요)"
+    )
+
+
+class DataGapRequest(BaseModel):
+    """
+    Writer가 작성 중 발견한 데이터 부족 요청
+
+    Writer가 특정 섹션 작성 시 데이터가 부족하면
+    Specialist에게 추가 분석을 요청할 수 있습니다.
+    """
+    requesting_section: str = Field(description="요청하는 섹션명")
+    target_specialist: str = Field(description="요청 대상 Specialist (market, bm, financial, risk, tech)")
+    query: str = Field(description="구체적인 데이터 요청 내용")
+    priority: str = Field(default="normal", description="우선순위: high, normal, low")
+    context: str = Field(default="", description="요청 배경 설명")
+
+
+class DataGapAnalysis(BaseModel):
+    """
+    Writer의 데이터 부족 분석 결과
+
+    Writer가 초안 작성 전 데이터 완전성을 검사하고
+    부족한 데이터가 있으면 Specialist에게 요청 목록을 생성합니다.
+    """
+    has_gaps: bool = Field(description="데이터 부족 여부")
+    gap_requests: List[DataGapRequest] = Field(default_factory=list, description="데이터 요청 목록")
+    can_proceed_with_assumptions: bool = Field(
+        default=True,
+        description="가정으로 진행 가능 여부 (True면 요청 없이도 진행 가능)"
+    )
+    assumptions_if_proceed: List[str] = Field(
+        default_factory=list,
+        description="가정으로 진행 시 세울 가정들"
+    )
+
+
+class SpecialistResponse(BaseModel):
+    """
+    Specialist의 추가 데이터 응답
+
+    Writer의 DataGapRequest에 대한 Specialist의 응답입니다.
+    """
+    request_id: str = Field(description="요청 ID (추적용)")
+    specialist_id: str = Field(description="응답한 Specialist ID")
+    data: Dict[str, Any] = Field(description="요청된 데이터")
+    confidence: float = Field(ge=0.0, le=1.0, default=0.8, description="데이터 신뢰도")
+    sources: List[str] = Field(default_factory=list, description="데이터 출처")

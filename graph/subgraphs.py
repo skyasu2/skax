@@ -284,31 +284,91 @@ Reviewer의 피드백에 대해 구체적인 개선 계획을 제시하세요.
 
 
 def _check_consensus_node(state: PlanCraftState) -> PlanCraftState:
-    """대화 합의 여부를 체크하고 라운드를 증가시키는 노드"""
+    """
+    대화 합의 여부를 LLM으로 판정하고 라운드를 증가시키는 노드
+
+    [UPGRADE] 키워드 기반 → LLM 기반 합의 감지
+    - ConsensusResult 스키마를 사용한 Structured Output
+    - 의미론적 분석으로 실질적 합의 여부 판단
+    - 합의된 개선 사항 자동 추출
+    """
     from graph.state import update_state
     from utils.settings import settings
+    from utils.llm import get_llm
+    from utils.schemas import ConsensusResult
+    from prompts.discussion_prompt import (
+        CONSENSUS_JUDGE_SYSTEM_PROMPT,
+        CONSENSUS_JUDGE_USER_PROMPT
+    )
 
     discussion_round = state.get("discussion_round", 0) + 1
     discussion_messages = state.get("discussion_messages", [])
+    max_rounds = getattr(settings, 'DISCUSSION_MAX_ROUNDS', 5)  # 기본값 증가 (3→5)
 
-    # 합의 여부 판단
+    # 합의 여부 판단 (LLM 기반)
     consensus_reached = False
+    agreed_items = []
+    unresolved_items = []
 
-    if discussion_messages:
-        last_reviewer_msg = None
-        for msg in reversed(discussion_messages):
-            if msg.get("role") == "reviewer":
-                last_reviewer_msg = msg.get("content", "")
-                break
+    if discussion_messages and len(discussion_messages) >= 2:
+        # 대화 이력 포맷팅
+        discussion_history = "\n".join([
+            f"[{m['role'].upper()} - 라운드 {m.get('round', '?')}]: {m['content']}"
+            for m in discussion_messages
+        ])
 
-        if last_reviewer_msg:
-            # "합의", "동의", "좋습니다", "진행하세요" 등의 키워드 체크
-            consensus_keywords = ["합의", "동의", "좋습니다", "진행", "승인", "완료"]
-            consensus_reached = any(kw in last_reviewer_msg for kw in consensus_keywords)
+        try:
+            # LLM 기반 합의 판정
+            llm = get_llm(temperature=0.1)  # 일관된 판정을 위해 낮은 temperature
+            consensus_llm = llm.with_structured_output(ConsensusResult)
+
+            messages = [
+                {"role": "system", "content": CONSENSUS_JUDGE_SYSTEM_PROMPT},
+                {"role": "user", "content": CONSENSUS_JUDGE_USER_PROMPT.format(
+                    discussion_history=discussion_history,
+                    current_round=discussion_round,
+                    max_rounds=max_rounds
+                )}
+            ]
+
+            result: ConsensusResult = consensus_llm.invoke(messages)
+
+            consensus_reached = result.consensus_reached
+            agreed_items = result.agreed_items
+            unresolved_items = result.unresolved_items
+
+            # 높은 신뢰도로 합의 도달 시에만 진정한 합의로 인정
+            if consensus_reached and result.confidence < 0.7:
+                consensus_reached = False
+                discussion_messages.append({
+                    "role": "system",
+                    "content": f"[합의 판정 신뢰도 부족 ({result.confidence:.0%}). 대화를 계속합니다.]",
+                    "round": discussion_round
+                })
+
+            # 합의 완료 시 로그
+            if consensus_reached:
+                discussion_messages.append({
+                    "role": "system",
+                    "content": f"[합의 완료] 신뢰도: {result.confidence:.0%}\n합의 사항: {', '.join(agreed_items[:3])}",
+                    "round": discussion_round
+                })
+
+        except Exception as e:
+            # LLM 실패 시 키워드 기반 Fallback
+            print(f"[Consensus] LLM 판정 실패, Fallback 사용: {e}")
+            last_reviewer_msg = ""
+            for msg in reversed(discussion_messages):
+                if msg.get("role") == "reviewer":
+                    last_reviewer_msg = msg.get("content", "")
+                    break
+
+            if last_reviewer_msg:
+                consensus_keywords = ["합의", "동의", "좋습니다", "진행", "승인", "완료"]
+                consensus_reached = any(kw in last_reviewer_msg for kw in consensus_keywords)
 
     # 최대 라운드 도달 시 강제 합의
-    max_rounds = getattr(settings, 'DISCUSSION_MAX_ROUNDS', 3)
-    if discussion_round >= max_rounds:
+    if discussion_round >= max_rounds and not consensus_reached:
         consensus_reached = True
         discussion_messages.append({
             "role": "system",
@@ -316,15 +376,13 @@ def _check_consensus_node(state: PlanCraftState) -> PlanCraftState:
             "round": discussion_round
         })
 
-    # 합의된 액션 아이템 추출
-    agreed_items = []
-    if consensus_reached:
-        for msg in discussion_messages:
-            if msg.get("role") == "writer":
-                content = msg.get("content", "")
-                # 간단한 액션 아이템 추출 (실제로는 LLM으로 추출 가능)
-                if "수정" in content or "추가" in content or "보완" in content:
-                    agreed_items.append(content[:100])  # 요약
+        # 최대 라운드 도달 시에도 합의 사항 추출 시도
+        if not agreed_items:
+            for msg in discussion_messages:
+                if msg.get("role") == "writer":
+                    content = msg.get("content", "")
+                    if any(kw in content for kw in ["수정", "추가", "보완", "개선"]):
+                        agreed_items.append(content[:150])
 
     return update_state(
         state,
