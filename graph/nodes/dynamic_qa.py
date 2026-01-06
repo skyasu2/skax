@@ -59,10 +59,16 @@ def analyze_data_gaps(state: PlanCraftState) -> PlanCraftState:
     structure_text = ""
     if structure:
         sections = structure.get("sections", []) if isinstance(structure, dict) else []
-        structure_text = "\n".join([
-            f"- {s.get('name', s.name) if isinstance(s, dict) else s.name}: {s.get('description', '') if isinstance(s, dict) else s.description}"
-            for s in sections
-        ])
+        structure_lines = []
+        for s in sections:
+            if isinstance(s, dict):
+                name = s.get('name', '')
+                desc = s.get('description', '')
+            else:
+                name = getattr(s, 'name', '')
+                desc = getattr(s, 'description', '')
+            structure_lines.append(f"- {name}: {desc}")
+        structure_text = "\n".join(structure_lines)
 
     # Specialist 분석 요약
     specialist_text = ""
