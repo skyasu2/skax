@@ -232,34 +232,61 @@ def poll_workflow_status(
                     current_step_display.markdown(f"🟢 **진행 중:** {label} 단계")
                 break
 
-        # 로그 수집 & 콜백 실행
+        # 로그 수집 & 콜백 실행 (Step History + Execution Log)
+        # 1. Step History 처리
         if len(step_history) > last_step_count:
             new_steps = step_history[last_step_count:]
+            last_step_count = len(step_history)
+            
             for step in new_steps:
                 step_name = step.get("step", "Unknown")
                 summary = step.get("summary", "")
                 exec_time = step.get("execution_time", "")
-
+                
                 icon = "✔"
                 for key, (ic, _) in STEP_LABELS.items():
                     if key in step_name.lower():
                         icon = ic
                         break
-
+                        
                 log_entry = {
                     "step": step_name,
-                    "summary": summary,
-                    "icon": icon,
-                    "time": exec_time or f"{elapsed}s"
+                    "summary": f"[{icon}] {step_name} 완료: {summary} ({exec_time})",
+                    "timestamp": time.time()
                 }
-                
+                status_widget.write(log_entry["summary"])
                 execution_log.append(log_entry)
                 
-                # [NEW] 실시간 로그 출력 콜백
                 if on_log_callback:
-                    on_log_callback(log_entry)
+                    # [FIX] 문자열 대신 Dict 객체 전체 전달 (TypeError 해결)
+                    on_log_callback({
+                        "step": step_name,
+                        "icon": icon,
+                        "summary": summary
+                    })
 
-            last_step_count = len(step_history)
+        # 2. Execution Log (Real-time Events) 처리
+        server_exec_log = status_data.get("execution_log", [])
+        current_exec_log_count = getattr(poll_workflow_status, "last_exec_log_count", 0)
+        
+        if len(server_exec_log) > current_exec_log_count:
+            new_events = server_exec_log[current_exec_log_count:]
+            poll_workflow_status.last_exec_log_count = len(server_exec_log)
+            
+            for event in new_events:
+                msg = event.get("message", "")
+                if msg:
+                     status_widget.write(f"  ↳ {msg}")
+                     if on_log_callback:
+                         # [FIX] Real-time event도 Dict 형태로 전달
+                         on_log_callback({
+                             "step": "Running",
+                             "icon": "⚡",
+                             "summary": msg
+                         })
+
+
+
 
         # 종료 조건 확인
         if current_status in ["completed", "interrupted", "failed"]:

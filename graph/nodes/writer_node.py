@@ -21,6 +21,17 @@ def run_writer_node(state: PlanCraftState) -> PlanCraftState:
 
     LangSmith: run_name="✍️ 콘텐츠 작성", tags=["agent", "llm", "generation", "slow"]
     """
+    # [Event] 작성 시작 이벤트 로그
+    from datetime import datetime
+    current_log = state.get("execution_log", []) or []
+    current_log.append({
+        "type": "writer_start",
+        "timestamp": datetime.now().isoformat(),
+        "message": "기획서 초안 작성을 시작합니다..."
+    })
+    # state에 미리 로그 반영 (run 함수 내에서 추가 로그가 쌓일 수 있도록)
+    state["execution_log"] = current_log
+    
     new_state = run(state)
     draft = new_state.get("draft")
     draft_len = 0

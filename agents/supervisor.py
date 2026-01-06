@@ -252,7 +252,8 @@ class NativeSupervisor:
         force_all: bool = False,
         user_constraints: List[str] = None,
         use_llm_routing: bool = False,  # [NEW] 규칙 기반 라우팅이 기본
-        deep_analysis_mode: bool = False # [NEW] 심층 분석 모드
+        deep_analysis_mode: bool = False, # [NEW] 심층 분석 모드
+        event_callback: callable = None  # [NEW] 이벤트 콜백
     ) -> Dict[str, Any]:
         """
         전문 에이전트 실행 (Plan-and-Execute DAG)
@@ -312,7 +313,8 @@ class NativeSupervisor:
             "development_scope": development_scope,
             "web_search_results": web_search_results,
             "user_constraints": user_constraints or [],
-            "deep_analysis_mode": deep_analysis_mode # [NEW]
+            "deep_analysis_mode": deep_analysis_mode, # [NEW]
+            "on_event": event_callback # [NEW] 이벤트 콜백 전달
         })
         
         results["integrated_context"] = self._integrate_results(results)
@@ -339,6 +341,9 @@ class NativeSupervisor:
         """
         from utils.error_handler import categorize_error
 
+        # [NEW] 이벤트 콜백 추출
+        on_event = context.get("on_event")
+
         # 실패한 에이전트 추적 (Replan용)
         failed_agents = []
 
@@ -356,6 +361,15 @@ class NativeSupervisor:
 
         for step in plan.steps:
             logger.info(f"--- 단계 {step.step_id}: {step.description} ---")
+            
+            # [Event] 단계 시작
+            if on_event:
+                on_event({
+                    "type": "step_start",
+                    "step_id": step.step_id,
+                    "description": step.description,
+                    "agents": step.agent_ids
+                })
 
             # 병렬 실행을 위한 Future 목록
             futures = {}
@@ -366,6 +380,14 @@ class NativeSupervisor:
                         # [NEW] 에이전트 통계 시작
                         agent_stats = stats.get_agent_stats(agent_id)
                         agent_stats.record_start()
+                        
+                        # [Event] 에이전트 시작
+                        if on_event:
+                            on_event({
+                                "type": "agent_start",
+                                "agent_id": agent_id,
+                                "timestamp": datetime.now().isoformat()
+                            })
 
                         # 실행 컨텍스트 준비
                         agent_context = self._prepare_agent_context(agent_id, context, results)
@@ -391,6 +413,14 @@ class NativeSupervisor:
                         # [NEW] 성공 통계 기록
                         agent_stats.record_end(success=True)
                         logger.info(f"  ✅ [Done] {agent_id} ({agent_stats.execution_time_ms:.0f}ms)")
+                        
+                        # [Event] 에이전트 완료
+                        if on_event:
+                            on_event({
+                                "type": "agent_success",
+                                "agent_id": agent_id,
+                                "duration_ms": agent_stats.execution_time_ms
+                            })
 
                     except Exception as e:
                         # [REFACTOR] 에러 카테고리화 적용
@@ -407,6 +437,15 @@ class NativeSupervisor:
 
                         # 카테고리별 로깅
                         logger.error(f"  ❌ [{error_category}] {agent_id}: {error_msg}")
+                        
+                        # [Event] 에이전트 에러
+                        if on_event:
+                            on_event({
+                                "type": "agent_error",
+                                "agent_id": agent_id,
+                                "error": error_msg,
+                                "category": error_category
+                            })
 
                         # [NEW] 동적 Replan: 복구 가능한 에러는 재시도 (TIMEOUT은 재시도하지 않음)
                         if error_category in ["LLM_ERROR", "NETWORK_ERROR"]:
@@ -415,6 +454,13 @@ class NativeSupervisor:
                                 results[self._get_result_key(agent_id)] = retry_result
                                 agent_stats.record_end(success=True)
                                 logger.info(f"  🔄 [Retried] {agent_id} 재시도 성공 (시도 {agent_stats.retry_count}회)")
+                                
+                                # [Event] 재시도 성공
+                                if on_event:
+                                    on_event({
+                                        "type": "agent_retry_success",
+                                        "agent_id": agent_id
+                                    })
                                 continue
 
                         # 재시도 실패 또는 복구 불가 에러
@@ -432,6 +478,14 @@ class NativeSupervisor:
                             "retry_count": agent_stats.retry_count,
                             **fallback
                         }
+                        
+                        # [Event] Fallback 사용
+                        if on_event:
+                            on_event({
+                                "type": "agent_fallback",
+                                "agent_id": agent_id,
+                                "reason": fallback.get("_fallback_reason")
+                            })
 
         # [NEW] 동적 Replan: 실패한 에이전트가 있으면 의존 에이전트 체크
         if failed_agents:
@@ -440,6 +494,7 @@ class NativeSupervisor:
         # [NEW] 실행 통계 완료 및 로깅
         stats.record_end()
         logger.info(stats.to_summary())
+
 
         # 결과에 통계 포함
         results["_execution_stats"] = stats.to_dict()
