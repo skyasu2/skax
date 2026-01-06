@@ -332,6 +332,9 @@ def retrieve_context(state: PlanCraftState) -> PlanCraftState:
 
     LangSmith: run_name="📚 컨텍스트 수집", tags=["rag", "retrieval"]
     """
+    import time
+    start_time = time.time()
+    
     from rag.retriever import Retriever
     from graph.state import update_state
     from utils.settings import get_preset
@@ -371,7 +374,7 @@ def retrieve_context(state: PlanCraftState) -> PlanCraftState:
     feature_label = f" ({', '.join(features)})" if features else ""
     summary = f"검색된 문서: {doc_count}건{feature_label}"
 
-    return update_step_history(new_state, "retrieve", status, summary)
+    return update_step_history(new_state, "retrieve", status, summary, start_time=start_time)
 
 
 # ... (상단 생략)
