@@ -33,7 +33,11 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 def main():
     """메인 함수"""
     # 1. 초기화
-    init_resources()
+    # 1. 초기화
+    api_port = init_resources()
+    from utils.config import Config
+    Config.API_BASE_URL = f"http://127.0.0.1:{api_port}/api/v1"
+    
     init_session_state()
 
     # 2. 헤더

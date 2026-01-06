@@ -47,8 +47,11 @@ def init_resources():
         # 0. FastAPI 백엔드 서버 시작 (Thread)
         from api.main import start_api_server
         print("[INIT] Starting FastAPI Backend Server...")
-        start_api_server(port=8000)
-        print("[INIT] FastAPI Backend Server Started on http://127.0.0.1:8000")
+        actual_port = start_api_server(start_port=8000)
+        
+        # [Update Config] Update API URL based on actual port
+        Config.API_BASE_URL = f"http://127.0.0.1:{actual_port}/api/v1"
+        print(f"[INIT] FastAPI Backend Server Started on http://127.0.0.1:{actual_port}")
 
         # 1. Config 검증
         Config.validate()
@@ -58,8 +61,11 @@ def init_resources():
         print("[INIT] Loading RAG Vectorstore...")
         load_vectorstore()
 
+        return actual_port
+
     except Exception as e:
         print(f"[WARN] Resource Initialization Warning: {e}")
+        return 8000 # Default fallback
 
 
 def render_header():

@@ -9,8 +9,8 @@ from datetime import datetime
 @st.dialog("🛠️ Dev Tools", width="large")
 def render_dev_tools():
     """개발자 도구 (모달)"""
-    tab_test, tab_all_tests, tab_graph, tab_history, tab_schema = st.tabs(
-        ["🧪 Agent Unit Test", "✅ Run ALL Tests", "📊 Workflow Graph", "🕰️ State History", "📐 Schema Viewer"]
+    tab_test, tab_all_tests, tab_graph, tab_history, tab_schema, tab_backend = st.tabs(
+        ["🧪 Agent Unit Test", "✅ Run ALL Tests", "📊 Workflow Graph", "🕰️ State History", "📐 Schema Viewer", "🖥️ Backend"]
     )
     
     # =========================================================================
@@ -442,6 +442,54 @@ def render_dev_tools():
                     
         except Exception as e:
             st.error(f"스키마 로드 실패: {str(e)}")
+
+    # =========================================================================
+    # Tab 5: Backend Control
+    # =========================================================================
+    with tab_backend:
+        st.subheader("🖥️ Backend Server Control")
+        st.info("FastAPI 백엔드 서버의 상태를 확인하고 제어합니다.")
+
+        # Health Check
+        import httpx
+        from utils.config import Config
+        
+        api_base = Config.API_BASE_URL.replace("/api/v1", "") # Root URL
+        health_url = f"{api_base}/health"
+        
+        col_status, col_action = st.columns([2, 1])
+        
+        with col_status:
+            st.markdown(f"**Target URL:** `{health_url}`")
+            if st.button("Ping Server", key="btn_ping_server"):
+                try:
+                    with st.spinner("Pinging..."):
+                        resp = httpx.get(health_url, timeout=2.0)
+                        if resp.status_code == 200:
+                            st.success(f"✅ Server is running! ({resp.json()})")
+                        else:
+                            st.warning(f"⚠️ Server responded with {resp.status_code}")
+                except Exception as e:
+                    st.error(f"❌ Connection Failed: {e}")
+
+        with col_action:
+            st.markdown("#### Danger Zone")
+            if st.button("🛑 재시작 (Restart)", type="primary", use_container_width=True, help="서버를 중지하고 캐시를 초기화하여 재실행합니다."):
+                try:
+                    from api.main import stop_api_server
+                    stop_api_server()
+                    st.toast("서버 중지 요청 전송됨...")
+                    
+                    # 캐시 초기화 (init_resources 재실행 유도)
+                    st.cache_resource.clear()
+                    st.toast("리소스 캐시 초기화됨")
+                    
+                    st.success("재시작 중... 잠시 후 새로고침됩니다.")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"재시작 실패: {e}")
     
     st.markdown("---")
     st.caption("Pydantic State Architecture v2.0 | Time-Travel Enabled")

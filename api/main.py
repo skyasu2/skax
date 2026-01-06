@@ -62,72 +62,96 @@ async def health_check():
     return {"status": "healthy", "service": "plancraft-api"}
 
 
-def start_api_server(host: str = "127.0.0.1", port: int = 8000, timeout: float = 10.0) -> threading.Thread:
+def start_api_server(host: str = "127.0.0.1", start_port: int = 8000, max_retries: int = 5, timeout: float = 10.0) -> int:
     """
     Start API server in background thread (Thread-safe)
+    Finds available port automatically.
 
     Args:
         host: Server host address
-        port: Server port number
+        start_port: Starting port number
+        max_retries: Number of ports to try
         timeout: Max seconds to wait for server startup
 
     Returns:
-        Thread running the server
+        int: The port number the server is running on
     """
     global _api_server, _api_thread
 
-    with _api_lock:
-        # Check if server is already running
-        if _api_thread is not None and _api_thread.is_alive():
-            import httpx
-            try:
-                resp = httpx.get(f"http://{host}:{port}/health", timeout=2.0)
-                if resp.status_code == 200:
-                    logger.info(f"[API] Server already running on {host}:{port}")
-                    return _api_thread
-            except Exception:
-                logger.warning("[API] Server thread alive but not responding, restarting...")
-
-        # Create server config
-        config = uvicorn.Config(
-            app,
-            host=host,
-            port=port,
-            log_level="warning",
-            access_log=False,
-        )
-        _api_server = uvicorn.Server(config)
-
-        def run_server():
-            try:
-                _api_server.run()
-            except Exception as e:
-                logger.error(f"[API] Server error: {e}")
-
-        _api_thread = threading.Thread(target=run_server, daemon=True, name="FastAPI-Server")
-        _api_thread.start()
-
-    # Wait for server with exponential backoff (outside lock)
     import httpx
-    start_time = time.time()
-    delay = 0.1
-    max_delay = 1.0
+    import socket
 
-    while time.time() - start_time < timeout:
+    for port in range(start_port, start_port + max_retries + 1):
+        # 1. Check if port is already running a VALID server
         try:
-            resp = httpx.get(f"http://{host}:{port}/health", timeout=2.0)
+            resp = httpx.get(f"http://{host}:{port}/health", timeout=1.0)
             if resp.status_code == 200:
-                elapsed = time.time() - start_time
-                logger.info(f"[API] Server started successfully on {host}:{port} ({elapsed:.2f}s)")
-                return _api_thread
+                data = resp.json()
+                if data.get("service") == "plancraft-api":
+                    logger.info(f"[API] Found active valid server on {host}:{port}")
+                    return port
+                else:
+                    logger.warning(f"[API] Port {port} occupied by stale/unknown service. Skipping.")
+                    continue
         except Exception:
+            # Not responding - might be free or dead
             pass
 
-        time.sleep(delay)
-        delay = min(delay * 1.5, max_delay)
+        # 2. Check if port is TCP occupied (but not responding to HTTP above)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex((host, port)) == 0:
+                logger.warning(f"[API] Port {port} is in use (TCP). Skipping.")
+                continue
 
-    logger.warning(f"[API] Server may not be ready after {timeout}s")
-    return _api_thread
+        # 3. Port seems free - Attempt to start
+        logger.info(f"[API] Attempting to start server on port {port}...")
+        
+        with _api_lock:
+            config = uvicorn.Config(
+                app,
+                host=host,
+                port=port,
+                log_level="warning",
+                access_log=False,
+            )
+            _api_server = uvicorn.Server(config)
+
+            def run_server():
+                try:
+                    _api_server.run()
+                except Exception as e:
+                    logger.error(f"[API] Server thread error on {port}: {e}")
+
+            _api_thread = threading.Thread(target=run_server, daemon=True, name=f"FastAPI-{port}")
+            _api_thread.start()
+
+        # 4. Wait/Verify startup
+        start_time = time.time()
+        delay = 0.2
+        
+        while time.time() - start_time < timeout:
+            try:
+                resp = httpx.get(f"http://{host}:{port}/health", timeout=1.0)
+                if resp.status_code == 200 and resp.json().get("service") == "plancraft-api":
+                    logger.info(f"[API] Server started successfully on {host}:{port}")
+                    return port
+            except Exception:
+                pass
+            
+            if not _api_thread.is_alive():
+                 logger.error(f"[API] Server thread died immediately on {port}")
+                 break
+            
+            time.sleep(delay)
+            
+        # If we reached here, this port failed to start in time or thread died.
+        # Stop specific server instance (if running) and try next port
+        if _api_server:
+            _api_server.should_exit = True
+        logger.warning(f"[API] Failed to start on {port}, trying next...")
+        time.sleep(1.0)
+
+    raise RuntimeError(f"Could not start API server on any port from {start_port} to {start_port + max_retries}")
 
 
 def stop_api_server():
