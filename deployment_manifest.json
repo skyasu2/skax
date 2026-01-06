@@ -1,12 +1,12 @@
 {
   "app.py": {
-    "size": 1580
+    "size": 1719
   },
   "requirements.txt": {
     "size": 1701
   },
   ".env.example": {
-    "size": 2473
+    "size": 2710
   },
   "ui/components.py": {
     "size": 1037
@@ -18,7 +18,7 @@
     "size": 4886
   },
   "ui/layout.py": {
-    "size": 4273
+    "size": 4518
   },
   "ui/mermaid.py": {
     "size": 6887
@@ -33,7 +33,7 @@
     "size": 10713
   },
   "ui/workflow_runner.py": {
-    "size": 22323
+    "size": 22396
   },
   "ui/__init__.py": {
     "size": 150
@@ -63,7 +63,7 @@
     "size": 2229
   },
   "ui/modules/dialogs/devtools.py": {
-    "size": 22922
+    "size": 25199
   },
   "ui/modules/dialogs/plan.py": {
     "size": 5259
@@ -93,7 +93,7 @@
     "size": 6569
   },
   "agents/refiner.py": {
-    "size": 5074
+    "size": 5290
   },
   "agents/reviewer.py": {
     "size": 3884
@@ -105,7 +105,10 @@
     "size": 8651
   },
   "agents/supervisor.py": {
-    "size": 43471
+    "size": 33975
+  },
+  "agents/supervisor_types.py": {
+    "size": 10297
   },
   "agents/writer.py": {
     "size": 13211
@@ -165,7 +168,7 @@
     "size": 23662
   },
   "graph/workflow.py": {
-    "size": 53500
+    "size": 40993
   },
   "graph/__init__.py": {
     "size": 481
@@ -185,6 +188,9 @@
   "graph/nodes/formatter_node.py": {
     "size": 5264
   },
+  "graph/nodes/hitl_node.py": {
+    "size": 11833
+  },
   "graph/nodes/refiner_node.py": {
     "size": 919
   },
@@ -194,6 +200,9 @@
   "graph/nodes/structurer_node.py": {
     "size": 1175
   },
+  "graph/nodes/utility_nodes.py": {
+    "size": 859
+  },
   "graph/nodes/writer_node.py": {
     "size": 1303
   },
@@ -201,7 +210,7 @@
     "size": 0
   },
   "api/main.py": {
-    "size": 4165
+    "size": 5472
   },
   "api/__init__.py": {
     "size": 33
@@ -231,7 +240,7 @@
     "size": 2504
   },
   "utils/config.py": {
-    "size": 6151
+    "size": 6488
   },
   "utils/context_builder.py": {
     "size": 7666
@@ -267,7 +276,7 @@
     "size": 13484
   },
   "utils/schemas.py": {
-    "size": 13228
+    "size": 13356
   },
   "utils/settings.py": {
     "size": 15341
@@ -300,10 +309,10 @@
     "size": 2148
   },
   "prompts/refiner_prompt.py": {
-    "size": 1431
+    "size": 1531
   },
   "prompts/reviewer_prompt.py": {
-    "size": 8962
+    "size": 9035
   },
   "prompts/structurer_prompt.py": {
     "size": 6796

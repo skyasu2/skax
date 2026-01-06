@@ -56,10 +56,18 @@ def init_resources():
         # 1. Config 검증
         Config.validate()
 
-        # 2. RAG 벡터스토어 로드
-        from rag.vectorstore import load_vectorstore
-        print("[INIT] Loading RAG Vectorstore...")
-        load_vectorstore()
+        # 2. RAG 벡터스토어 로드 (Background)
+        import threading
+        def _init_rag_bg():
+            from rag.vectorstore import load_vectorstore, rebuild_index_if_needed
+            print("[INIT] Checking RAG Vectorstore...")
+            # 없거나 깨졌을 때만 재생성
+            rebuild_index_if_needed()
+            load_vectorstore()
+            print("[INIT] RAG Vectorstore Ready")
+
+        rag_thread = threading.Thread(target=_init_rag_bg, daemon=True)
+        rag_thread.start()
 
         return actual_port
 

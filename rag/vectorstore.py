@@ -185,6 +185,28 @@ def load_vectorstore() -> FAISS:
         return init_vectorstore()
 
 
+
+
+def rebuild_index_if_needed():
+    """
+    필요한 경우에만 인덱스를 재빌드합니다. (파일 없음 또는 로드 실패 시)
+    백그라운드 초기화 용도.
+    """
+    if not os.path.exists(VECTORSTORE_PATH):
+        print("[RAG] Index not found. Building new index...")
+        init_vectorstore()
+        return
+
+    # 파일은 있는데 로드가 안 되는 경우 체크
+    try:
+        embeddings = get_embeddings()
+        FAISS.load_local(VECTORSTORE_PATH, embeddings, allow_dangerous_deserialization=True)
+        print("[RAG] Existing index is valid.")
+    except Exception:
+        print("[RAG] Index corrupted or mismatch. Rebuilding...")
+        init_vectorstore()
+
+
 # =============================================================================
 # CLI 실행
 # =============================================================================
