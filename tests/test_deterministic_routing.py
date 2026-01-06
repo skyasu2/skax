@@ -10,12 +10,18 @@ Key Principles:
 """
 
 import pytest
-from agents.supervisor import (
-    detect_required_agents,
-    RoutingDecision,
-    TECH_KEYWORDS,
-    CONTENT_KEYWORDS,
-)
+
+
+# Lazy import to avoid circular import issues
+def _get_routing_functions():
+    """순환 import 방지를 위한 lazy import"""
+    from agents.supervisor_types import (
+        detect_required_agents,
+        RoutingDecision,
+        TECH_KEYWORDS,
+        CONTENT_KEYWORDS,
+    )
+    return detect_required_agents, RoutingDecision, TECH_KEYWORDS, CONTENT_KEYWORDS
 
 
 class TestDeterministicRouting:
@@ -23,6 +29,8 @@ class TestDeterministicRouting:
 
     def test_same_input_same_output(self):
         """동일 입력 시 항상 동일한 결과 반환"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         service = "AI 기반 점심 추천 앱"
         purpose = "기획서 작성"
 
@@ -39,6 +47,8 @@ class TestDeterministicRouting:
 
     def test_returns_routing_decision_type(self):
         """RoutingDecision 타입 반환"""
+        detect_required_agents, RoutingDecision, _, _ = _get_routing_functions()
+
         result = detect_required_agents("서비스", "기획서 작성")
         assert isinstance(result, RoutingDecision)
         assert hasattr(result, "required_analyses")
@@ -50,6 +60,8 @@ class TestPurposeBasedRouting:
 
     def test_planning_purpose_includes_all_core_agents(self):
         """기획서 작성 목적 → 4대 필수 에이전트 포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("카페 창업", "기획서 작성")
 
         core_agents = ["market", "bm", "financial", "risk"]
@@ -58,6 +70,8 @@ class TestPurposeBasedRouting:
 
     def test_idea_validation_includes_only_market_bm(self):
         """아이디어 검증 목적 → market, bm만 포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("카페 창업", "아이디어 검증")
 
         assert "market" in result.required_analyses
@@ -68,6 +82,8 @@ class TestPurposeBasedRouting:
 
     def test_default_purpose_is_planning(self):
         """기본 목적은 기획서 작성"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("서비스")  # purpose 미지정
 
         core_agents = ["market", "bm", "financial", "risk"]
@@ -84,16 +100,22 @@ class TestTechKeywordRouting:
     ])
     def test_tech_keywords_trigger_tech_agent(self, keyword):
         """기술 키워드 → tech 에이전트 포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents(f"{keyword} 기반 서비스", "기획서 작성")
         assert "tech" in result.required_analyses
 
     def test_no_tech_keyword_no_tech_agent(self):
         """기술 키워드 없음 → tech 에이전트 미포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("카페 창업 사업 계획", "기획서 작성")
         assert "tech" not in result.required_analyses
 
     def test_tech_keyword_case_insensitive(self):
         """대소문자 무관하게 감지"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result1 = detect_required_agents("AI 서비스", "기획서 작성")
         result2 = detect_required_agents("ai 서비스", "기획서 작성")
         result3 = detect_required_agents("Ai 서비스", "기획서 작성")
@@ -112,11 +134,15 @@ class TestContentKeywordRouting:
     ])
     def test_content_keywords_trigger_content_agent(self, keyword):
         """콘텐츠 키워드 → content 에이전트 포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents(f"{keyword} 중심 사업", "기획서 작성")
         assert "content" in result.required_analyses
 
     def test_no_content_keyword_no_content_agent(self):
         """콘텐츠 키워드 없음 → content 에이전트 미포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("B2B 물류 시스템", "기획서 작성")
         assert "content" not in result.required_analyses
 
@@ -126,6 +152,8 @@ class TestCombinedKeywordRouting:
 
     def test_both_tech_and_content(self):
         """기술 + 콘텐츠 키워드 → 둘 다 포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents(
             "AI 기반 인플루언서 마케팅 플랫폼",
             "기획서 작성"
@@ -136,6 +164,8 @@ class TestCombinedKeywordRouting:
 
     def test_complex_service_description(self):
         """복잡한 서비스 설명도 정확히 분석"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents(
             "React Native 기반 음식 배달 앱으로, 유튜브 크리에이터와 협업하여 마케팅",
             "기획서 작성"
@@ -155,16 +185,22 @@ class TestReasoningOutput:
 
     def test_reasoning_includes_purpose(self):
         """reasoning에 목적 관련 설명 포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("서비스", "기획서 작성")
         assert "기획서" in result.reasoning
 
     def test_reasoning_includes_detected_keywords(self):
         """reasoning에 감지된 키워드 포함"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("AI 기반 앱", "기획서 작성")
         assert "키워드" in result.reasoning or "감지" in result.reasoning
 
     def test_reasoning_is_not_empty(self):
         """reasoning이 비어있지 않음"""
+        detect_required_agents, _, _, _ = _get_routing_functions()
+
         result = detect_required_agents("서비스", "기획서 작성")
         assert len(result.reasoning) > 0
 
@@ -174,19 +210,23 @@ class TestKeywordSets:
 
     def test_tech_keywords_is_frozenset(self):
         """TECH_KEYWORDS는 불변 집합"""
+        _, _, TECH_KEYWORDS, _ = _get_routing_functions()
         assert isinstance(TECH_KEYWORDS, frozenset)
 
     def test_content_keywords_is_frozenset(self):
         """CONTENT_KEYWORDS는 불변 집합"""
+        _, _, _, CONTENT_KEYWORDS = _get_routing_functions()
         assert isinstance(CONTENT_KEYWORDS, frozenset)
 
     def test_tech_keywords_all_lowercase(self):
         """TECH_KEYWORDS는 모두 소문자"""
+        _, _, TECH_KEYWORDS, _ = _get_routing_functions()
         for kw in TECH_KEYWORDS:
             assert kw == kw.lower(), f"'{kw}'는 소문자여야 함"
 
     def test_content_keywords_all_lowercase(self):
         """CONTENT_KEYWORDS는 모두 소문자"""
+        _, _, _, CONTENT_KEYWORDS = _get_routing_functions()
         for kw in CONTENT_KEYWORDS:
             assert kw == kw.lower(), f"'{kw}'는 소문자여야 함"
 
@@ -214,5 +254,5 @@ class TestBackwardCompatibility:
 
     def test_detect_required_agents_is_exported(self):
         """detect_required_agents가 export됨"""
-        from agents.supervisor import detect_required_agents
+        detect_required_agents, _, _, _ = _get_routing_functions()
         assert callable(detect_required_agents)

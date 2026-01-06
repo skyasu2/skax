@@ -54,6 +54,9 @@ class GenerationPreset(BaseModel):
     use_context_reorder: bool = Field(default=False, description="Long Context Reorder 사용 여부")
     # [NEW] 심층 분석 모드 (High Quality 전용)
     deep_analysis_mode: bool = Field(default=False, description="심층 분석(시나리오 플래닝 등) 수행 여부")
+    # [NEW] Writer ReAct 패턴 설정
+    enable_writer_react: bool = Field(default=False, description="Writer ReAct 모드 활성화 (Balanced/Quality)")
+    react_max_tool_calls: int = Field(default=3, description="ReAct 최대 도구 호출 횟수")
 
 
 # 프리셋 정의
@@ -80,6 +83,9 @@ GENERATION_PRESETS = {
         use_reranker=True,  # [IMPROVE] Cross-Encoder Reranking 활성화 (정확도 향상)
         use_multi_query=True,
         use_query_expansion=True,
+        # Writer ReAct: 균형 모드에서 활성화
+        enable_writer_react=True,
+        react_max_tool_calls=3,
     ),
     "fast": GenerationPreset(
         name="빠른 생성",
@@ -118,6 +124,9 @@ GENERATION_PRESETS = {
         use_query_expansion=True,
         use_context_reorder=True,
         deep_analysis_mode=True,  # 심층 분석 활성화
+        # Writer ReAct: 고품질 모드에서 활성화
+        enable_writer_react=True,
+        react_max_tool_calls=3,
     ),
 }
 

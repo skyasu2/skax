@@ -30,6 +30,10 @@ PlanCraft는 LangGraph가 조율하는 **계층적 다중 에이전트 아키텍
 ### ✍️ 작가: `Writer` (집필 에이전트)
 - **역할**: RAG(지식 베이스) 및 웹 검색 데이터를 활용하여 실제 섹션별 본문을 작성합니다.
 - **능력**:
+  - **ReAct 패턴** *(Balanced/Quality 프리셋)*: 작성 중 데이터 부족 시 **자율적으로 도구 호출** (Thought→Action→Observation)
+    - `request_specialist_analysis`: Specialist 에이전트에게 추가 분석 요청
+    - `search_rag_documents`: 내부 RAG 문서 검색
+    - `search_web`: 웹에서 최신 정보 검색
   - **초개인화**: 분석 컨텍스트에 맞춰 어조와 깊이를 조절합니다.
   - **시각적 사고**: Mermaid 다이어그램 및 ASCII 차트를 생성하여 시각적 이해를 돕습니다.
   - **팩트 기반**: 신뢰성 확보를 위해 웹 검색 출처를 엄격하게 인용합니다.
@@ -84,7 +88,13 @@ PlanCraft는 LangGraph가 조율하는 **계층적 다중 에이전트 아키텍
 - **해결**: Quality 모드에서 `Writer`가 전체 목차를 3개 섹션 단위로 나누어 **순차적으로 작성(Sequential Chunking)**하고 병합하는 로직 탑재.
 - **결과**: 13~15개의 방대한 섹션도 누락 없이 100% 완벽하게 작성됩니다.
 
-### E. 로직 교정
+### E. Writer ReAct 패턴 (Autonomous Tool Calling) - *New!*
+- **기능**: `Writer`가 작성 중 데이터 부족을 **스스로 판단**하여 도구를 자율적으로 호출합니다.
+- **도구**: `request_specialist_analysis`, `search_rag_documents`, `search_web`
+- **제어**: 무한 루프 방지를 위해 **최대 3회** 호출로 제한됩니다.
+- **적용**: Balanced/Quality 프리셋에서 활성화 (Fast 프리셋은 기존 방식 유지)
+
+### F. 로직 교정
 - `Structurer` 프롬프트에 하드코딩되어 있던 섹션 수 제한을 제거하고, 프리셋 설정에 따라 유동적으로 확장되도록 수정했습니다.
 
 ---

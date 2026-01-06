@@ -7,14 +7,14 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776ab?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-ff4b4b?style=for-the-badge&logo=streamlit)](https://streamlit.io/)
 
-### 🆕 최근 업데이트 (2026-01-06)
+### 🆕 최근 업데이트 (2026-01-07)
 
 | 개선 항목 | 설명 |
 |-----------|------|
+| 🔄 **Writer ReAct 패턴** | Writer가 작성 중 자율적으로 도구 호출 (Thought→Action→Observation) |
 | ⚡ **실시간 활동 로그** | 에이전트 작업 상태가 UI에 실시간으로 표시 |
 | ⏱️ **정확한 실행 시간** | 각 단계별 소요 시간이 정확히 측정됨 |
 | 🎯 **타겟 피드백** | Reviewer가 수정이 필요한 섹션을 구체적으로 지정 |
-| 🔄 **자동 복구 RAG** | 앱 시작 시 벡터스토어 자동 점검 및 복구 |
 
 ---
 
@@ -83,7 +83,7 @@ graph LR
 | **💼 BM Agent** | 수익 모델, 가격 정책, BEP | 비즈니스 모델 |
 | **⚠️ Risk Agent** | 법적/기술적 리스크, SWOT | 리스크 분석 |
 | **🛠️ Tech Agent** | 기술 스택, 아키텍처 설계 | 기술 명세 |
-| **✍️ Writer** | 섹션별 콘텐츠 작성 | 기획서 초안 |
+| **✍️ Writer** | 섹션별 콘텐츠 작성 (ReAct 패턴) | 기획서 초안 |
 | **🔎 Reviewer** | 품질 평가 (PASS/REVISE/FAIL) | 점수, 피드백 |
 | **✨ Refiner** | 피드백 기반 개선 | 개선 전략 |
 
@@ -104,11 +104,11 @@ LangGraph `interrupt()` 기반의 **사용자 개입 시스템**:
 
 ### 4. ⚡ 품질 프리셋
 
-| 모드 | 속도 | 모델 | 용도 |
-|------|------|------|------|
-| **⚡ Fast** | ~1분 | GPT-4o-mini | 아이디어 스케치 |
-| **⚖️ Balanced** | 2~3분 | GPT-4o | 일반 기획서 (기본값) |
-| **💎 Quality** | 3~5분 | GPT-4o + 심층 분석 | 투자 제안서 |
+| 모드 | 속도 | 모델 | Writer ReAct | 용도 |
+|------|------|------|--------------|------|
+| **⚡ Fast** | ~1분 | GPT-4o-mini | ❌ | 아이디어 스케치 |
+| **⚖️ Balanced** | 2~3분 | GPT-4o | ✅ | 일반 기획서 (기본값) |
+| **💎 Quality** | 3~5분 | GPT-4o + 심층 분석 | ✅ | 투자 제안서 |
 
 ### 5. 🔄 품질 보증 루프 (QA Loop)
 

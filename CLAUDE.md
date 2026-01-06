@@ -42,15 +42,18 @@ uvicorn api.main:app --reload --port 8000
 ### Multi-Agent Workflow (LangGraph StateGraph)
 
 ```
-START → context_gathering → analyze → structure → data_gap_analysis → write → review → [discussion] → refine → format → END
-                              ↓                         ↓                        ↓                          ↑
-                        option_pause (HITL)     [request_specialist]       [score < 9]─────────────────────┘
-                              ↓                         ↓                        ↓
-                            END              collect_responses → write    [score < 5] → analyze (restart)
+START → context_gathering → analyze → structure → write (ReAct) → review → [discussion] → refine → format → END
+                              ↓                       ↓                        ↓                          ↑
+                        option_pause (HITL)   [Thought→Action→Obs]        [score < 9]─────────────────────┘
+                              ↓                       ↓                        ↓
+                            END              도구 자율 호출 (최대3회)    [score < 5] → analyze (restart)
 ```
 
-**Multi-Agent Collaboration (NEW)**:
-- **Dynamic Q&A**: Writer가 데이터 부족 시 Specialist에게 동적으로 요청
+**Multi-Agent Collaboration**:
+- **Writer ReAct 패턴**: Writer가 작성 중 데이터 부족 판단 시 자율적으로 도구 호출 (Balanced/Quality 프리셋)
+  - `request_specialist_analysis`: Specialist 에이전트에게 추가 분석 요청
+  - `search_rag_documents`: 내부 RAG 문서 검색
+  - `search_web`: 웹 검색
 - **Co-authoring**: Reviewer ↔ Writer가 LLM 기반 합의까지 대화 (최대 5라운드)
 
 **10 Agents**:
@@ -58,7 +61,7 @@ START → context_gathering → analyze → structure → data_gap_analysis → 
 - **Structurer**: Designs document outline (9-13 sections based on preset)
 - **Supervisor**: Orchestrates Specialist Squad (Plan-and-Execute pattern)
 - **Specialists** (Market/BM/Risk/Tech): Parallel domain-specific analysis
-- **Writer**: Generates section content with self-validation
+- **Writer**: Generates section content with ReAct pattern (autonomous tool calling)
 - **Reviewer**: Evaluates quality (PASS ≥9 / REVISE 5-8 / FAIL <5)
 - **Refiner**: Creates improvement strategies based on feedback
 - **Formatter**: Produces final output with chat summary
@@ -73,11 +76,11 @@ START → context_gathering → analyze → structure → data_gap_analysis → 
 
 ### Quality Presets (`utils/settings.py`)
 
-| Preset | Model | Max Refine | Features |
-|--------|-------|------------|----------|
-| fast | gpt-4o-mini | 1 | Basic MMR search |
-| balanced | gpt-4o | 2 | Multi-Query + Reranking |
-| quality | gpt-4o | 3 | Full RAG + Deep Analysis |
+| Preset | Model | Max Refine | Writer ReAct | Features |
+|--------|-------|------------|--------------|----------|
+| fast | gpt-4o-mini | 1 | ❌ | Basic MMR search |
+| balanced | gpt-4o | 2 | ✅ (3 calls) | Multi-Query + Reranking |
+| quality | gpt-4o | 3 | ✅ (3 calls) | Full RAG + Deep Analysis |
 
 Access via: `from utils.settings import get_preset; preset = get_preset("quality")`
 
@@ -95,6 +98,7 @@ LangGraph `interrupt()` is used for user interaction. **Critical rules**:
 - `graph/subgraphs.py`: Sub-graph patterns (Context, Generation, QA)
 - `prompts/`: LLM prompt templates (Korean language)
 - `rag/`: FAISS vectorstore + retriever with advanced features
+- `tools/`: Agent tools (Writer ReAct tools: `writer_tools.py`)
 - `ui/`: Streamlit components (tabs/, modules/, dialogs/)
 - `utils/schemas.py`: Pydantic schemas for agent outputs (AnalysisResult, JudgeResult, etc.)
 

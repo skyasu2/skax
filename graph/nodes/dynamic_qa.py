@@ -1,10 +1,16 @@
 """
-Dynamic Q&A Node - Writer ↔ Specialist 동적 질의응답
+[DEPRECATED] Dynamic Q&A Node - Writer ReAct 패턴으로 대체됨
 
-Writer가 작성 중 데이터 부족을 감지하면 Specialist에게 직접 요청하고,
-응답을 받아 작성을 계속하는 진정한 멀티에이전트 협업 패턴을 구현합니다.
+이 모듈은 더 이상 workflow에서 사용되지 않습니다.
+Writer가 작성 중 자율적으로 도구를 호출하는 ReAct 패턴으로 대체되었습니다.
 
-흐름:
+새로운 구현: agents/writer.py의 _run_with_react_loop()
+새로운 도구: tools/writer_tools.py
+
+기존 테스트 호환성을 위해 함수들은 유지됩니다.
+새로운 코드에서는 이 모듈을 사용하지 마세요.
+
+[기존 흐름 - DEPRECATED]
     structure → [data_gap_analysis] → (has_gaps?)
                     ↓ Yes                    ↓ No
             [specialist_request]         [write]
@@ -13,9 +19,12 @@ Writer가 작성 중 데이터 부족을 감지하면 Specialist에게 직접 �
                     ↓
                 [write]
 
-LangGraph Send API 활용:
-    - Send("market_agent", {...}): 특정 Specialist에게 요청 전송
-    - 병렬 요청 처리 가능
+[새로운 흐름 - ACTIVE]
+    structure → write (ReAct 내장)
+               [Thought] "데이터 부족"
+               [Action]  request_specialist_analysis(...)
+               [Observation] {...}
+               [Continue] 작성 계속
 """
 
 from typing import List, Dict, Any, Literal, Union

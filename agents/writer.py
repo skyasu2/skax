@@ -6,9 +6,13 @@ PlanCraft Agent - Writer Agent (작가)
 
 [Key Capabilities]
 1. 적응형 작성 전략 (Adaptive Writing Strategy):
-   - Fast/Balanced: 속도를 위해 한 번에 전체를 작성하는 Single-shot 방식을 사용합니다.
-   - Quality: 내용 손실(Context Loss)을 막기 위해 3개 섹션 단위로 나누어 작성하는 Chunk Writing 방식을 사용합니다.
-2. 능동적 데이터 통합:
+   - Fast: 속도를 위해 한 번에 전체를 작성하는 Single-shot 방식을 사용합니다.
+   - Balanced/Quality: ReAct 패턴으로 데이터 부족 시 자율적으로 도구를 호출합니다.
+2. ReAct 패턴 (Reasoning + Acting):
+   - [Thought] 작성 중 데이터 부족 판단
+   - [Action] Specialist/Web/RAG 도구 호출
+   - [Observation] 결과 확인 후 작성 계속
+3. 능동적 데이터 통합:
    - RAG(Vector DB) 및 실시간 웹 검색(Active Search) 결과를 본문에 자연스럽게 녹여냅니다.
    - Mermaid 다이어그램 및 시각 자료 코드를 생성하여 문서의 가독성을 높입니다.
 """
@@ -142,12 +146,28 @@ def run(state: PlanCraftState) -> PlanCraftState:
     prepend_msg = strategy_msg + review_context + refinement_context
     formatted_prompt = prepend_msg + formatted_prompt + get_time_instruction()
 
-    # 5. LLM 호출 (Self-Reflection Loop)
+    # 5. LLM 호출
     messages = [
         {"role": "system", "content": get_time_context() + system_prompt},
         {"role": "user", "content": formatted_prompt}
     ]
 
+    # [NEW] ReAct 모드 판단 (Balanced/Quality에서 활성화)
+    # 1. 프리셋 설정 확인 (enable_writer_react)
+    # 2. state 오버라이드 확인 (UI에서 개별 비활성화 가능)
+    use_react_mode = (
+        preset.enable_writer_react and                 # 프리셋에서 활성화됨
+        refine_count == 0 and                          # 첫 작성 시에만
+        state.get("enable_writer_react", True)         # state에서 비활성화 가능
+    )
+
+    if use_react_mode:
+        logger.info(f"[Writer] 🔄 ReAct 모드 활성화 (preset={active_preset})")
+        return _run_with_react_loop(
+            state, messages, preset, specialist_context, logger
+        )
+
+    # Standard Mode (Fast 또는 ReAct 비활성화 시)
     writer_llm = get_llm(
         model_type=preset.model_type,
         temperature=preset.temperature
@@ -158,8 +178,8 @@ def run(state: PlanCraftState) -> PlanCraftState:
     last_draft_dict = None
     last_error = None
 
-    # [NEW] Quality 모드일 경우: 분할 작성 (Chunk Writing)
-    if active_preset == "quality" and structure:
+    # Quality 모드 + ReAct 비활성화 시: 분할 작성 (Chunk Writing)
+    if active_preset == "quality" and structure and not use_react_mode:
         logger.info("[Writer] 👑 Quality Mode: Chunk Writing 시작 (섹션별 상세 작성)")
         try:
             final_draft_dict = _write_in_chunks(
@@ -299,4 +319,210 @@ def _write_in_chunks(llm, base_messages, structure_obj, logger):
         
     logger.info(f"[Writer Chunk] 병합 완료: 총 {len(full_draft['sections'])}개 섹션")
     return full_draft
+
+
+# =============================================================================
+# ReAct Pattern Implementation
+# =============================================================================
+
+# ReAct 설정
+REACT_MAX_TOOL_CALLS = 3  # 최대 도구 호출 횟수
+REACT_MAX_ITERATIONS = 5  # 최대 루프 반복 횟수
+
+
+def _run_with_react_loop(
+    state: PlanCraftState,
+    base_messages: list,
+    preset,
+    specialist_context: str,
+    logger
+) -> PlanCraftState:
+    """
+    ReAct 패턴으로 초안 작성 (Tool 호출 가능)
+
+    Writer가 작성 중 데이터 부족을 자율적으로 판단하고,
+    필요시 Specialist/Web/RAG 도구를 호출하여 데이터를 보강합니다.
+
+    Flow:
+        [Thought] "시장 데이터가 부족하다"
+        [Action]  request_specialist_analysis("market", "TAM/SAM/SOM 분석")
+        [Observation] {tam: "10조원", ...}
+        [Continue] 작성 계속...
+        [Final Answer] DraftResult JSON
+
+    Args:
+        state: 현재 워크플로우 상태
+        base_messages: 시스템/유저 메시지
+        preset: 프리셋 설정
+        specialist_context: 기존 Specialist 분석 결과
+        logger: 로거
+
+    Returns:
+        PlanCraftState: draft 필드가 추가된 상태
+    """
+    from langchain_core.messages import AIMessage, ToolMessage
+    from tools.writer_tools import get_writer_tools
+    from prompts.writer_prompt import WRITER_REACT_INSTRUCTION
+
+    logger.info("[Writer ReAct] ReAct 루프 시작")
+
+    # 1. 도구 준비
+    tools = get_writer_tools()
+    tool_map = {tool.name: tool for tool in tools}
+
+    # 2. LLM with Tools 설정
+    llm = get_llm(
+        model_type=preset.model_type,
+        temperature=preset.temperature
+    )
+    llm_with_tools = llm.bind_tools(tools)
+
+    # 3. ReAct 지침을 시스템 프롬프트에 추가
+    messages = base_messages.copy()
+    messages[0]["content"] += "\n\n" + WRITER_REACT_INSTRUCTION
+
+    # 4. ReAct 루프
+    tool_call_count = 0
+    iteration = 0
+    tool_results_context = []  # 도구 호출 결과 누적
+
+    while iteration < REACT_MAX_ITERATIONS:
+        iteration += 1
+        logger.info(f"[Writer ReAct] Iteration {iteration}/{REACT_MAX_ITERATIONS}")
+
+        try:
+            response = llm_with_tools.invoke(messages)
+
+            # Tool 호출 감지
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                # AIMessage 추가
+                messages.append(response)
+
+                for tool_call in response.tool_calls:
+                    if tool_call_count >= REACT_MAX_TOOL_CALLS:
+                        logger.warning(f"[Writer ReAct] 최대 도구 호출 횟수 도달 ({REACT_MAX_TOOL_CALLS})")
+                        # 더 이상 도구 호출하지 않고 종료
+                        messages.append(ToolMessage(
+                            content="[LIMIT] 도구 호출 횟수 제한에 도달했습니다. 현재까지의 정보로 작성을 완료하세요.",
+                            tool_call_id=tool_call['id']
+                        ))
+                        break
+
+                    tool_name = tool_call['name']
+                    tool_args = tool_call['args']
+
+                    logger.info(f"[Writer ReAct] Tool 호출: {tool_name}({list(tool_args.keys())})")
+
+                    # Tool 실행
+                    result = _execute_react_tool(tool_name, tool_args, tool_map, logger)
+                    tool_call_count += 1
+
+                    # 결과 저장
+                    tool_results_context.append({
+                        "tool": tool_name,
+                        "query": tool_args.get("query", tool_args.get("specialist_type", "")),
+                        "result_preview": result[:200] + "..." if len(result) > 200 else result
+                    })
+
+                    # ToolMessage 추가
+                    messages.append(ToolMessage(
+                        content=result,
+                        tool_call_id=tool_call['id']
+                    ))
+
+                # 도구 호출 후 루프 계속
+                continue
+
+            else:
+                # Tool 호출 없음 = 최종 응답 준비 완료
+                logger.info("[Writer ReAct] Tool 호출 완료, 최종 작성 단계로 진입")
+                break
+
+        except Exception as e:
+            logger.error(f"[Writer ReAct] 루프 오류: {e}")
+            break
+
+    # 5. 최종 Structured Output 생성
+    logger.info("[Writer ReAct] 최종 DraftResult 생성 중...")
+
+    # 도구 결과를 컨텍스트로 추가
+    if tool_results_context:
+        tools_summary = "\n\n".join([
+            f"### {tr['tool']} 결과 ({tr['query']})\n{tr['result_preview']}"
+            for tr in tool_results_context
+        ])
+        additional_context = f"""
+=====================================================================
+🔧 ReAct 도구 호출 결과 (반드시 활용할 것!)
+=====================================================================
+{tools_summary}
+=====================================================================
+"""
+        # 유저 메시지에 추가
+        messages[-1] = {"role": "user", "content": messages[1]["content"] + additional_context}
+
+    # Structured Output LLM으로 최종 작성
+    final_llm = get_llm(
+        model_type=preset.model_type,
+        temperature=preset.temperature
+    ).with_structured_output(DraftResult)
+
+    try:
+        # 최종 메시지 정리 (Tool 관련 메시지 제거하고 컨텍스트만 유지)
+        final_messages = [
+            messages[0],  # System
+            {"role": "user", "content": messages[1]["content"]}  # User (원본)
+        ]
+
+        # 도구 결과 컨텍스트 추가
+        if tool_results_context:
+            tools_context = "\n".join([
+                f"- {tr['tool']}: {tr['result_preview']}"
+                for tr in tool_results_context
+            ])
+            final_messages[1]["content"] += f"\n\n[추가 데이터 - ReAct 도구 결과]\n{tools_context}"
+
+        final_result = final_llm.invoke(final_messages)
+        draft_dict = ensure_dict(final_result)
+
+        section_count = len(draft_dict.get("sections", []))
+        logger.info(f"[Writer ReAct] ✅ 작성 완료 (섹션 {section_count}개, 도구 호출 {tool_call_count}회)")
+
+        return update_state(state, draft=draft_dict, current_step="write")
+
+    except Exception as e:
+        logger.error(f"[Writer ReAct] 최종 작성 실패: {e}")
+        return update_state(state, error=f"Writer ReAct 실패: {str(e)}")
+
+
+def _execute_react_tool(
+    tool_name: str,
+    tool_args: dict,
+    tool_map: dict,
+    logger
+) -> str:
+    """
+    ReAct 도구 실행 헬퍼
+
+    Args:
+        tool_name: 도구 이름
+        tool_args: 도구 인자
+        tool_map: 도구 이름 → 도구 객체 맵
+        logger: 로거
+
+    Returns:
+        도구 실행 결과 문자열
+    """
+    if tool_name not in tool_map:
+        return f"[ERROR] 알 수 없는 도구: {tool_name}. 사용 가능: {list(tool_map.keys())}"
+
+    tool = tool_map[tool_name]
+
+    try:
+        result = tool.invoke(tool_args)
+        logger.info(f"[Writer ReAct] Tool '{tool_name}' 성공: {len(result)}자")
+        return result
+    except Exception as e:
+        logger.error(f"[Writer ReAct] Tool '{tool_name}' 실패: {e}")
+        return f"[ERROR] {tool_name} 실행 실패: {str(e)}. 가정으로 진행하세요."
 

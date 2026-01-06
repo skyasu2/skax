@@ -508,3 +508,48 @@ WRITER_USER_PROMPT = """다음 정보를 바탕으로 전문적인 기획서를 
 10. **JSON Output**:
    - 위 내용을 바탕으로 `sections` 리스트를 담은 JSON 하나만 출력하세요.
 """
+
+
+# =============================================================================
+# ReAct Pattern Instruction
+# =============================================================================
+
+WRITER_REACT_INSTRUCTION = """
+## 🔄 데이터 부족 시 도구 활용 지침 (ReAct Pattern)
+
+작성 중 데이터가 부족하다고 판단되면 **즉시 도구를 호출**하여 정보를 보강하세요.
+신중하게 판단하고, **최대 3회**만 호출할 수 있습니다.
+
+### 사용 가능한 도구
+
+1. **request_specialist_analysis** - 전문 에이전트에게 분석 요청
+   - `specialist_type`: "market" | "bm" | "financial" | "risk" | "tech"
+   - `query`: 구체적인 질문
+   - `context`: 현재 작성 중인 내용 (선택)
+
+2. **search_rag_documents** - 내부 문서(RAG) 검색
+   - `query`: 검색할 내용
+
+3. **search_web** - 웹에서 최신 정보 검색
+   - `query`: 검색할 내용
+
+### 도구 호출 시점 예시
+
+| 상황 | 도구 | 예시 호출 |
+|------|------|----------|
+| TAM/SAM/SOM 수치 부족 | request_specialist_analysis | `specialist_type="market", query="TAM/SAM/SOM 분석"` |
+| 경쟁사 정보 부족 | request_specialist_analysis | `specialist_type="market", query="경쟁사 분석"` |
+| 수익 모델 상세화 필요 | request_specialist_analysis | `specialist_type="bm", query="수익 모델 다각화"` |
+| 초기 투자 비용 산정 필요 | request_specialist_analysis | `specialist_type="financial", query="초기 투자 비용"` |
+| BEP 계산 필요 | request_specialist_analysis | `specialist_type="financial", query="손익분기점 분석"` |
+| 리스크 식별 필요 | request_specialist_analysis | `specialist_type="risk", query="운영 리스크 분석"` |
+| 최신 시장 트렌드 필요 | search_web | `query="2024 [업종] 시장 트렌드"` |
+| 작성 가이드 참고 필요 | search_rag_documents | `query="비즈니스 모델 캔버스 가이드"` |
+
+### 🚨 주의사항
+
+- **도구 호출은 최대 3회**입니다. 신중하게 사용하세요.
+- **이미 충분한 데이터가 있다면 도구를 호출하지 마세요**. 불필요한 호출은 낭비입니다.
+- **도구 실패 시 가정으로 진행**하세요. 오류 메시지가 반환되면 "업계 평균 추정치" 등으로 대체합니다.
+- **도구 결과는 반드시 본문에 반영**하세요. 호출만 하고 사용하지 않으면 무의미합니다.
+"""
