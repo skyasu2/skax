@@ -165,10 +165,27 @@ class WorkflowService:
 
         state = snapshot.values
 
-        # Check for interrupts
+        # Check for interrupts (두 가지 패턴 지원)
         interrupt_value = None
         if snapshot.next and snapshot.tasks:
-            if hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
+            next_node = snapshot.next[0] if snapshot.next else None
+
+            # Pattern 1: interrupt_before 패턴 (option_pause 노드 전에 interrupt)
+            if next_node == "option_pause":
+                # State에서 interrupt payload 구성
+                interrupt_value = {
+                    "type": "option_selector",
+                    "question": state.get("option_question", "추가 정보가 필요합니다."),
+                    "options": state.get("options", []),
+                    "node_ref": "option_pause",
+                    "data": {
+                        "user_input": state.get("user_input", ""),
+                        "topic": state.get("analysis", {}).get("topic", "") if state.get("analysis") else "",
+                        "clarification_questions": state.get("analysis", {}).get("clarification_questions", []) if state.get("analysis") else [],
+                    }
+                }
+            # Pattern 2: 노드 내부 interrupt() 호출 (기존 방식)
+            elif hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
                 interrupt_value = snapshot.tasks[0].interrupts[0].value
 
         has_interrupt = bool(interrupt_value)
