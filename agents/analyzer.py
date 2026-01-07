@@ -275,18 +275,11 @@ def run(state: PlanCraftState) -> PlanCraftState:
                 analysis_dict["options"] = []
 
         else:
-            # [Source Gate] 직접 입력 → 기본적으로 NeedInfo (HITL 필요)
-            if num_missing <= 1:
-                # [Ambiguity Gate] 예외: 슬롯이 충분하면 AutoPlan 허용
-                get_file_logger().info(f"[Gate] 직접입력 + 슬롯 충분(누락 {num_missing}개) → AutoPlan (예외)")
-                analysis_dict["need_more_info"] = False
-                analysis_dict["option_question"] = None
-                analysis_dict["options"] = []
-            else:
-                # 직접 입력 + 슬롯 부족 → NeedInfo (기본 동작)
-                get_file_logger().info(f"[Gate] 직접입력 + 슬롯 {num_missing}개 누락 → NeedInfo (기본)")
-                analysis_dict["need_more_info"] = True
-                _set_hitl_options(analysis_dict, user_input, clarification_questions)
+            # [Source Gate] 직접 입력 → 무조건 NeedInfo (사용자 확인 필수)
+            # 사용자 의도: "템플릿이 아니면 무조건 '이렇게 진행할까요?' 확인"
+            get_file_logger().info(f"[Gate] 직접입력 → NeedInfo (무조건 확인)")
+            analysis_dict["need_more_info"] = True
+            _set_hitl_options(analysis_dict, user_input, clarification_questions)
 
         # LLM이 명시적으로 옵션을 제공한 경우 HITL 활성화
         opts = analysis_dict.get("options", [])
