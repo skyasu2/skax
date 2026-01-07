@@ -16,9 +16,19 @@ PlanCraft - Multi-Agent 설정 모듈
 """
 
 import os
+import sys
 from typing import Dict, List, Any, Optional, Callable, Type, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
+
+# =============================================================================
+# 프로젝트 루트 경로 보장 (Streamlit 환경 호환)
+# =============================================================================
+# importlib.import_module()이 실행 환경에 관계없이 동작하도록
+# 프로젝트 루트를 sys.path에 추가합니다.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 # =============================================================================
 # Type Checking용 Forward Reference (순환 import 방지)

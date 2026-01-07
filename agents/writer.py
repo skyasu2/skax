@@ -400,14 +400,23 @@ def _run_with_react_loop(
                 # AIMessage 추가
                 messages.append(response)
 
+                # 이미 응답한 tool_call_ids 추적
+                responded_tool_call_ids = set()
+                limit_reached = False
+
                 for tool_call in response.tool_calls:
                     if tool_call_count >= REACT_MAX_TOOL_CALLS:
                         logger.warning(f"[Writer ReAct] 최대 도구 호출 횟수 도달 ({REACT_MAX_TOOL_CALLS})")
-                        # 더 이상 도구 호출하지 않고 종료
-                        messages.append(ToolMessage(
-                            content="[LIMIT] 도구 호출 횟수 제한에 도달했습니다. 현재까지의 정보로 작성을 완료하세요.",
-                            tool_call_id=tool_call['id']
-                        ))
+                        # [FIX] 모든 남은 tool_calls에 대해 LIMIT 응답 추가 (OpenAI API 규약)
+                        # 병렬 tool_call 시 응답 누락으로 인한 400 에러 방지
+                        for remaining_tc in response.tool_calls:
+                            if remaining_tc['id'] not in responded_tool_call_ids:
+                                messages.append(ToolMessage(
+                                    content="[LIMIT] 도구 호출 횟수 제한에 도달했습니다. 현재까지의 정보로 작성을 완료하세요.",
+                                    tool_call_id=remaining_tc['id']
+                                ))
+                                responded_tool_call_ids.add(remaining_tc['id'])
+                        limit_reached = True
                         break
 
                     tool_name = tool_call['name']
@@ -431,6 +440,12 @@ def _run_with_react_loop(
                         content=result,
                         tool_call_id=tool_call['id']
                     ))
+                    responded_tool_call_ids.add(tool_call['id'])
+
+                # 제한 도달 시 루프 종료, 아니면 계속
+                if limit_reached:
+                    logger.info("[Writer ReAct] 도구 호출 제한으로 최종 작성 단계로 진입")
+                    break
 
                 # 도구 호출 후 루프 계속
                 continue
