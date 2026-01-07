@@ -353,6 +353,10 @@ def handle_workflow_result(final_result: Dict[str, Any], status_data: Dict = Non
     intent = final_result.get("intent")
     is_greeting = intent == "greeting"
 
+    # [DEBUG] 라우팅 판단 로깅
+    print(f"[UI DEBUG] intent={intent}, is_greeting={is_greeting}, generated_plan={bool(generated_plan)}, is_general={is_general}")
+    print(f"[UI DEBUG] final_result keys: {list(final_result.keys())}")
+
     # 결과 유형별 처리
     if is_greeting:
         # [NEW] greeting intent → 채팅으로 응답 (기획서 X)
