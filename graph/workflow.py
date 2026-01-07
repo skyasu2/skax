@@ -827,20 +827,22 @@ def compile_workflow(use_subgraphs: bool = False, checkpointer = None):
         use_subgraphs: 서브그래프 패턴 사용 여부
         checkpointer: [Optional] 외부 주입 Checkpointer (테스트용)
 
-    [LangGraph Best Practice] interrupt_before 사용
-    - 노드 내부 interrupt() 대신 컴파일 옵션으로 interrupt 지점 지정
-    - 더 안정적이고 예측 가능한 interrupt 동작
+    [LangGraph Best Practice] Dynamic interrupt() 사용
+    - 노드 내부에서 interrupt() 직접 호출 (option_pause_node 참조)
+    - 조건부 HITL 로직에 더 유연함
+    - 공식 권장: "Dynamic interrupts are recommended for HITL workflows"
     """
     # 체크포인터 설정 (외부 주입 없으면 기본값 사용)
     if checkpointer is None:
         from utils.checkpointer import get_checkpointer
         checkpointer = get_checkpointer()
 
-    # [FIX] interrupt_before로 HITL 지점 지정
-    # option_pause 노드 실행 전에 자동으로 interrupt 발생
+    # [UPDATE] Dynamic interrupt 패턴 사용
+    # option_pause_node 내부에서 interrupt() 직접 호출
+    # interrupt_before 제거 → 더 유연한 HITL 로직
     compile_options = {
         "checkpointer": checkpointer,
-        "interrupt_before": ["option_pause"],  # HITL 노드 전에 interrupt
+        # interrupt_before 제거: Dynamic interrupt() 사용
     }
 
     if use_subgraphs:
