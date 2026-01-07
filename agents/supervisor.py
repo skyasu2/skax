@@ -22,9 +22,9 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from utils.llm import get_llm
-from utils.file_logger import FileLogger
+from utils.file_logger import get_file_logger
 
-logger = FileLogger()
+logger = get_file_logger()
 
 from agents.supervisor_types import (
     AgentExecutionStats,

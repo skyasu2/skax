@@ -19,9 +19,9 @@ PlanCraft - Financial Agent (재무 시뮬레이션 에이전트)
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 from utils.llm import get_llm
-from utils.file_logger import FileLogger
+from utils.file_logger import get_file_logger
 
-logger = FileLogger()
+logger = get_file_logger()
 
 
 # =============================================================================

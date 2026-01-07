@@ -19,10 +19,10 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm import get_llm
-from utils.file_logger import FileLogger
+from utils.file_logger import get_file_logger
 import json
 
-logger = FileLogger()
+logger = get_file_logger()
 
 
 # =============================================================================

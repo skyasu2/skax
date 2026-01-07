@@ -10,9 +10,9 @@ PlanCraft - Business Model Agent (비즈니스 모델 에이전트)
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 from utils.llm import get_llm
-from utils.file_logger import FileLogger
+from utils.file_logger import get_file_logger
 
-logger = FileLogger()
+logger = get_file_logger()
 
 
 # =============================================================================
