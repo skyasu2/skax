@@ -475,10 +475,6 @@ WRITER_USER_PROMPT = """다음 정보를 바탕으로 전문적인 기획서를 
 {user_constraints}
 ---
 
-**시각화 지침 (Visual Instruction):**
-{visual_instruction}
----
-
 **참고 자료 (RAG):**
 {context}
 ---
@@ -520,6 +516,15 @@ WRITER_USER_PROMPT = """다음 정보를 바탕으로 전문적인 기획서를 
 
 10. **JSON Output**:
    - 위 내용을 바탕으로 `sections` 리스트를 담은 JSON 하나만 출력하세요.
+
+---
+🚨🚨🚨 **[최우선 필수] 시각적 요소 - 반드시 포함!** 🚨🚨🚨
+
+{visual_instruction}
+
+⚠️ **경고**: 위 시각적 요소가 포함되지 않으면 **검증 실패로 재작성** 요청됩니다!
+⚠️ Mermaid 다이어그램은 '시스템 아키텍처' 또는 '사용자 여정' 섹션에 포함하세요.
+⚠️ ASCII 차트는 '수익 모델' 또는 '성장 전략' 섹션에 포함하세요.
 """
 
 
