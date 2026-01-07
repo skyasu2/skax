@@ -425,20 +425,57 @@ def get_qa_app():
 # Sub-graph 실행 래퍼 (메인 Graph에서 노드로 사용)
 # =============================================================================
 
+def _should_skip_context_gathering(user_input: str) -> bool:
+    """
+    잡담/인사 입력에 대해 컨텍스트 수집을 스킵할지 판단
+
+    조건: 입력이 10자 미만 AND 기획 관련 키워드 없음
+    """
+    if not user_input or len(user_input.strip()) >= 10:
+        return False
+
+    # 기획 관련 키워드 (이 중 하나라도 있으면 검색 필요)
+    planning_keywords = [
+        "앱", "플랫폼", "서비스", "시스템", "웹", "사이트",
+        "기획", "사업", "창업", "스타트업", "비즈니스",
+        "리뷰", "추천", "검색", "관리", "예약", "배달", "쇼핑",
+        "만들어", "개발", "구축", "설계"
+    ]
+
+    input_lower = user_input.lower()
+    has_keyword = any(kw in input_lower for kw in planning_keywords)
+
+    return not has_keyword  # 키워드 없으면 스킵
+
+
 def run_context_subgraph(state: PlanCraftState) -> PlanCraftState:
     """
     컨텍스트 수집 서브그래프 (Context Sub-graph)
-    
+
     [PHASE 2] RAG 검색과 웹 검색을 병렬로 수행하여 성능 향상
-    
+    [PHASE 3] 잡담/인사 입력 시 검색 스킵으로 불필요한 API 호출 방지
+
     변경 전: RAG → Web (순차, ~5초)
     변경 후: RAG + Web (병렬, ~3초)
+    스킵 시: 즉시 반환 (~0초)
     """
     from graph.workflow import retrieve_context, fetch_web_context
     from graph.state import update_state
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import time
-    
+
+    user_input = state.get("user_input", "")
+
+    # [PHASE 3] 잡담/인사 사전 필터링 - 검색 스킵
+    if _should_skip_context_gathering(user_input):
+        print(f"[Subgraph] 짧은 입력 감지, 컨텍스트 수집 스킵: '{user_input}'")
+        return update_state(
+            state,
+            rag_context=None,
+            web_context=None,
+            current_step="context_gathering"
+        )
+
     # 1. 초기 상태 로깅
     current_history = state.get("step_history", []) or []
     print(f"[Subgraph] 병렬 Context Gathering Started")
