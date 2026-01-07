@@ -940,6 +940,17 @@ def run_plancraft(
                 if step_key and timeline_callback:
                     timeline_callback.set_step(step_key)
 
+        # [FIX] Interrupt 발생 시 stream 조기 종료
+        # stream 중에 interrupt가 발생하면 snapshot에서 확인 가능
+        try:
+            snapshot = app.get_state(config)
+            if snapshot.next and snapshot.tasks:
+                if hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
+                    # Interrupt 발생 - 스트림 종료
+                    break
+        except Exception:
+            pass  # 상태 조회 실패 시 계속 진행
+
     # 타임라인 완료 처리
     if timeline_callback:
         timeline_callback.finish()

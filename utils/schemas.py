@@ -31,6 +31,23 @@ from typing import List, Optional, Self, Literal, Dict, Any
 # Analyzer Agent 스키마
 # =============================================================================
 
+class IntentSlots(BaseModel):
+    """
+    의도 명확성 검사를 위한 슬롯 정보
+
+    사용자 입력에서 추출한 핵심 정보를 구조화합니다.
+    길이가 아닌 '정보 완전성'으로 HITL 필요 여부를 판단합니다.
+
+    Attributes:
+        target: 대상 (누구를 위한 서비스인가?)
+        purpose: 목적 (무엇을 해결하려 하는가?)
+        output_type: 산출물 형태 (앱, 웹, 사업계획서 등)
+    """
+    target: Optional[str] = Field(default=None, description="대상 (누구를 위한?)")
+    purpose: Optional[str] = Field(default=None, description="목적 (무엇을 위해?)")
+    output_type: Optional[str] = Field(default=None, description="산출물 형태 (앱, 웹, 서비스 등)")
+
+
 class OptionChoice(BaseModel):
     """
     사용자 선택 옵션
@@ -77,10 +94,24 @@ class AnalysisResult(BaseModel):
     
     # [추가] 문서 유형 분류
     doc_type: str = Field(
-        default="web_app_plan", 
+        default="web_app_plan",
         description="생성할 문서 유형 (web_app_plan, business_plan 중 하나)"
     )
-    
+
+    # [NEW] 슬롯 기반 의도 명확성 검사
+    intent_slots: Optional[IntentSlots] = Field(
+        default=None,
+        description="추출된 의도 슬롯 (target, purpose, output_type)"
+    )
+    missing_slots: List[str] = Field(
+        default_factory=list,
+        description="누락된 슬롯 목록 (예: ['target', 'purpose'])"
+    )
+    clarification_questions: List[str] = Field(
+        default_factory=list,
+        description="누락된 슬롯에 대한 구체적 질문 (최대 2개)"
+    )
+
     need_more_info: bool = Field(default=False, description="추가 정보 필요 여부")
 
     @model_validator(mode='after')
