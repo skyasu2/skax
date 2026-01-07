@@ -23,6 +23,27 @@ from utils.file_logger import get_file_logger
 
 # LLM은 함수 내에서 동적 초기화 (설정 유연성)
 
+
+def _set_hitl_options(analysis_dict: dict, user_input: str, clarification_questions: list) -> None:
+    """
+    HITL 옵션 설정 헬퍼 함수
+
+    사용자에게 진행 여부를 확인하는 옵션을 설정합니다.
+    """
+    topic = analysis_dict.get("topic", user_input)
+    questions_text = "\n".join(f"• {q}" for q in clarification_questions) if clarification_questions else ""
+
+    if questions_text:
+        analysis_dict["option_question"] = f"💡 '{topic}' 기획을 위해 확인이 필요합니다.\n{questions_text}"
+    else:
+        analysis_dict["option_question"] = f"💡 '{topic}' 기획을 이렇게 진행할까요?"
+
+    analysis_dict["options"] = [
+        {"id": "yes", "title": "네, 진행합니다", "description": "AI가 합리적인 가정으로 기획서 생성"},
+        {"id": "retry", "title": "수정할게요", "description": "추가 정보 입력 후 진행"}
+    ]
+
+
 def _get_analyzer_llm(temperature: float = None):
     """
     Analyzer LLM 생성 (동적 설정)
@@ -168,20 +189,29 @@ def run(state: PlanCraftState) -> PlanCraftState:
             f"router_intent={intent}"
         )
 
-        # [HITL 정책] 슬롯 기반 의도 명확성 검사
-        # - 슬롯이 2개 이상 누락: Clarification 질문 필요 (need_more_info=True)
-        # - 슬롯이 1개 이하 누락: AI가 합리적으로 추론 (need_more_info=False)
+        # =============================================================================
+        # 2-Tier Gate System: Source Gate → Ambiguity Gate
+        # =============================================================================
+        #
+        # [Source Gate] (Primary Decision)
+        # - 템플릿 실행 (is_template_execution=True) → AutoPlan 기본 (HITL 스킵)
+        # - 직접 입력 (is_template_execution=False) → NeedInfo 기본 (HITL 필요)
+        #
+        # [Ambiguity Gate] (Exception Handling)
+        # - 직접 입력 + 슬롯 완전(0-1개 누락) → AutoPlan (예외적 스킵)
+        # - 템플릿 + 슬롯 2개+ 누락 → NeedInfo (예외적 HITL)
+        # =============================================================================
+
         is_general = analysis_dict.get("is_general_query", False)
         missing_slots = analysis_dict.get("missing_slots", [])
         clarification_questions = analysis_dict.get("clarification_questions", [])
+        is_template = state.get("is_template_execution", False)
 
         # [FALLBACK] LLM이 missing_slots를 제공하지 않은 경우 코드에서 자체 검사
-        # intent_slots가 없거나 missing_slots가 비어있으면 직접 슬롯 검사
         intent_slots = analysis_dict.get("intent_slots")
         if not missing_slots and not is_general:
             detected_missing = []
 
-            # 슬롯 추출 시도 (intent_slots 또는 분석 결과에서)
             if intent_slots and isinstance(intent_slots, dict):
                 if not intent_slots.get("target"):
                     detected_missing.append("target")
@@ -190,15 +220,10 @@ def run(state: PlanCraftState) -> PlanCraftState:
                 if not intent_slots.get("output_type"):
                     detected_missing.append("output_type")
             else:
-                # intent_slots가 없으면 입력에서 직접 추론
                 input_lower = user_input.lower().strip()
                 output_keywords = ["앱", "웹", "사이트", "플랫폼", "서비스", "시스템", "어플"]
                 has_output_type = any(kw in input_lower for kw in output_keywords)
-
-                # target은 대부분 명시되지 않음
                 detected_missing.append("target")
-
-                # output_type 체크
                 if not has_output_type:
                     detected_missing.append("output_type")
 
@@ -207,19 +232,16 @@ def run(state: PlanCraftState) -> PlanCraftState:
                 analysis_dict["missing_slots"] = missing_slots
                 get_file_logger().info(f"[Fallback] 코드에서 슬롯 검사: missing_slots={missing_slots}")
 
-        # [GUARDRAIL] LLM이 짧은 키워드를 잡담으로 오판하는 경우 코드 레벨에서 강제 보정
-        # 예: "영화 리뷰", "맛집 추천" 등 -> 잡담 아님!
+        # [GUARDRAIL] 잡담 오분류 보정
         SERVICE_KEYWORDS = ["리뷰", "추천", "앱", "플랫폼", "기획", "개발", "아이디어", "창업", "사이트", "웹", "시스템", "서비스", "분석"]
         input_lower = user_input.lower().strip()
 
-        # 키워드가 포함되어 있는데 잡담으로 분류된 경우 -> 강제 전환
         if is_general and any(kw in input_lower for kw in SERVICE_KEYWORDS):
-            get_file_logger().info(f"[Guardrail] 잡담 오분류 감지됨 (키워드 포함). 기획 제안 모드로 강제 전환.")
+            get_file_logger().info(f"[Guardrail] 잡담 오분류 감지됨. 기획 모드로 강제 전환.")
             is_general = False
             analysis_dict["is_general_query"] = False
             analysis_dict["topic"] = analysis_dict.get("topic") if analysis_dict.get("topic") != "잡담" else f"{user_input} 서비스"
 
-            # 슬롯 정보가 없으면 기본 슬롯 누락으로 처리
             if not missing_slots:
                 missing_slots = ["target", "output_type"]
                 analysis_dict["missing_slots"] = missing_slots
@@ -228,35 +250,46 @@ def run(state: PlanCraftState) -> PlanCraftState:
                     "앱, 웹, 서비스 중 어떤 형태로 만들까요?"
                 ]
 
-        # [HITL 정책] 슬롯 기반 분기
-        if not is_general:
-            num_missing = len(missing_slots)
+        # =============================================================================
+        # 2-Tier Gate Logic
+        # =============================================================================
+        num_missing = len(missing_slots)
 
+        if is_general:
+            # 잡담은 HITL 불필요
+            analysis_dict["need_more_info"] = False
+            get_file_logger().info("[Gate] 잡담 → AutoPlan (HITL 불필요)")
+
+        elif is_template:
+            # [Source Gate] 템플릿 실행 → 기본적으로 AutoPlan
             if num_missing >= 2:
-                # 슬롯 2개 이상 누락: Clarification 질문 필요
-                get_file_logger().info(f"[HITL] Clarification 필요: 누락 슬롯 {num_missing}개 ({missing_slots})")
+                # [Ambiguity Gate] 예외: 필수 슬롯 2개+ 누락 시 HITL
+                get_file_logger().info(f"[Gate] 템플릿 + 슬롯 {num_missing}개 누락 → NeedInfo (예외)")
                 analysis_dict["need_more_info"] = True
-
-                # Clarification 질문이 없으면 기본 옵션 생성
-                if not analysis_dict.get("options"):
-                    topic = analysis_dict.get("topic", user_input)
-                    questions_text = "\n".join(f"• {q}" for q in clarification_questions) if clarification_questions else ""
-                    analysis_dict["option_question"] = f"💡 '{topic}' 기획을 위해 확인이 필요합니다.\n{questions_text}"
-                    analysis_dict["options"] = [
-                        {"id": "yes", "title": "AI가 알아서 진행", "description": "합리적인 가정으로 기획서 생성"},
-                        {"id": "retry", "title": "직접 답변할게요", "description": "위 질문에 답변 후 진행"}
-                    ]
+                _set_hitl_options(analysis_dict, user_input, clarification_questions)
             else:
-                # 슬롯 1개 이하 누락: 즉시 진행 (Fast Track)
-                get_file_logger().info(f"[HITL] Fast Track: 슬롯 충분 (누락 {num_missing}개), 바로 진행")
+                # 템플릿 + 슬롯 충분 → AutoPlan
+                get_file_logger().info(f"[Gate] 템플릿 + 슬롯 충분 → AutoPlan")
                 analysis_dict["need_more_info"] = False
                 analysis_dict["option_question"] = None
                 analysis_dict["options"] = []
 
-        # [HITL 정책] 옵션이 있으면 사용자 확인 필요
-        # LLM이 옵션을 제공했다면 이는 사용자에게 선택권을 주려는 의도이므로 HITL 활성화
-        opts = analysis_dict.get("options", [])
+        else:
+            # [Source Gate] 직접 입력 → 기본적으로 NeedInfo (HITL 필요)
+            if num_missing <= 1:
+                # [Ambiguity Gate] 예외: 슬롯이 충분하면 AutoPlan 허용
+                get_file_logger().info(f"[Gate] 직접입력 + 슬롯 충분(누락 {num_missing}개) → AutoPlan (예외)")
+                analysis_dict["need_more_info"] = False
+                analysis_dict["option_question"] = None
+                analysis_dict["options"] = []
+            else:
+                # 직접 입력 + 슬롯 부족 → NeedInfo (기본 동작)
+                get_file_logger().info(f"[Gate] 직접입력 + 슬롯 {num_missing}개 누락 → NeedInfo (기본)")
+                analysis_dict["need_more_info"] = True
+                _set_hitl_options(analysis_dict, user_input, clarification_questions)
 
+        # LLM이 명시적으로 옵션을 제공한 경우 HITL 활성화
+        opts = analysis_dict.get("options", [])
         if opts and len(opts) > 0:
             analysis_dict["need_more_info"] = True
             analysis_dict["is_general_query"] = False

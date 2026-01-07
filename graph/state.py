@@ -103,6 +103,7 @@ class PlanCraftInput(TypedDict, total=False):
     thread_id: str
     generation_preset: str  # [NEW] 생성 모드 프리셋 (fast/balanced/quality)
     intent: Optional[str]  # [NEW] Router intent 리셋용
+    is_template_execution: bool  # [NEW] 템플릿 실행 여부 (2-Tier Gate)
 
 
 # =============================================================================
@@ -274,6 +275,10 @@ class PlanCraftState(TypedDict, total=False):
     # [NEW] Smart Router 의도 분류 결과
     intent: Optional[str]  # "greeting" | "planning" | "confirmation"
 
+    # [NEW] 2-Tier Gate System - Source Gate
+    # 템플릿 실행인지 직접 입력인지 구분 (HITL 기본 동작 결정)
+    is_template_execution: bool  # True: AutoPlan 기본, False: NeedInfo 기본
+
 
 
 # =============================================================================
@@ -352,6 +357,9 @@ def create_initial_state(
 
         # Smart Router
         "intent": None,  # "greeting" | "planning" | "confirmation"
+
+        # 2-Tier Gate System
+        "is_template_execution": False,  # 기본값: 직접 입력 (NeedInfo 기본)
     }
 
 

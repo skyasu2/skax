@@ -822,19 +822,30 @@ def create_subgraph_workflow() -> StateGraph:
 def compile_workflow(use_subgraphs: bool = False, checkpointer = None):
     """
     워크플로우 컴파일
-    
+
     Args:
         use_subgraphs: 서브그래프 패턴 사용 여부
         checkpointer: [Optional] 외부 주입 Checkpointer (테스트용)
+
+    [LangGraph Best Practice] interrupt_before 사용
+    - 노드 내부 interrupt() 대신 컴파일 옵션으로 interrupt 지점 지정
+    - 더 안정적이고 예측 가능한 interrupt 동작
     """
     # 체크포인터 설정 (외부 주입 없으면 기본값 사용)
     if checkpointer is None:
         from utils.checkpointer import get_checkpointer
         checkpointer = get_checkpointer()
-    
+
+    # [FIX] interrupt_before로 HITL 지점 지정
+    # option_pause 노드 실행 전에 자동으로 interrupt 발생
+    compile_options = {
+        "checkpointer": checkpointer,
+        "interrupt_before": ["option_pause"],  # HITL 노드 전에 interrupt
+    }
+
     if use_subgraphs:
-        return create_subgraph_workflow().compile(checkpointer=checkpointer)
-    return create_workflow().compile(checkpointer=checkpointer)
+        return create_subgraph_workflow().compile(**compile_options)
+    return create_workflow().compile(**compile_options)
 
 
 # 전역 앱 인스턴스
@@ -853,7 +864,8 @@ def run_plancraft(
     callbacks: list = None,
     thread_id: str = "default_thread",
     resume_command: dict = None,  # [NEW] 재개를 위한 커맨드 데이터
-    generation_preset: str = None  # [NEW] 생성 모드 프리셋 (fast/balanced/quality)
+    generation_preset: str = None,  # [NEW] 생성 모드 프리셋 (fast/balanced/quality)
+    is_template_execution: bool = False  # [NEW] 템플릿 실행 여부 (2-Tier Gate)
 ) -> dict:
     """
     PlanCraft 워크플로우 실행 엔트리포인트
@@ -867,6 +879,7 @@ def run_plancraft(
         thread_id: 세션 ID
         resume_command: 인터럽트 후 재개를 위한 데이터 (Command resume)
         generation_preset: 생성 모드 프리셋 ("fast", "balanced", "quality")
+        is_template_execution: 템플릿 실행 여부 (True: AutoPlan 기본, False: NeedInfo 기본)
     """
     from graph.state import create_initial_state
     from langgraph.types import Command
@@ -885,6 +898,8 @@ def run_plancraft(
             "generation_preset": generation_preset or DEFAULT_PRESET,
             # [FIX] 새 요청마다 intent 리셋 (이전 세션 상태 오염 방지)
             "intent": None,
+            # [NEW] 2-Tier Gate System
+            "is_template_execution": is_template_execution,
         }
 
     # 워크플로우 실행설정
@@ -929,27 +944,15 @@ def run_plancraft(
                 timeline_callback = cb
                 break
 
-    # stream 모드로 실행하여 노드별 진행상황 추적
-    for event in app.stream(input_data, config=config, stream_mode="updates"):
-        final_state = event
-
-        # 노드 이름 추출 및 타임라인 업데이트
-        if isinstance(event, dict):
-            for node_name in event.keys():
-                step_key = NODE_TO_STEP.get(node_name)
-                if step_key and timeline_callback:
-                    timeline_callback.set_step(step_key)
-
-        # [FIX] Interrupt 발생 시 stream 조기 종료
-        # stream 중에 interrupt가 발생하면 snapshot에서 확인 가능
-        try:
-            snapshot = app.get_state(config)
-            if snapshot.next and snapshot.tasks:
-                if hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
-                    # Interrupt 발생 - 스트림 종료
-                    break
-        except Exception:
-            pass  # 상태 조회 실패 시 계속 진행
+    # [FIX] invoke 모드로 변경 - interrupt 발생 시 즉시 반환됨
+    # stream 모드는 interrupt 시 종료되지 않는 문제가 있음
+    try:
+        final_state = app.invoke(input_data, config=config)
+    except Exception as e:
+        # invoke 실패 시 에러 상태 반환
+        from utils.file_logger import get_file_logger
+        get_file_logger().error(f"[Workflow] invoke 실패: {e}")
+        return {"error": str(e)}
 
     # 타임라인 완료 처리
     if timeline_callback:
@@ -958,14 +961,37 @@ def run_plancraft(
     # [NEW] 인터럽트 상태 및 최종 상태 확인
     snapshot = app.get_state(config)
 
+    # [DEBUG] Interrupt 상태 로깅
+    from utils.file_logger import get_file_logger
+    logger = get_file_logger()
+    logger.info(f"[DEBUG] snapshot.next = {snapshot.next}")
+    logger.info(f"[DEBUG] snapshot.tasks = {len(snapshot.tasks) if snapshot.tasks else 0}")
+
     # stream 모드에서는 snapshot.values에서 전체 상태 가져오기
     final_state = snapshot.values if snapshot.values else final_state
 
     interrupt_payload = None
     if snapshot.next and snapshot.tasks:
-        # 다음 단계가 있는데 멈췄다면 인터럽트일 가능성 확인
-        # (LangGraph 최신 버전은 snapshot.tasks[0].interrupts에 정보가 있음)
-        if hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
+        # interrupt_before 사용 시 snapshot.next에 다음 노드가 있음
+        next_node = snapshot.next[0] if snapshot.next else None
+
+        # option_pause 노드 전에 interrupt 발생한 경우
+        if next_node == "option_pause":
+            # State에서 interrupt payload 구성
+            state_values = snapshot.values or {}
+            interrupt_payload = {
+                "type": "option_selector",
+                "question": state_values.get("option_question", "추가 정보가 필요합니다."),
+                "options": state_values.get("options", []),
+                "node_ref": "option_pause",
+                "data": {
+                    "user_input": state_values.get("user_input", ""),
+                    "topic": state_values.get("analysis", {}).get("topic", "") if state_values.get("analysis") else "",
+                    "clarification_questions": state_values.get("analysis", {}).get("clarification_questions", []) if state_values.get("analysis") else [],
+                }
+            }
+        # 기존 방식 (노드 내부 interrupt)도 지원
+        elif hasattr(snapshot.tasks[0], "interrupts") and snapshot.tasks[0].interrupts:
             interrupt_payload = snapshot.tasks[0].interrupts[0].value
 
     # 결과 반환 준비

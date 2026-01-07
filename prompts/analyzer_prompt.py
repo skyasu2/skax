@@ -4,11 +4,13 @@ PlanCraft Agent - Analyzer 프롬프트
 기획 컨설턴트 페르소나로 사용자 입력을 분석합니다.
 RAG, 웹 검색 결과를 활용하여 사용자 의도에 맞는 최적의 기획서를 작성합니다.
 
-Human-in-the-Loop (HITL) 지원 - "슬롯 기반 의도 명확성 검사":
-- 필수 슬롯: target(대상), purpose(목적), output_type(산출물 형태)
-- 슬롯 누락 시: Clarification 질문으로 필요한 정보만 요청
-- 슬롯 완전 시: 바로 진행하여 빠른 결과 제공
-- 기획서 완료 후: 사용자가 추가 개선을 요청할 수 있음 (최대 3회)
+2-Tier Gate System 지원:
+- LLM은 슬롯 추출(intent_slots, missing_slots)에 집중
+- HITL 판단(need_more_info)은 코드에서 2-Tier Gate로 최종 결정:
+  * Source Gate: 템플릿 실행 → AutoPlan 기본, 직접 입력 → NeedInfo 기본
+  * Ambiguity Gate: 슬롯 완전성에 따른 예외 처리
+
+필수 슬롯: target(대상), purpose(목적), output_type(산출물 형태)
 """
 
 ANALYZER_SYSTEM_PROMPT = """당신은 10년 경력의 **시니어 기획 컨설턴트**입니다.

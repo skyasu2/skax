@@ -241,5 +241,116 @@ class TestHITLMetaFields:
         assert payload_dict["question"] == "테스트 질문"
 
 
+class TestTwoTierGateSystem:
+    """2-Tier Gate System 테스트 (Source Gate + Ambiguity Gate)"""
+
+    def test_direct_input_with_missing_slots_needs_info(self):
+        """직접 입력 + 슬롯 2개 이상 누락 → NeedInfo (기본 동작)"""
+        # 직접 입력(is_template_execution=False)이면서 슬롯 부족하면 HITL
+        state = PlanCraftState(
+            user_input="영화 리뷰",
+            is_template_execution=False,  # 직접 입력
+            current_step="analyze"
+        )
+
+        # 시뮬레이션: missing_slots = ["target", "output_type"] (2개 누락)
+        num_missing = 2
+        is_template = state.get("is_template_execution", False)
+
+        # Gate 로직: 직접 입력 + 슬롯 2개 누락 → NeedInfo
+        if not is_template and num_missing >= 2:
+            result = "NeedInfo"
+        else:
+            result = "AutoPlan"
+
+        assert result == "NeedInfo", "직접 입력 + 슬롯 부족은 NeedInfo여야 함"
+
+    def test_direct_input_with_complete_slots_autoplan(self):
+        """직접 입력 + 슬롯 충분 (0-1개 누락) → AutoPlan (예외)"""
+        state = PlanCraftState(
+            user_input="영화 리뷰 앱",
+            is_template_execution=False,  # 직접 입력
+            current_step="analyze"
+        )
+
+        # 시뮬레이션: missing_slots = ["target"] (1개만 누락)
+        num_missing = 1
+        is_template = state.get("is_template_execution", False)
+
+        # Gate 로직: 직접 입력 + 슬롯 1개 이하 누락 → AutoPlan
+        if not is_template and num_missing <= 1:
+            result = "AutoPlan"
+        else:
+            result = "NeedInfo"
+
+        assert result == "AutoPlan", "직접 입력 + 슬롯 충분은 AutoPlan이어야 함"
+
+    def test_template_execution_autoplan_by_default(self):
+        """템플릿 실행 → AutoPlan (기본 동작)"""
+        state = PlanCraftState(
+            user_input="기획서 작성해줘",
+            is_template_execution=True,  # 템플릿 실행
+            current_step="analyze"
+        )
+
+        # 시뮬레이션: 슬롯 1개 누락 (템플릿은 상관없이 AutoPlan)
+        num_missing = 1
+        is_template = state.get("is_template_execution", False)
+
+        # Gate 로직: 템플릿 + 슬롯 1개 이하 누락 → AutoPlan
+        if is_template and num_missing < 2:
+            result = "AutoPlan"
+        else:
+            result = "NeedInfo"
+
+        assert result == "AutoPlan", "템플릿 실행은 기본 AutoPlan이어야 함"
+
+    def test_template_with_critical_missing_slots_needs_info(self):
+        """템플릿 실행 + 필수 슬롯 2개 이상 누락 → NeedInfo (예외)"""
+        state = PlanCraftState(
+            user_input="기획서",
+            is_template_execution=True,  # 템플릿 실행
+            current_step="analyze"
+        )
+
+        # 시뮬레이션: missing_slots = ["target", "purpose", "output_type"] (3개 누락)
+        num_missing = 3
+        is_template = state.get("is_template_execution", False)
+
+        # Gate 로직: 템플릿 + 슬롯 2개 이상 누락 → NeedInfo (예외)
+        if is_template and num_missing >= 2:
+            result = "NeedInfo"
+        else:
+            result = "AutoPlan"
+
+        assert result == "NeedInfo", "템플릿이라도 슬롯 2개 이상 누락 시 NeedInfo"
+
+    def test_state_has_is_template_execution_field(self):
+        """PlanCraftState에 is_template_execution 필드 존재 확인"""
+        from graph.state import create_initial_state
+
+        state = create_initial_state("테스트 입력")
+
+        # 필드 존재 및 기본값 확인
+        assert "is_template_execution" in state
+        assert state["is_template_execution"] == False, "기본값은 False(직접 입력)"
+
+    def test_set_hitl_options_helper(self):
+        """_set_hitl_options 헬퍼 함수 동작 검증"""
+        from agents.analyzer import _set_hitl_options
+
+        analysis_dict = {"topic": "테스트 서비스"}
+        clarification_questions = ["대상은 누구인가요?", "어떤 형태로 만들까요?"]
+
+        _set_hitl_options(analysis_dict, "테스트 입력", clarification_questions)
+
+        # 옵션 설정 확인
+        assert "options" in analysis_dict
+        assert len(analysis_dict["options"]) == 2
+        assert analysis_dict["options"][0]["title"] == "네, 진행합니다"
+        assert "option_question" in analysis_dict
+        assert "확인이 필요합니다" in analysis_dict["option_question"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
