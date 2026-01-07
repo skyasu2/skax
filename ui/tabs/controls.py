@@ -92,6 +92,13 @@ def render_input_area():
         st.session_state.chat_history.append({"role": "user", "content": user_input, "type": "text"})
         st.session_state.input_key += 1
         st.session_state.pending_input = user_input
+
+        # [FIX] 새 대화 메시지마다 thread_id 갱신 (이전 상태 오염 방지)
+        # Resume(HITL 응답)이 아닌 새 질문일 때만 thread_id 갱신
+        if not st.session_state.current_state or not st.session_state.current_state.get("need_more_info"):
+            import uuid
+            st.session_state.thread_id = str(uuid.uuid4())
+
         st.rerun()
 
     return status_placeholder
