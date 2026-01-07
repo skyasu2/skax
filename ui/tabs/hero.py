@@ -73,8 +73,8 @@ def render_brainstorming_hero():
     ">
         <strong>💡 Tip: 빠른 기획서 생성을 위한 입력 가이드</strong>
         <p style="margin: 8px 0 0 0; color: #495057; font-size: 0.9rem;">
-            <b>20자 이상</b> 입력 시 확인 절차 없이 바로 기획서가 생성됩니다.<br/>
-            예) "직장인을 위한 AI 기반 식단 관리 앱" ✅ &nbsp; vs &nbsp; "다이어트 앱" ❓ (확인 필요)
+            <b>위 예시 버튼</b>을 클릭하면 바로 기획서가 생성됩니다.<br/>
+            직접 입력 시에는 AI가 기획 방향을 먼저 확인합니다.
         </p>
     </div>
     """, unsafe_allow_html=True)
