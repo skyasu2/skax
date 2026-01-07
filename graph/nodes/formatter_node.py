@@ -38,23 +38,24 @@ def run_formatter_node(state: PlanCraftState) -> PlanCraftState:
     final_md = ""
 
     if draft:
+        from graph.state import ensure_dict
+
         # Title 추출
         title = "기획서"
         if structure:
-            title = structure.get("title") if isinstance(structure, dict) else getattr(structure, "title", "기획서")
+            structure_dict = ensure_dict(structure)
+            title = structure_dict.get("title", "기획서")
 
         final_md = f"# {title}\n\n"
 
         # Sections 추출
-        sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
+        draft_dict = ensure_dict(draft)
+        sections = draft_dict.get("sections", [])
 
         for sec in sections:
-            if isinstance(sec, dict):
-                name = sec.get("name", "")
-                content = sec.get("content", "")
-            else:
-                name = sec.name
-                content = sec.content
+            sec_dict = ensure_dict(sec)
+            name = sec_dict.get("name", "")
+            content = sec_dict.get("content", "")
             final_md += f"## {name}\n\n{content}\n\n"
 
         # 웹 검색 출처 추가

@@ -116,8 +116,12 @@ def run(state: PlanCraftState) -> PlanCraftState:
     # 현재 draft를 백업
     previous_text = ""
     if draft:
-        sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
-        previous_text = "\n\n".join([f"## {s.get('name', '')}\n{s.get('content', '')}" if isinstance(s, dict) else f"## {s.name}\n{s.content}" for s in sections])
+        draft_dict = ensure_dict(draft)
+        sections = draft_dict.get("sections", [])
+        previous_text = "\n\n".join([
+            f"## {ensure_dict(s).get('name', '')}\n{ensure_dict(s).get('content', '')}"
+            for s in sections
+        ])
 
     return update_state(
         state,

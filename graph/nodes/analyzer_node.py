@@ -41,8 +41,9 @@ def run_analyzer_node(state: PlanCraftState) -> PlanCraftState:
     analysis = new_state.get("analysis")
     topic = "N/A"
     if analysis:
-        # Pydantic 호환
-        topic = analysis.get("topic") if isinstance(analysis, dict) else getattr(analysis, "topic", "N/A")
+        from graph.state import ensure_dict
+        analysis_dict = ensure_dict(analysis)
+        topic = analysis_dict.get("topic", "N/A")
     
     return update_step_history(
         new_state, 

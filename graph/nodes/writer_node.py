@@ -40,10 +40,11 @@ def run_writer_node(state: PlanCraftState) -> PlanCraftState:
     draft = new_state.get("draft")
     draft_len = 0
     if draft:
-        sections = draft.get("sections") if isinstance(draft, dict) else getattr(draft, "sections", [])
+        from graph.state import ensure_dict
+        draft_dict = ensure_dict(draft)
+        sections = draft_dict.get("sections", [])
         if sections:
-             # SectionContent 객체 or dict
-             draft_len = sum(len(s.get("content", "") if isinstance(s, dict) else s.content) for s in sections)
+            draft_len = sum(len(ensure_dict(s).get("content", "")) for s in sections)
     
     return update_step_history(
         new_state, "write", "SUCCESS", summary=f"초안 작성 완료 ({draft_len}자)", start_time=start_time

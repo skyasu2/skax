@@ -2,6 +2,8 @@
 Draft Validator Helper
 """
 from typing import List
+from graph.state import ensure_dict
+
 
 def validate_draft(draft_dict: dict, preset, specialist_context: str,
                     refine_count: int, logger) -> List[str]:
@@ -32,8 +34,9 @@ def validate_draft(draft_dict: dict, preset, specialist_context: str,
     # 검증 2: 섹션별 최소 길이
     short_sections = []
     for sec in sections:
-        sec_name = sec.get("name", "") if isinstance(sec, dict) else getattr(sec, "name", "")
-        sec_content = sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+        sec_dict = ensure_dict(sec)
+        sec_name = sec_dict.get("name", "")
+        sec_content = sec_dict.get("content", "")
         if len(sec_content) < MIN_CONTENT_LENGTH:
             short_sections.append(sec_name)
 
@@ -43,7 +46,7 @@ def validate_draft(draft_dict: dict, preset, specialist_context: str,
     # 검증 3: Mermaid 다이어그램
     if preset.include_diagrams > 0:
         has_mermaid = any(
-            "```mermaid" in (sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", ""))
+            "```mermaid" in ensure_dict(sec).get("content", "")
             for sec in sections
         )
         if not has_mermaid:
@@ -53,7 +56,7 @@ def validate_draft(draft_dict: dict, preset, specialist_context: str,
     if preset.include_charts > 0:
         chart_indicators = ["▓", "░", "█", "■", "□", "●", "○"]
         has_chart = any(
-            any(ind in (sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")) for ind in chart_indicators)
+            any(ind in ensure_dict(sec).get("content", "") for ind in chart_indicators)
             for sec in sections
         )
         if not has_chart:
@@ -62,7 +65,7 @@ def validate_draft(draft_dict: dict, preset, specialist_context: str,
     # 검증 5: Specialist 분석 반영
     if specialist_context and refine_count == 0:
         all_content = " ".join(
-            sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+            ensure_dict(sec).get("content", "")
             for sec in sections
         )
         specialist_checks = {

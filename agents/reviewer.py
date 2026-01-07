@@ -32,20 +32,21 @@ def run(state: PlanCraftState) -> PlanCraftState:
     if not draft:
         return update_state(state, error="검토할 초안이 없습니다.")
     
-    # Draft 내용 추출
-    if isinstance(draft, dict):
-        sections = draft.get("sections", [])
-    else:
-        sections = getattr(draft, "sections", [])
-        
-    full_text = "\n\n".join([f"## {s.get('name', '')}\n{s.get('content', '')}" if isinstance(s, dict) else f"## {s.name}\n{s.content}" for s in sections])
-    
+    # Draft 내용 추출 (ensure_dict로 통일)
+    draft_dict = ensure_dict(draft)
+    sections = draft_dict.get("sections", [])
+
+    full_text = "\n\n".join([
+        f"## {ensure_dict(s).get('name', '')}\n{ensure_dict(s).get('content', '')}"
+        for s in sections
+    ])
+
     rag_context = state.get("rag_context", "")
     web_context = state.get("web_context", "")
-    
+
     # [NEW] 전문 에이전트 분석 결과를 컨텍스트에 추가 (교차 검증용)
-    specialist_analysis = state.get("specialist_analysis", {})
-    specialist_context = specialist_analysis.get("integrated_context", "") if isinstance(specialist_analysis, dict) else ""
+    specialist_analysis = ensure_dict(state.get("specialist_analysis", {}))
+    specialist_context = specialist_analysis.get("integrated_context", "")
     
     context = f"{rag_context}\n{web_context}"
     if specialist_context:

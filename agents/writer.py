@@ -258,15 +258,17 @@ def _write_in_chunks(llm, base_messages, structure_obj, logger):
         dict: 합쳐진 DraftResult 딕셔너리
     """
     import copy
-    
-    sections = structure_obj.get("sections", []) if isinstance(structure_obj, dict) else getattr(structure_obj, "sections", [])
+    from graph.state import ensure_dict
+
+    structure_dict = ensure_dict(structure_obj)
+    sections = structure_dict.get("sections", [])
     if not sections:
         raise ValueError("구조에 섹션 정보가 없습니다.")
 
     full_draft = {
-        "title": getattr(structure_obj, "title", "Business Plan"),
+        "title": structure_dict.get("title", "Business Plan"),
         "sections": [],
-        "key_features": [] # 나중에 첫 청크에서 가져옴
+        "key_features": []  # 나중에 첫 청크에서 가져옴
     }
     
     # 청크 사이즈: 3개 섹션씩

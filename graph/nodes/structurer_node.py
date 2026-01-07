@@ -28,7 +28,9 @@ def run_structurer_node(state: PlanCraftState) -> PlanCraftState:
     structure = new_state.get("structure")
     count = 0
     if structure:
-        sections = structure.get("sections") if isinstance(structure, dict) else getattr(structure, "sections", [])
+        from graph.state import ensure_dict
+        structure_dict = ensure_dict(structure)
+        sections = structure_dict.get("sections", [])
         count = len(sections) if sections else 0
     
     return update_step_history(

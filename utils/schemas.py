@@ -191,7 +191,9 @@ class JudgeResult(BaseModel):
         strengths: 잘된 점들
         weaknesses: 약한 점들
         action_items: 구체적인 수정 지시사항
+        target_sections: 수정이 필요한 섹션 목록
         reasoning: 판정 이유 (1-2문장)
+        feedback_summary: 전반적인 피드백 요약 (Refiner/Analyzer 참조용)
     """
     overall_score: int = Field(ge=1, le=10, description="전체 점수 (1-10)")
     verdict: str = Field(description="판정: PASS, REVISE, FAIL")
@@ -201,6 +203,7 @@ class JudgeResult(BaseModel):
     action_items: List[str] = Field(default_factory=list, description="구체적 수정 지시")
     target_sections: List[str] = Field(default_factory=list, description="수정이 필요한 섹션 이름 또는 ID 목록")
     reasoning: str = Field(default="", description="판정 이유")
+    feedback_summary: str = Field(default="", description="전반적인 피드백 요약 (Refiner/Analyzer 참조용)")
 
     @field_validator('verdict')
     @classmethod
