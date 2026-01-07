@@ -679,7 +679,10 @@ class NativeSupervisor:
         if agent_id == "market":
             ctx["target_market"] = base_context.get("target_market", "")
             ctx["web_search_results"] = base_context.get("web_search_results")
-            
+
+            # [NEW] 심층 분석 모드에서 추가 검색 허용
+            ctx["allow_additional_search"] = base_context.get("deep_analysis_mode", False)
+
             # [NEW] 심층 분석 모드
             if base_context.get("deep_analysis_mode", False):
                 ctx["analysis_requirements"] = "Provide deep comparative analysis with at least 3 competitors."

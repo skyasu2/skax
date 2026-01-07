@@ -3,6 +3,10 @@ PlanCraft Agent - Web Search Executor
 
 웹 검색 실행 로직을 전담하는 모듈입니다.
 URL 직접 조회(Fetch) 및 Tavily 검색(Search)을 병렬로 처리합니다.
+
+[UPDATE] v1.5.0
+- 프리셋 기반 검색 제어 (max_queries, search_depth)
+- 검색 결과 캐싱 연동
 """
 
 import re
@@ -10,15 +14,28 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tools.mcp_client import fetch_url_sync, search_sync
 from tools.web_search import should_search_web
 from tools.search_client import _is_blocked_domain  # [NEW] 도메인 필터링
+from tools.search_cache import get_cached_search, cache_search_result, get_cache_stats  # [NEW] 캐싱
 
 
-def execute_web_search(user_input: str, rag_context: str = "") -> dict:
+def execute_web_search(
+    user_input: str,
+    rag_context: str = "",
+    max_queries: int = 3,      # [NEW] 최대 쿼리 수
+    search_depth: str = "basic"  # [NEW] 검색 깊이 (basic/advanced)
+) -> dict:
     """
     웹 검색 또는 URL 조회를 수행하고 결과를 반환합니다.
-    
+
+    [UPDATE] v1.5.0
+    - max_queries: 프리셋 기반 쿼리 수 제한
+    - search_depth: 검색 깊이 (basic=빠른, advanced=심층)
+    - 캐싱: 동일 쿼리 중복 호출 방지
+
     Args:
         user_input: 사용자 입력 문자열
         rag_context: RAG 검색 컨텍스트 (참고용)
+        max_queries: 최대 검색 쿼리 수 (기본 3)
+        search_depth: 검색 깊이 - "basic" 또는 "advanced" (기본 "basic")
 
     Returns:
         dict: {
@@ -55,8 +72,9 @@ def execute_web_search(user_input: str, rag_context: str = "") -> dict:
         
         # 2. URL이 없으면 조건부 웹 검색
         else:
-            decision = should_search_web(user_input, rag_context if rag_context else "")
-            print(f"[WebSearch] Decision: should_search={decision['should_search']}, reason={decision.get('reason', 'N/A')}")
+            # [NEW] max_queries 파라미터 전달
+            decision = should_search_web(user_input, rag_context if rag_context else "", max_queries=max_queries)
+            print(f"[WebSearch] Decision: should_search={decision['should_search']}, reason={decision.get('reason', 'N/A')}, max_queries={max_queries}, depth={search_depth}")
 
             if decision["should_search"]:
                 search_queries = decision["search_query"]
@@ -70,10 +88,23 @@ def execute_web_search(user_input: str, rag_context: str = "") -> dict:
                 print(f"[WebSearch] Executing Queries: {queries}")
 
                 if queries:
-                    # [Optimization] 다중 쿼리 병렬 실행
+                    # [Optimization] 다중 쿼리 병렬 실행 + 캐싱
                     def run_query(idx, q):
                         try:
-                            return idx, q, search_sync(q)
+                            # [NEW] 캐시 먼저 확인
+                            cached = get_cached_search(q)
+                            if cached:
+                                print(f"[WebSearch] Cache HIT: {q[:30]}...")
+                                return idx, q, cached
+
+                            # 캐시 미스 → 실제 검색
+                            result = search_sync(q, search_depth=search_depth)
+
+                            # [NEW] 결과 캐싱
+                            if result.get("success"):
+                                cache_search_result(q, result)
+
+                            return idx, q, result
                         except Exception as e:
                             return idx, q, {"success": False, "error": str(e)}
 

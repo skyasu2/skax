@@ -13,15 +13,35 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
     """
     조건부 웹 정보 수집 노드
 
+    [UPDATE] v1.5.0 - 프리셋 기반 웹 검색 최적화
+    - fast: 1개 쿼리, basic depth
+    - balanced: 3개 쿼리, basic depth
+    - quality: 5개 쿼리, advanced depth
+
     Side-Effect: 외부 웹 API 호출 (Tavily Search)
     - 실패 시 재시도 안전함 (조회 전용, 멱등성 보장)
-    - 중복 호출 시 동일 결과 반환 (검색 결과 캐싱 없음)
+    - 검색 결과 캐싱으로 중복 호출 방지
 
     LangSmith: run_name="📚 컨텍스트 수집", tags=["rag", "retrieval", "web", "search", "tavily"]
     """
     import time
+    from utils.settings import get_preset
+
     start_time = time.time()
-    
+
+    # [NEW] 프리셋 설정 로드
+    preset_key = state.get("generation_preset", "balanced")
+    preset = get_preset(preset_key)
+
+    # [NEW] 웹 검색 비활성화 체크
+    if not preset.web_search_enabled:
+        print(f"[FetchWeb] 웹 검색 비활성화 (preset={preset_key})")
+        return update_step_history(
+            update_state(state, web_context=None, web_urls=[], web_sources=[]),
+            "fetch_web", "SKIPPED", "웹 검색 비활성화됨",
+            start_time=start_time
+        )
+
     user_input = state.get("user_input", "")
     rag_context = state.get("rag_context")
     
@@ -43,7 +63,14 @@ def fetch_web_context(state: PlanCraftState) -> PlanCraftState:
                 print(f"[FetchWeb] 쿼리 최적화: '{user_input}' -> '{search_input}'")
 
     # 1. 웹 검색 실행 (Executor 위임)
-    result = execute_web_search(search_input, rag_context)
+    # [NEW] 프리셋 기반 파라미터 전달
+    print(f"[FetchWeb] Preset={preset_key}, max_queries={preset.web_search_max_queries}, depth={preset.web_search_depth}")
+    result = execute_web_search(
+        search_input,
+        rag_context,
+        max_queries=preset.web_search_max_queries,
+        search_depth=preset.web_search_depth
+    )
 
     # [DEBUG] 웹 검색 결과 상세 로그
     print(f"[FETCH_WEB DEBUG] urls={len(result.get('urls', []))}, sources={len(result.get('sources', []))}, context_len={len(result.get('context') or '')}, error={result.get('error')}")

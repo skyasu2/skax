@@ -57,6 +57,11 @@ class GenerationPreset(BaseModel):
     # [NEW] Writer ReAct 패턴 설정
     enable_writer_react: bool = Field(default=False, description="Writer ReAct 모드 활성화 (Balanced/Quality)")
     react_max_tool_calls: int = Field(default=3, description="ReAct 최대 도구 호출 횟수")
+    # [NEW] 웹 검색 최적화 설정
+    web_search_enabled: bool = Field(default=True, description="웹 검색 활성화")
+    web_search_depth: str = Field(default="basic", description="검색 깊이 (basic/advanced)")
+    web_search_max_queries: int = Field(default=3, description="최대 검색 쿼리 수")
+    market_agent_search: bool = Field(default=False, description="MarketAgent 추가 검색 허용")
 
 
 # 프리셋 정의
@@ -86,6 +91,11 @@ GENERATION_PRESETS = {
         # Writer ReAct: 균형 모드에서 활성화
         enable_writer_react=True,
         react_max_tool_calls=3,
+        # [NEW] 웹 검색: 표준 (3개 쿼리)
+        web_search_enabled=True,
+        web_search_depth="basic",
+        web_search_max_queries=3,
+        market_agent_search=False,
     ),
     "fast": GenerationPreset(
         name="빠른 생성",
@@ -102,6 +112,11 @@ GENERATION_PRESETS = {
         structurer_max_retries=2,  # 구조 검증은 고정
         include_diagrams=0,  # 빠른 모드: 시각 자료 없음
         include_charts=0,
+        # [NEW] 웹 검색: 최소화 (1개 쿼리만)
+        web_search_enabled=True,
+        web_search_depth="basic",
+        web_search_max_queries=1,
+        market_agent_search=False,
     ),
     "quality": GenerationPreset(
         name="고품질",
@@ -127,6 +142,11 @@ GENERATION_PRESETS = {
         # Writer ReAct: 고품질 모드에서 활성화
         enable_writer_react=True,
         react_max_tool_calls=3,
+        # [NEW] 웹 검색: 심층 (5개 쿼리, advanced)
+        web_search_enabled=True,
+        web_search_depth="advanced",
+        web_search_max_queries=5,
+        market_agent_search=True,  # MarketAgent 추가 검색 허용
     ),
 }
 

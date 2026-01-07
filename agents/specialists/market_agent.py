@@ -78,16 +78,22 @@ class MarketAgent:
         self,
         service_overview: str,
         target_market: str,
-        web_search_results: List[Dict[str, Any]] = None
+        web_search_results: List[Dict[str, Any]] = None,
+        allow_additional_search: bool = False  # [NEW] 추가 검색 허용 여부
     ) -> Dict[str, Any]:
         """
-        시장 분석을 수행합니다. (Active Search 적용)
-        
+        시장 분석을 수행합니다.
+
+        [UPDATE] v1.5.0 - 조건부 추가 검색
+        - allow_additional_search=True이고 시장 규모 데이터가 없으면 추가 검색 수행
+        - quality 프리셋에서만 활성화됨
+
         Args:
             service_overview: 서비스 개요
             target_market: 타겟 시장
             web_search_results: 초기 웹 검색 결과 (참고용)
-            
+            allow_additional_search: 추가 검색 허용 여부 (quality 모드에서 True)
+
         Returns:
             MarketAnalysis dict
         """
@@ -99,8 +105,8 @@ class MarketAgent:
         from langgraph.prebuilt import create_react_agent
         from langchain_core.messages import SystemMessage, HumanMessage
         
-        logger.info(f"[{self.name}] 시장 분석 시작 (Context-based Only)")
-        
+        logger.info(f"[{self.name}] 시장 분석 시작 (allow_additional_search={allow_additional_search})")
+
         # 1. 초기 컨텍스트 구성
         # 이미 text로 포맷팅된 web_context가 들어올 수도 있고, list[dict]가 들어올 수도 있음
         web_context_str = ""
@@ -109,6 +115,14 @@ class MarketAgent:
         elif isinstance(web_search_results, list):
             for result in web_search_results[:5]:
                 web_context_str += f"- {result.get('title', '')}: {result.get('content', '')[:500]}\n"
+
+        # [NEW] 조건부 추가 검색 (quality 모드)
+        if allow_additional_search and not self._has_market_size_data(web_context_str):
+            logger.info(f"[{self.name}] 시장 규모 데이터 부족, 추가 검색 수행")
+            additional_context = self._search_market_data(target_market or service_overview)
+            if additional_context:
+                web_context_str = f"{web_context_str}\n\n[추가 검색 결과]\n{additional_context}"
+                logger.info(f"[{self.name}] 추가 검색 완료 ({len(additional_context)}자)")
         
         # 2. 프롬프트 구성
         user_prompt_content = MARKET_USER_PROMPT.format(
@@ -215,6 +229,51 @@ class MarketAgent:
             ]
         }
     
+    def _has_market_size_data(self, context: str) -> bool:
+        """
+        컨텍스트에 시장 규모 관련 데이터가 있는지 확인
+
+        Args:
+            context: 웹 검색 컨텍스트 문자열
+
+        Returns:
+            bool: 시장 규모 키워드가 있으면 True
+        """
+        if not context:
+            return False
+
+        keywords = [
+            "시장 규모", "market size", "TAM", "SAM", "SOM",
+            "억원", "조원", "billion", "trillion",
+            "성장률", "CAGR", "growth rate",
+            "시장 점유율", "market share"
+        ]
+        context_lower = context.lower()
+        return any(kw.lower() in context_lower for kw in keywords)
+
+    def _search_market_data(self, topic: str) -> str:
+        """
+        시장 규모 특화 추가 검색 (1회만)
+
+        Args:
+            topic: 검색 주제
+
+        Returns:
+            str: 검색 결과 문자열
+        """
+        try:
+            from tools.search_client import get_search_client
+
+            client = get_search_client()
+            query = f"{topic} 시장 규모 통계 2026"
+            logger.info(f"[{self.name}] 추가 검색 쿼리: {query}")
+
+            result = client.search(query, max_results=3)
+            return result if result else ""
+        except Exception as e:
+            logger.warning(f"[{self.name}] 추가 검색 실패: {e}")
+            return ""
+
     def format_as_markdown(self, analysis: Dict[str, Any]) -> str:
         """시장 분석을 마크다운 형식으로 변환"""
         md = "### 시장 규모\n\n"

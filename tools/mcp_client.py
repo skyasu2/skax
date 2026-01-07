@@ -219,16 +219,25 @@ class MCPToolkit:
         except Exception as e:
             return f"[웹 조회 실패: {str(e)}]"
     
-    def _fallback_search(self, query: str, max_results: int = 5) -> Dict[str, Any]:
+    def _fallback_search(
+        self,
+        query: str,
+        max_results: int = 5,
+        search_depth: str = "basic"  # [NEW] 검색 깊이 파라미터
+    ) -> Dict[str, Any]:
         """
         Tavily Python SDK를 사용한 웹 검색
-        
+
+        [UPDATE] v1.5.0 - search_depth 파라미터 추가
+        - basic: 빠른 검색 (비용 절감)
+        - advanced: 심층 검색 (품질 향상)
+
         MCP 없이도 Tavily API로 직접 검색합니다.
         """
         try:
             from tavily import TavilyClient
             from utils.config import Config
-            
+
             if not Config.TAVILY_API_KEY:
                 return {
                     "success": False,
@@ -237,18 +246,19 @@ class MCPToolkit:
                     "error": "TAVILY_API_KEY not configured",
                     "source": "no-api-key"
                 }
-            
+
             # Tavily 클라이언트 생성
             client = TavilyClient(api_key=Config.TAVILY_API_KEY)
-            
-            # [개선] 고급 검색 옵션 활성화
+
+            # [UPDATE] 프리셋 기반 검색 깊이 적용
             search_params = {
                 "query": query,
-                "search_depth": "advanced", # 심층 검색
+                "search_depth": search_depth,  # [NEW] 파라미터로 전달
                 "include_answer": True,     # AI 요약 답변 포함
-                "include_raw_content": True,# 본문 원문 포함
+                "include_raw_content": search_depth == "advanced",  # advanced일 때만 본문 포함
                 "max_results": max_results
             }
+            print(f"[Tavily SDK] search_depth={search_depth}, max_results={max_results}")
             
             response = client.search(**search_params)
             
@@ -410,26 +420,37 @@ def fetch_url_sync(url: str, max_length: int = 5000) -> str:
     return toolkit._fallback_fetch(url, max_length)
 
 
-def search_sync(query: str, max_results: int = 5) -> Dict[str, Any]:
+def search_sync(
+    query: str,
+    max_results: int = 5,
+    search_depth: str = "basic"  # [NEW] 검색 깊이 (basic/advanced)
+) -> Dict[str, Any]:
     """
     동기적으로 웹 검색
-    
+
+    [UPDATE] v1.5.0 - search_depth 파라미터 추가
+
+    Args:
+        query: 검색 쿼리
+        max_results: 최대 결과 수
+        search_depth: 검색 깊이 ("basic" 또는 "advanced")
+
     MCP 모드: 비동기 Tavily MCP 호출을 동기로 변환
     Fallback 모드: 빈 결과 반환 (DuckDuckGo 제거됨)
     """
     from utils.config import Config
     import shutil
-    
+
     # [수정] npx 감지 - 없으면 즉시 Fallback (Async 루프 진입 방지)
     has_npx = shutil.which("npx") is not None
-    
+
     if Config.MCP_ENABLED and has_npx:
         try:
             async def _async_search():
                 toolkit = MCPToolkit()
                 await toolkit.initialize()
                 return await toolkit.search(query, max_results)
-            
+
             return _run_async(_async_search())
         except Exception as e:
             print(f"[WARN] MCP 검색 실패: {e}")
@@ -440,7 +461,7 @@ def search_sync(query: str, max_results: int = 5) -> Dict[str, Any]:
                 "error": str(e),
                 "source": "mcp-error"
             }
-    
+
     # Fallback: Tavily Python SDK 사용
     toolkit = MCPToolkit(use_mcp=False)
-    return toolkit._fallback_search(query, max_results)
+    return toolkit._fallback_search(query, max_results, search_depth=search_depth)
