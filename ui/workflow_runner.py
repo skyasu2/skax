@@ -360,16 +360,22 @@ def handle_workflow_result(final_result: Dict[str, Any], status_data: Dict = Non
     debug_logger.info(f"[UI ROUTING] final_result keys: {list(final_result.keys())}")
 
     # 결과 유형별 처리
+    debug_logger.info(f"[UI ROUTING] 분기 판단: is_greeting={is_greeting}, options={len(options) if options else 0}, is_general={is_general}, has_plan={bool(generated_plan)}")
+
     if is_greeting:
-        # [NEW] greeting intent → 채팅으로 응답 (기획서 X)
+        debug_logger.info("[UI ROUTING] → _handle_greeting_result 호출")
         _handle_greeting_result(generated_plan or "안녕하세요!")
     elif options and len(options) > 0 and not is_general:
+        debug_logger.info("[UI ROUTING] → _handle_options_result 호출")
         _handle_options_result(options, option_question, analysis_res)
     elif is_general:
+        debug_logger.info("[UI ROUTING] → _handle_general_result 호출")
         _handle_general_result(analysis_res)
     elif generated_plan:
+        debug_logger.info("[UI ROUTING] → _handle_plan_result 호출")
         _handle_plan_result(generated_plan, final_result, status_data)
     else:
+        debug_logger.info("[UI ROUTING] → 기본 완료 메시지")
         st.session_state.chat_history.append({
             "role": "assistant", "content": "작업이 완료되었습니다.", "type": "text"
         })
