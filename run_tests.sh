@@ -25,7 +25,8 @@ echo "[DEBUG] Python Version: $(python --version)"
 # Run pytest with HTML report generation
 # --self-contained-html: Embed CSS/JS into a single HTML file
 # [FIX] Use python -m pytest to ensure we use the venv's pytest with installed plugins
-python -m pytest tests/ --html=reports/test_report.html --self-contained-html --asyncio-mode=auto
+# [FIX] Removed --asyncio-mode=auto (requires pytest-asyncio which may not be installed)
+python -m pytest tests/ --html=reports/test_report.html --self-contained-html -v
 
 echo ""
 echo "========================================================"

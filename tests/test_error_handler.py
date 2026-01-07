@@ -23,14 +23,14 @@ class TestErrorCategorization:
     
     def test_categorize_llm_error(self):
         """LLM 관련 에러 분류 테스트"""
-        # OpenAI API 에러
+        # OpenAI API rate limit 에러 - RATE_LIMIT_ERROR로 더 구체적으로 분류됨
         err = Exception("OpenAI API rate limit exceeded")
-        assert categorize_error(err) == "LLM_ERROR"
-        
+        assert categorize_error(err) == "RATE_LIMIT_ERROR"
+
         # Azure 에러
         err = Exception("Azure OpenAI deployment not found")
         assert categorize_error(err) == "LLM_ERROR"
-        
+
         # 토큰 초과
         err = Exception("Maximum token limit exceeded")
         assert categorize_error(err) == "LLM_ERROR"
