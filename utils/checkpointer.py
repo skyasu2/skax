@@ -70,6 +70,7 @@ def get_checkpointer(
     if cp_type == "sqlite":
         try:
             from langgraph.checkpoint.sqlite import SqliteSaver
+            import sqlite3
 
             # 경로 결정 (인자 > 환경변수 > 기본값)
             db_path = sqlite_path or os.getenv("SQLITE_CHECKPOINT_PATH", DEFAULT_SQLITE_PATH)
@@ -81,7 +82,9 @@ def get_checkpointer(
                 print(f"[Checkpointer] Created directory: {db_dir}")
 
             print(f"[Checkpointer] Using SQLiteSaver: {db_path}")
-            return SqliteSaver.from_conn_string(db_path)
+            # [FIX] from_conn_string()은 context manager 반환 → 직접 connection 생성
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            return SqliteSaver(conn)
 
         except ImportError:
             print("[WARN] 'langgraph-checkpoint-sqlite' not installed. Falling back to MemorySaver.")
