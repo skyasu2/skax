@@ -55,9 +55,12 @@ def init_resources():
         # 0. FastAPI 백엔드 서버 시작 (Thread)
         from api.main import start_api_server, stop_api_server
 
-        # [NEW] 개발 환경 포트 충돌 방지: 이전 서버 정리
-        print("[INIT] Cleaning up previous server instance...")
-        stop_api_server()
+        # [UPDATED] 개발 환경에서만 서버 정리 (프로덕션에서는 워크플로우 상태 보존)
+        # 환경변수 CHECKPOINTER_TYPE이 memory이거나 미설정인 경우에만 정리 실행
+        is_dev_mode = os.getenv("CHECKPOINTER_TYPE", "memory").lower() == "memory"
+        if is_dev_mode:
+            print("[INIT] Dev mode: Cleaning up previous server instance...")
+            stop_api_server()
 
         print("[INIT] Starting FastAPI Backend Server...")
         actual_port = start_api_server(start_port=8000)
