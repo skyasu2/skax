@@ -167,7 +167,7 @@ from graph.nodes.formatter_node import run_formatter_node
 from graph.nodes.discussion_node import run_discussion_node
 from graph.nodes.common import update_step_history
 from graph.nodes.hitl_node import option_pause_node
-from graph.nodes.utility_nodes import general_response_node
+from graph.nodes.utility_nodes import general_response_node, chat_response_node
 from graph.nodes.router_node import smart_router_node, Intent
 
 # [DEPRECATED] Dynamic Q&A Nodes - Writer ReAct 패턴으로 대체됨
@@ -544,8 +544,9 @@ def create_workflow() -> StateGraph:
     # [NEW] Smart Router - Entry Point (Rule + LLM Hybrid)
     workflow.add_node("router", smart_router_node)
 
-    # [NEW] Greeting Response (인사/잡담 전용, context 스킵)
-    workflow.add_node("greeting_response", general_response_node)
+    # [NEW] Chat Response (인사/잡담 전용, LLM 대화, context 스킵)
+    # GPT-4o-mini로 자연스러운 대화 + 브레인스토밍 지원
+    workflow.add_node("greeting_response", chat_response_node)
 
     # [UPDATE] 컨텍스트 수집 단계 분리 (RAG → Analyze → Web Search)
     # 기존 병렬 서브그래프(run_context_subgraph) 대신 RAG만 먼저 수행
