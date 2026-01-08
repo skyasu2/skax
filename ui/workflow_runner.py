@@ -382,12 +382,12 @@ def handle_workflow_result(final_result: Dict[str, Any], status_data: Dict = Non
     if analysis_res and isinstance(analysis_res, dict):
         is_general = analysis_res.get("is_general_query", False)
 
-    # [NEW] Router intent 확인 (greeting/confirmation은 일반 응답으로 처리)
+    # [NEW] Router intent 확인 (greeting/info_query는 채팅 응답으로 처리)
     intent = final_result.get("intent")
-    is_greeting = intent == "greeting"
+    is_chat_response = intent in ("greeting", "info_query")
 
     # 결과 유형별 처리
-    if is_greeting:
+    if is_chat_response:
         _handle_greeting_result(generated_plan or "안녕하세요!")
     elif options and len(options) > 0 and not is_general:
         _handle_options_result(options, option_question, analysis_res)
