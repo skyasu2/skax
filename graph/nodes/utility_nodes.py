@@ -117,6 +117,40 @@ def general_response_node(state: PlanCraftState) -> PlanCraftState:
 # Chat Response Node (LLM 기반)
 # =============================================================================
 
+# 웹 검색이 필요할 수 있는 키워드 패턴
+WEB_SEARCH_TRIGGERS = [
+    "뉴스", "최신", "현재", "요즘", "트렌드", "시세", "가격", "환율",
+    "날씨", "주가", "코인", "비트코인", "이더리움",
+    "검색해", "찾아", "알아봐", "조사해",
+    "누구", "무엇", "언제", "어디", "어떻게", "왜",  # 5W1H (선택적)
+]
+
+
+def _should_web_search(user_input: str) -> bool:
+    """웹 검색이 필요한지 간단히 판단"""
+    input_lower = user_input.lower()
+    # 명시적 검색 요청 또는 시사/정보 관련 키워드
+    explicit_triggers = ["검색해", "찾아봐", "알아봐", "조사해", "뉴스", "최신", "현재", "시세", "가격", "환율", "날씨", "주가"]
+    return any(trigger in input_lower for trigger in explicit_triggers)
+
+
+def _do_quick_search(query: str) -> str:
+    """빠른 웹 검색 수행 (1회)"""
+    try:
+        from tools.mcp_client import search_sync
+        result = search_sync(query, max_results=3, search_depth="basic")
+        if result.get("success") and result.get("results"):
+            snippets = []
+            for r in result["results"][:3]:
+                title = r.get("title", "")
+                snippet = r.get("snippet", "")[:200]
+                snippets.append(f"- {title}: {snippet}")
+            return "\n".join(snippets)
+    except Exception as e:
+        print(f"[ChatResponse] 웹 검색 실패: {e}")
+    return ""
+
+
 def chat_response_node(state: PlanCraftState) -> PlanCraftState:
     """
     LLM 기반 자연스러운 대화 응답 노드
@@ -126,6 +160,7 @@ def chat_response_node(state: PlanCraftState) -> PlanCraftState:
     - 대화 이력 참조하여 맥락 유지
     - 브레인스토밍 지원
     - 적절한 시점에 기획서 작성 제안
+    - 필요시 웹 검색 1회 수행
 
     [호출 경로]
     Router → intent="greeting" → chat_response (LLM 대화)
@@ -149,6 +184,14 @@ def chat_response_node(state: PlanCraftState) -> PlanCraftState:
         today_str = f"{now.year}년 {now.month}월 {now.day}일 ({weekdays_kr[now.weekday()]})"
         system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(today_date=today_str)
 
+        # [NEW] 웹 검색이 필요한지 판단
+        web_context = ""
+        if _should_web_search(user_input):
+            logger.info(f"[ChatResponse] 웹 검색 트리거됨: '{user_input[:30]}...'")
+            web_context = _do_quick_search(user_input)
+            if web_context:
+                logger.info(f"[ChatResponse] 웹 검색 결과 추가됨 ({len(web_context)}자)")
+
         # 대화 이력 구성 (최근 6개까지)
         messages = [{"role": "system", "content": system_prompt}]
 
@@ -161,8 +204,12 @@ def chat_response_node(state: PlanCraftState) -> PlanCraftState:
                     "content": msg.get("content", "")
                 })
 
-        # 현재 입력 추가
-        messages.append({"role": "user", "content": user_input})
+        # 현재 입력 추가 (웹 검색 결과 포함)
+        if web_context:
+            user_message = f"{user_input}\n\n[참고: 웹 검색 결과]\n{web_context}"
+        else:
+            user_message = user_input
+        messages.append({"role": "user", "content": user_message})
 
         # LLM 호출 (gpt-4o-mini로 비용 절감)
         llm = get_llm(model_type="gpt-4o-mini", temperature=0.7)
