@@ -45,19 +45,9 @@ def render_chat_and_state():
             render_human_interaction(state)
 
         # [FIX] 일반 대화(is_general_query)일 때는 완료 화면을 띄우지 않음
-        # generated_plan은 workflow_runner에서 일반 대화 시 None으로 초기화됨
+        # generated_plan과 완료 메시지는 workflow_runner에서 이미 처리됨
         elif st.session_state.generated_plan and state.get("final_output") and not state.get("analysis", {}).get("is_general_query", False):
-            st.success("기획서 작성이 완료되었습니다!")
-            st.session_state.generated_plan = state["final_output"]
-
-            if not st.session_state.plan_history or st.session_state.plan_history[-1]['content'] != state["final_output"]:
-                now_str = datetime.now().strftime("%H:%M:%S")
-                st.session_state.plan_history.append({
-                    "version": len(st.session_state.plan_history) + 1,
-                    "timestamp": now_str,
-                    "content": state["final_output"]
-                })
-
+            # 액션 버튼만 표시 (st.success 및 generated_plan 설정은 workflow_runner에서 처리)
             st.divider()
             col_act1, col_act2 = st.columns(2)
             with col_act1:

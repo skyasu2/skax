@@ -508,6 +508,9 @@ def run_pending_workflow(pending_text: str, status_placeholder):
     with status_placeholder.container():
         with st.status("🚀 작업을 수행하고 있습니다...", expanded=True) as status:
             try:
+                # [FIX] 워크플로우 시작 시간 기록 (elapsed time 계산용)
+                workflow_start_time = time.time()
+
                 file_content = st.session_state.get("uploaded_content", None)
                 current_refine_count = st.session_state.get("next_refine_count", 0)
                 previous_plan = st.session_state.generated_plan
@@ -597,8 +600,7 @@ def run_pending_workflow(pending_text: str, status_placeholder):
 
                 # 완료 상태 표시
                 progress_bar.progress(100)
-                start_time = time.time()
-                total_elapsed = int(time.time() - start_time)
+                total_elapsed = int(time.time() - workflow_start_time)
                 current_step_display.empty()
 
                 if execution_log:
