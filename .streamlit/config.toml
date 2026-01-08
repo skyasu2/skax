@@ -15,4 +15,4 @@ textColor = "#1a1a2e"
 
 [client]
 showErrorDetails = false
-toolbarMode = "minimal"
+toolbarMode = "auto"

@@ -113,6 +113,9 @@ def start_api_server(host: str = "127.0.0.1", start_port: int = 8000, max_retrie
                 port=port,
                 log_level="warning",
                 access_log=False,
+                lifespan="off",
+                install_signal_handlers=False,
+                ws="none",
             )
             _api_server = uvicorn.Server(config)
 

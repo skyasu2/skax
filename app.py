@@ -34,7 +34,8 @@ def main():
     """메인 함수"""
     # 1. 초기화
     # 1. 초기화
-    api_port = init_resources()
+    with st.spinner("시스템 초기화 중... (API 서버 및 리소스 로딩)"):
+        api_port = init_resources()
     from utils.config import Config
     Config.API_BASE_URL = f"http://127.0.0.1:{api_port}/api/v1"
     
