@@ -183,24 +183,33 @@ CONTROLS_CSS = """
 }
 
 /* ===== 모드 선택 드롭다운 최적화 ===== */
+.mode-select {
+    max-width: 100px !important;
+}
 .mode-select [data-testid="stSelectbox"] {
-    min-width: 90px !important;
-    max-width: 120px !important;
+    width: 100px !important;
+    min-width: 80px !important;
+    max-width: 100px !important;
+}
+.mode-select [data-testid="stSelectbox"] > div {
+    width: 100px !important;
 }
 .mode-select [data-testid="stSelectbox"] > div > div {
-    padding: 4px 8px !important;
-    min-height: 36px !important;
-    font-size: 0.85rem !important;
-    border-radius: 10px !important;
-    border: 1.5px solid #e2e8f0 !important;
-    background: white !important;
+    padding: 2px 6px !important;
+    min-height: 32px !important;
+    font-size: 0.8rem !important;
+    border-radius: 8px !important;
+    border: 1px solid #d1d5db !important;
+    background: #f9fafb !important;
+    width: 100px !important;
 }
 .mode-select [data-testid="stSelectbox"] > div > div:hover {
-    border-color: #94a3b8 !important;
+    border-color: #9ca3af !important;
+    background: white !important;
 }
 .mode-select [data-testid="stSelectbox"] svg {
-    width: 14px !important;
-    height: 14px !important;
+    width: 12px !important;
+    height: 12px !important;
 }
 </style>
 """
@@ -435,8 +444,8 @@ def render_input_area():
     file_count = len(st.session_state.attached_files)
     current_mode = st.session_state.get("generation_preset", "balanced")
 
-    # 파일 버튼 + 모드 셀렉트 (더 컴팩트하게)
-    col_file, col_mode, col_space = st.columns([0.8, 1.8, 7.4])
+    # 파일 버튼 + 모드 셀렉트 (컴팩트)
+    col_file, col_mode, col_space = st.columns([0.5, 1.2, 8.3])
     
     with col_file:
         btn_class = "has-files" if file_count > 0 else ""
