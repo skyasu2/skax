@@ -37,52 +37,108 @@ MODE_CONFIG = {
 # =============================================================================
 CONTROLS_CSS = """
 <style>
-/* ===== 툴바 (채팅 입력창 위) ===== */
-.chat-toolbar {
-    display: flex;
+/* ===== 입력창 위 툴바 (가로 강제) ===== */
+.input-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
     align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
-    border-radius: 16px;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.95);
+    border-radius: 12px;
     border: 1px solid #e2e8f0;
     margin-bottom: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    width: fit-content;
+    max-width: 100%;
 }
 
-/* ===== 좌측 그룹 (+ 버튼 + 파일 개수) ===== */
-.toolbar-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* ===== 파일 버튼 ===== */
+.file-btn button {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    flex-shrink: 0 !important;
+    border-radius: 10px !important;
+    border: 1.5px solid #94a3b8 !important;
+    background: white !important;
+    color: #475569 !important;
+    font-size: 1.1rem !important;
+    padding: 0 !important;
+    transition: all 0.15s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+.file-btn button:hover {
+    background: #f1f5f9 !important;
+    border-color: #64748b !important;
+    transform: scale(1.05) !important;
+}
+.file-btn.has-files button {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+    border-color: #3b82f6 !important;
+    color: #1d4ed8 !important;
 }
 
-/* ===== 우측 그룹 (모드 버튼들) ===== */
-.toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+/* ===== 모드 버튼 (작고 깔끔하게) ===== */
+.mode-btn button {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    flex-shrink: 0 !important;
+    border-radius: 10px !important;
+    border: 1.5px solid #e2e8f0 !important;
+    background: white !important;
+    font-size: 1.15rem !important;
+    padding: 0 !important;
+    transition: all 0.15s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+.mode-btn button:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    transform: scale(1.05) !important;
+}
+.mode-btn.active button {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    border: none !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4) !important;
+}
+
+/* ===== 파일 개수 배지 ===== */
+.file-count-badge {
+    background: #ef4444;
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 8px;
+    position: relative;
+    top: -8px;
+    left: -8px;
+    margin-right: -12px;
 }
 
 /* ===== 파일 칩 스타일 ===== */
 .file-chip {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    gap: 6px;
+    padding: 4px 10px;
+    background: #f1f5f9;
     border: 1px solid #cbd5e1;
-    border-radius: 20px;
-    font-size: 0.85rem;
+    border-radius: 16px;
+    font-size: 0.8rem;
     color: #334155;
-    max-width: 160px;
-    transition: all 0.15s ease;
+    max-width: 120px;
 }
-.file-chip:hover {
-    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
-    border-color: #94a3b8;
-}
-.file-chip-icon { font-size: 1rem; }
+.file-chip-icon { font-size: 0.9rem; }
 .file-chip-name {
     flex: 1;
     white-space: nowrap;
@@ -95,97 +151,22 @@ CONTROLS_CSS = """
 .files-preview-bar {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px 16px;
-    background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
-    border-radius: 16px 16px 0 0;
-    border: 1px solid #e2e8f0;
-    border-bottom: none;
-    margin-bottom: -4px;
-}
-
-/* ===== + 버튼 스타일 ===== */
-.plus-btn button {
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
-    border-radius: 50% !important;
-    border: 1.5px solid #e2e8f0 !important;
-    background: white !important;
-    color: #64748b !important;
-    font-size: 1.5rem !important;
-    font-weight: 300 !important;
-    padding: 0 !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-.plus-btn button:hover {
-    background: #f1f5f9 !important;
-    border-color: #94a3b8 !important;
-    color: #475569 !important;
-    transform: scale(1.08) !important;
-}
-.plus-btn.has-files button {
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
-    border-color: #60a5fa !important;
-    color: #2563eb !important;
-}
-
-/* ===== 모드 버튼 스타일 (가로 배치) ===== */
-.mode-btn button {
-    width: 44px !important;
-    height: 44px !important;
-    min-width: 44px !important;
-    border-radius: 12px !important;
-    border: 1.5px solid #e2e8f0 !important;
-    background: white !important;
-    font-size: 1.4rem !important;
-    padding: 0 !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-.mode-btn button:hover {
-    background: #f8fafc !important;
-    border-color: #94a3b8 !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-}
-.mode-btn.active button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    border: none !important;
-    color: white !important;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.35) !important;
-}
-.mode-btn.active button:hover {
-    transform: translateY(-2px) scale(1.02) !important;
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.45) !important;
-}
-
-/* ===== 파일 개수 배지 ===== */
-.file-count-badge {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 2px 8px;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #f8fafc;
     border-radius: 12px;
-    margin-left: -4px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 8px;
 }
 
 /* ===== 업로드 패널 ===== */
 .upload-panel {
     background: white;
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 12px;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 8px;
     border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
 
 /* ===== Prefill 확인 박스 ===== */
@@ -193,13 +174,33 @@ CONTROLS_CSS = """
     background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
     border: 1px solid #93c5fd;
     border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
+    padding: 12px;
+    margin-bottom: 12px;
 }
 .prefill-text {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: #1e40af;
-    margin-bottom: 12px;
+}
+
+/* ===== 모드 선택 드롭다운 최적화 ===== */
+.mode-select [data-testid="stSelectbox"] {
+    min-width: 90px !important;
+    max-width: 120px !important;
+}
+.mode-select [data-testid="stSelectbox"] > div > div {
+    padding: 4px 8px !important;
+    min-height: 36px !important;
+    font-size: 0.85rem !important;
+    border-radius: 10px !important;
+    border: 1.5px solid #e2e8f0 !important;
+    background: white !important;
+}
+.mode-select [data-testid="stSelectbox"] > div > div:hover {
+    border-color: #94a3b8 !important;
+}
+.mode-select [data-testid="stSelectbox"] svg {
+    width: 14px !important;
+    height: 14px !important;
 }
 </style>
 """
@@ -429,50 +430,49 @@ def render_input_area():
         render_upload_panel()
 
     # =========================================================================
-    # 툴바: [+] 버튼 (좌측) + 모드 선택 버튼들 (우측) - 가로 한 줄 배치
+    # 툴바: 📂 파일 + 모드 선택 (컴팩트 레이아웃)
     # =========================================================================
-    col_plus, col_spacer, col_mode1, col_mode2, col_mode3 = st.columns([0.6, 5, 0.7, 0.7, 0.7])
-
     file_count = len(st.session_state.attached_files)
     current_mode = st.session_state.get("generation_preset", "balanced")
 
-    # [+] 버튼 (좌측)
-    with col_plus:
+    # 파일 버튼 + 모드 셀렉트 (더 컴팩트하게)
+    col_file, col_mode, col_space = st.columns([0.8, 1.8, 7.4])
+    
+    with col_file:
         btn_class = "has-files" if file_count > 0 else ""
-        st.markdown(f'<div class="plus-btn {btn_class}">', unsafe_allow_html=True)
-        
-        btn_icon = "✕" if st.session_state.show_upload_panel else "+"
-        if st.button(btn_icon, key="btn_plus", help="파일 첨부" if not st.session_state.show_upload_panel else "닫기"):
+        st.markdown(f'<div class="file-btn {btn_class}">', unsafe_allow_html=True)
+        btn_label = f"📂 {file_count}" if file_count > 0 else "📂"
+        if st.button(btn_label, key="btn_file", help="파일 첨부"):
             st.session_state.show_upload_panel = not st.session_state.show_upload_panel
             st.rerun()
-        
         st.markdown('</div>', unsafe_allow_html=True)
-        
-        # 파일 개수 배지
-        if file_count > 0 and not st.session_state.show_upload_panel:
-            st.markdown(f'<span class="file-count-badge">{file_count}</span>', unsafe_allow_html=True)
-
-    # 모드 버튼들 (우측, 가로 배치)
-    mode_keys = list(MODE_CONFIG.keys())
-    mode_columns = [col_mode1, col_mode2, col_mode3]
     
-    for col, mode_key in zip(mode_columns, mode_keys):
-        mode_info = MODE_CONFIG[mode_key]
-        is_active = (current_mode == mode_key)
-        
-        with col:
-            active_class = "active" if is_active else ""
-            st.markdown(f'<div class="mode-btn {active_class}">', unsafe_allow_html=True)
-            
-            if st.button(
-                mode_info["icon"],
-                key=f"mode_{mode_key}",
-                help=f"{mode_info['label']}: {mode_info['desc']}"
-            ):
-                st.session_state.generation_preset = mode_key
-                st.rerun()
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+    with col_mode:
+        st.markdown('<div class="mode-select">', unsafe_allow_html=True)
+        mode_options = {
+            "⚡ 속도": "speed",
+            "⚖️ 균형": "balanced",
+            "💎 품질": "quality"
+        }
+        mode_labels = list(mode_options.keys())
+        mode_values = list(mode_options.values())
+
+        # 현재 모드에 해당하는 인덱스 찾기
+        current_idx = mode_values.index(current_mode) if current_mode in mode_values else 1
+
+        selected = st.selectbox(
+            "모드",
+            options=mode_labels,
+            index=current_idx,
+            key="mode_select",
+            label_visibility="collapsed"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        new_mode = mode_options.get(selected, "balanced")
+        if new_mode != current_mode:
+            st.session_state.generation_preset = new_mode
+            st.rerun()
 
     # 채팅 입력창
     placeholder_text = "💬 메시지를 입력하세요..."
