@@ -53,7 +53,12 @@ def init_resources():
 
     try:
         # 0. FastAPI 백엔드 서버 시작 (Thread)
-        from api.main import start_api_server
+        from api.main import start_api_server, stop_api_server
+
+        # [NEW] 개발 환경 포트 충돌 방지: 이전 서버 정리
+        print("[INIT] Cleaning up previous server instance...")
+        stop_api_server()
+
         print("[INIT] Starting FastAPI Backend Server...")
         actual_port = start_api_server(start_port=8000)
         server_running = True
