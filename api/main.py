@@ -105,18 +105,25 @@ def start_api_server(host: str = "127.0.0.1", start_port: int = 8000, max_retrie
 
         # 3. Port seems free - Attempt to start
         logger.info(f"[API] Attempting to start server on port {port}...")
-        
+
         with _api_lock:
-            config = uvicorn.Config(
-                app,
-                host=host,
-                port=port,
-                log_level="warning",
-                access_log=False,
-                lifespan="off",
-                install_signal_handlers=False,
-                ws="none",
-            )
+            # uvicorn 버전 호환성: install_signal_handlers는 0.19+ 필요
+            config_kwargs = {
+                "app": app,
+                "host": host,
+                "port": port,
+                "log_level": "warning",
+                "access_log": False,
+                "lifespan": "off",
+            }
+            # 선택적 파라미터 (구버전 uvicorn 호환)
+            try:
+                # uvicorn 0.19+ 에서 지원
+                config = uvicorn.Config(**config_kwargs, install_signal_handlers=False, ws="none")
+            except TypeError:
+                # 구버전 uvicorn 폴백
+                logger.warning("[API] Old uvicorn version detected, using basic config")
+                config = uvicorn.Config(**config_kwargs)
             _api_server = uvicorn.Server(config)
 
             def run_server():
