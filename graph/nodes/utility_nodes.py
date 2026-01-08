@@ -117,6 +117,40 @@ def general_response_node(state: PlanCraftState) -> PlanCraftState:
 # Chat Response Node (LLM 기반)
 # =============================================================================
 
+# FAQ 캐시 (LLM 호출 없이 즉시 응답)
+# 키: 포함 패턴, 값: 응답 (callable이면 동적 생성)
+FAQ_CACHE = {
+    # 날짜/시간 관련 (동적)
+    "오늘 며칠": lambda now: f"오늘은 {now.year}년 {now.month}월 {now.day}일이야! 📅",
+    "몇 시": lambda now: f"지금은 {now.hour}시 {now.minute}분이야! ⏰",
+    "무슨 요일": lambda now: f"오늘은 {['월','화','수','목','금','토','일'][now.weekday()]}요일이야!",
+
+    # 자기 소개
+    "너 누구": "나는 PlanCraft 기획 도우미야! 앱, 서비스, 사업 기획서를 만들어줄 수 있어. 😊",
+    "누구야": "나는 PlanCraft 기획 도우미야! 앱, 서비스, 사업 기획서를 만들어줄 수 있어. 😊",
+    "뭘 할 수 있": "앱 기획, 서비스 기획, 사업 계획서 작성을 도와줄 수 있어! 아이디어를 말해줘. 🎯",
+    "무엇을 할 수": "앱 기획, 서비스 기획, 사업 계획서 작성을 도와줄 수 있어! 아이디어를 말해줘. 🎯",
+
+    # 인사
+    "잘 지내": "잘 지내고 있어! 너는 어때? 오늘 기획할 아이디어 있어? 😊",
+    "심심해": "심심하면 같이 아이디어 브레인스토밍 해볼까? 🤔",
+}
+
+
+def _check_faq_cache(user_input: str) -> str | None:
+    """FAQ 캐시에서 응답 확인 (LLM 호출 스킵)"""
+    from datetime import datetime
+    now = datetime.now()
+    input_lower = user_input.lower()
+
+    for pattern, response in FAQ_CACHE.items():
+        if pattern in input_lower:
+            if callable(response):
+                return response(now)
+            return response
+    return None
+
+
 # 웹 검색이 필요할 수 있는 키워드 패턴
 WEB_SEARCH_TRIGGERS = [
     "뉴스", "최신", "현재", "요즘", "트렌드", "시세", "가격", "환율",
@@ -174,6 +208,26 @@ def chat_response_node(state: PlanCraftState) -> PlanCraftState:
 
     logger.info(f"[ChatResponse] 대화 요청: '{user_input[:50]}...'")
 
+    # [NEW] FAQ 캐시 체크 (LLM 호출 스킵)
+    cached_response = _check_faq_cache(user_input)
+    if cached_response:
+        logger.info(f"[ChatResponse] FAQ 캐시 히트! LLM 스킵")
+        new_state = update_state(
+            state,
+            current_step="chat_response",
+            final_output=cached_response,
+            need_more_info=False,
+            options=[],
+            option_question=None
+        )
+        return update_step_history(
+            new_state,
+            "chat_response",
+            "SUCCESS",
+            summary="FAQ 캐시 응답",
+            start_time=start_time
+        )
+
     try:
         from utils.llm import get_llm
         from datetime import datetime
@@ -184,7 +238,7 @@ def chat_response_node(state: PlanCraftState) -> PlanCraftState:
         today_str = f"{now.year}년 {now.month}월 {now.day}일 ({weekdays_kr[now.weekday()]})"
         system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(today_date=today_str)
 
-        # [NEW] 웹 검색이 필요한지 판단
+        # 웹 검색이 필요한지 판단
         web_context = ""
         if _should_web_search(user_input):
             logger.info(f"[ChatResponse] 웹 검색 트리거됨: '{user_input[:30]}...'")

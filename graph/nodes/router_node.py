@@ -25,6 +25,7 @@ from utils.file_logger import get_file_logger
 class Intent(str, Enum):
     """사용자 입력 의도 분류"""
     GREETING = "greeting"        # 인사, 잡담, 안부
+    INFO_QUERY = "info_query"    # 정보성 질문 (날씨, 뉴스, 시세 등) → 웹검색 우선
     PLANNING = "planning"        # 기획서 작성 요청
     CONFIRMATION = "confirmation"  # 이전 제안 승인 ("좋아", "진행해")
     UNCERTAIN = "uncertain"      # 규칙으로 판단 불가 → LLM 폴백
@@ -43,7 +44,21 @@ GREETING_EXACT = {
 }
 
 GREETING_CONTAINS = {
-    "날씨", "오늘 뭐해", "심심해", "잘 지내",
+    "오늘 뭐해", "심심해", "잘 지내",
+}
+
+# [NEW] 정보성 질문 패턴 (웹검색 우선)
+INFO_QUERY_KEYWORDS = {
+    # 시사/뉴스
+    "뉴스", "소식", "이슈",
+    # 날씨/환경
+    "날씨", "기온", "미세먼지",
+    # 금융/시세
+    "시세", "가격", "환율", "주가", "코인", "비트코인", "이더리움", "주식",
+    # 트렌드
+    "트렌드", "인기", "유행", "핫한",
+    # 명시적 검색 요청
+    "검색해", "찾아봐", "알아봐", "조사해",
 }
 
 # 승인/확정 패턴 (정확히 일치 또는 시작 패턴)
@@ -109,11 +124,15 @@ def _classify_by_rules(user_input: str, has_previous_proposal: bool) -> Intent:
     if any(kw in original for kw in PLANNING_KEYWORDS):
         return Intent.PLANNING
 
-    # 4단계: 인사 포함 패턴 (키워드가 없으면서 인사 패턴 포함)
+    # 4단계: [NEW] 정보성 질문 (웹검색 우선)
+    if any(kw in normalized for kw in INFO_QUERY_KEYWORDS):
+        return Intent.INFO_QUERY
+
+    # 5단계: 인사 포함 패턴 (키워드가 없으면서 인사 패턴 포함)
     if any(g in normalized for g in GREETING_CONTAINS):
         return Intent.GREETING
 
-    # 5단계: 짧은 입력(5자 이하)이면서 키워드 없음 → 인사로 추정
+    # 6단계: 짧은 입력(5자 이하)이면서 키워드 없음 → 인사로 추정
     if len(original) <= 5:
         return Intent.GREETING
 

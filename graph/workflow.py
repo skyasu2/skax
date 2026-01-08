@@ -126,7 +126,8 @@ class RouteKey(str, Enum):
     str 상속으로 add_conditional_edges에서 직접 사용 가능.
     """
     # Smart Router 분기 (Entry Point)
-    GREETING = "greeting"          # 인사/잡담 → general_response
+    GREETING = "greeting"          # 인사/잡담 → greeting_response
+    INFO_QUERY = "info_query"      # 정보성 질문 → greeting_response (웹검색 우선)
     PLANNING = "planning"          # 기획 요청 → context_gathering
     CONFIRMATION = "confirmation"  # 승인 → analyze (context 스킵)
 
@@ -482,6 +483,7 @@ def route_by_intent(state: PlanCraftState) -> RouterRoutes:
     │ Intent                 │ 반환값                │ 다음 노드              │
     ├────────────────────────┼───────────────────────┼────────────────────────┤
     │ greeting               │ RouteKey.GREETING     │ greeting_response      │
+    │ info_query             │ RouteKey.INFO_QUERY   │ greeting_response (웹검색)│
     │ confirmation           │ RouteKey.CONFIRMATION │ analyze (context 스킵) │
     │ planning (기본)        │ RouteKey.PLANNING     │ context_gathering      │
     └────────────────────────┴───────────────────────┴────────────────────────┘
@@ -494,6 +496,9 @@ def route_by_intent(state: PlanCraftState) -> RouterRoutes:
     if intent == Intent.GREETING.value:
         logger.info("[ROUTING] → greeting_response (context 스킵)")
         return RouteKey.GREETING
+    elif intent == Intent.INFO_QUERY.value:
+        logger.info("[ROUTING] → greeting_response (info_query, 웹검색 우선)")
+        return RouteKey.INFO_QUERY
     elif intent == Intent.CONFIRMATION.value:
         logger.info("[ROUTING] → analyze (confirmation, context 스킵)")
         return RouteKey.CONFIRMATION
@@ -588,6 +593,7 @@ def create_workflow() -> StateGraph:
         route_by_intent,
         {
             RouteKey.GREETING: "greeting_response",      # 인사 → 바로 응답
+            RouteKey.INFO_QUERY: "greeting_response",    # 정보성 질문 → 응답 (웹검색 우선)
             RouteKey.PLANNING: "context_gathering",      # 기획 → RAG/Web 검색
             RouteKey.CONFIRMATION: "analyze"             # 승인 → 바로 분석
         }
