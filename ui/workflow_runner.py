@@ -19,6 +19,35 @@ from utils.config import Config
 # API Base URL - Removed safely
 # API_BASE_URL = Config.API_BASE_URL
 
+
+def check_api_health(timeout: float = 2.0) -> Tuple[bool, str]:
+    """
+    API 서버 상태를 확인합니다.
+
+    Args:
+        timeout: 타임아웃 (초)
+
+    Returns:
+        Tuple[bool, str]: (정상 여부, 에러 메시지)
+    """
+    try:
+        # /api/v1 제거하고 /health 엔드포인트 호출
+        base_url = Config.API_BASE_URL.replace("/api/v1", "")
+        resp = httpx.get(f"{base_url}/health", timeout=timeout)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("service") == "plancraft-api":
+                return True, ""
+            return False, "알 수 없는 서비스가 응답했습니다"
+        return False, f"서버 응답 오류 (status={resp.status_code})"
+    except httpx.ConnectError:
+        return False, "API 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요."
+    except httpx.TimeoutException:
+        return False, "API 서버 응답 시간 초과"
+    except Exception as e:
+        return False, f"API 서버 확인 실패: {e}"
+
+
 # 단계별 진행률 매핑
 STEP_PROGRESS = {
     "router": 5,                     # [NEW] Smart Router
@@ -484,6 +513,14 @@ def run_pending_workflow(pending_text: str, status_placeholder):
                 previous_plan = st.session_state.generated_plan
                 thread_id = st.session_state.thread_id
                 generation_preset = st.session_state.get("generation_preset", "balanced")
+
+                # [NEW] API 서버 상태 확인
+                api_ok, api_error = check_api_health()
+                if not api_ok:
+                    status.update(label="❌ API 서버 연결 실패", state="error", expanded=True)
+                    st.error(f"🔌 {api_error}")
+                    st.info("💡 **해결 방법:**\n- 터미널에서 서버 로그를 확인하세요\n- 앱을 새로고침하여 서버 재시작을 시도하세요")
+                    return
 
                 # API 호출
                 status.write("🔄 작업 요청을 전송 중입니다...")

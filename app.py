@@ -33,12 +33,15 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 def main():
     """메인 함수"""
     # 1. 초기화
-    # 1. 초기화
     with st.spinner("시스템 초기화 중... (API 서버 및 리소스 로딩)"):
-        api_port = init_resources()
+        api_port, server_running = init_resources()
     from utils.config import Config
     Config.API_BASE_URL = f"http://127.0.0.1:{api_port}/api/v1"
-    
+
+    # 서버 시작 실패 시 경고 표시
+    if not server_running:
+        st.error("⚠️ API 서버 시작 실패 - 기획서 생성이 불가능합니다. 터미널 로그를 확인해주세요.")
+
     init_session_state()
 
     # 2. 헤더
