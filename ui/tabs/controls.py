@@ -1,42 +1,105 @@
 """
-Input & Controls Tab
+Input & Controls Tab - 채팅 입력창 UI
 """
 import streamlit as st
 
-def render_file_upload():
-    """파일 업로드 영역 렌더링"""
-    with st.expander("📎 참고 자료 추가 (파일 업로드)", expanded=False):
-        MAX_FILE_SIZE_MB = 10
-        MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-        ALLOWED_EXTENSIONS = {"txt", "md", "docx", "pdf"}
 
-        uploaded_file = st.file_uploader(
-            "기획서 생성에 참고할 파일 (PDF, DOCX, TXT 등)",
-            type=["txt", "md", "docx", "pdf"],
-            key="file_uploader_bottom"
-        )
-        if uploaded_file:
-            try:
-                file_size = len(uploaded_file.getbuffer())
-                if file_size > MAX_FILE_SIZE_BYTES:
-                    st.error(f"파일이 너무 큽니다. 최대 {MAX_FILE_SIZE_MB}MB까지 허용됩니다.")
-                elif ".." in uploaded_file.name or "/" in uploaded_file.name or "\\" in uploaded_file.name:
-                    st.error("유효하지 않은 파일명입니다.")
-                elif uploaded_file.name.split(".")[-1].lower() not in ALLOWED_EXTENSIONS:
-                    st.error("지원하지 않는 파일 형식입니다.")
-                else:
-                    content = uploaded_file.read().decode("utf-8", errors='ignore')
-                    if len(content) > 50000:
-                        content = content[:50000]
-                        st.warning("파일이 너무 길어 일부만 사용됩니다 (50,000자 제한)")
-                    st.session_state.uploaded_content = content
-                    st.success(f"✅ '{uploaded_file.name}' 업로드됨 ({file_size // 1024}KB)")
-            except Exception:
-                st.error("파일을 읽을 수 없습니다. 파일 형식을 확인해주세요.")
+# =============================================================================
+# 아이콘 버튼 스타일 (CSS)
+# =============================================================================
+ICON_BUTTON_CSS = """
+<style>
+/* 아이콘 버튼 컨테이너 */
+.icon-btn-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+/* 개별 아이콘 버튼 */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 16px;
+    border: none;
+    background: transparent;
+}
+.icon-btn:hover {
+    background: rgba(128, 128, 128, 0.2);
+}
+.icon-btn.active {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+/* 모드 선택 아이콘 그룹 */
+.mode-icons {
+    display: flex;
+    gap: 2px;
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+/* 업로드된 파일 표시 */
+.uploaded-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(34, 197, 94, 0.15);
+    border-radius: 12px;
+    font-size: 12px;
+    color: #22c55e;
+}
+</style>
+"""
+
+
+def render_file_upload():
+    """파일 업로드 영역 렌더링 (팝오버 스타일)"""
+    MAX_FILE_SIZE_MB = 10
+    MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+    ALLOWED_EXTENSIONS = {"txt", "md", "docx", "pdf"}
+
+    uploaded_file = st.file_uploader(
+        "📎 참고 자료 (PDF, DOCX, TXT, MD)",
+        type=["txt", "md", "docx", "pdf"],
+        key="file_uploader_bottom",
+        label_visibility="collapsed"
+    )
+    if uploaded_file:
+        try:
+            file_size = len(uploaded_file.getbuffer())
+            if file_size > MAX_FILE_SIZE_BYTES:
+                st.error(f"파일이 너무 큽니다. 최대 {MAX_FILE_SIZE_MB}MB까지 허용됩니다.")
+            elif ".." in uploaded_file.name or "/" in uploaded_file.name or "\\" in uploaded_file.name:
+                st.error("유효하지 않은 파일명입니다.")
+            elif uploaded_file.name.split(".")[-1].lower() not in ALLOWED_EXTENSIONS:
+                st.error("지원하지 않는 파일 형식입니다.")
+            else:
+                content = uploaded_file.read().decode("utf-8", errors='ignore')
+                if len(content) > 50000:
+                    content = content[:50000]
+                    st.warning("파일이 너무 길어 일부만 사용됩니다 (50,000자 제한)")
+                st.session_state.uploaded_content = content
+                st.success(f"✅ '{uploaded_file.name}' ({file_size // 1024}KB)")
+        except Exception:
+            st.error("파일을 읽을 수 없습니다.")
 
 
 def render_input_area():
     """채팅 입력 영역 렌더링. status_placeholder 반환."""
+    # CSS 스타일 적용
+    st.markdown(ICON_BUTTON_CSS, unsafe_allow_html=True)
+
     # Prefill 확인 UI
     if st.session_state.prefill_prompt and not st.session_state.pending_input:
         st.info(f"📝 **선택된 예시:** {st.session_state.prefill_prompt}")
@@ -57,28 +120,61 @@ def render_input_area():
     st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
     status_placeholder = st.empty()
 
-    # 채팅 입력창과 모드 선택을 위한 컨테이너 (Streamlit 특성상 chat_input은 하단 고정되므로, 그 위에 옵션 배치)
-    col_mode, col_blank = st.columns([2, 8])
-    with col_mode:
-        preset_mode = st.selectbox(
-            "품질 모드 선택",
-            ["balanced", "quality", "speed"],
-            format_func=lambda x: {
-                "balanced": "⚖️ 균형 (Balanced)",
-                "quality": "💎 고품질 (High Quality)",
-                "speed": "⚡ 속도 (Speed)"
-            }[x],
-            index=["balanced", "quality", "speed"].index(st.session_state.generation_preset),
-            key="preset_selector_main", # Key 변경하여 충돌 방지
-            label_visibility="collapsed", # 라벨 숨김으로 공간 절약
-            help="**모드 설명**\n\n"
-                 "⚖️ **균형**: 속도와 품질의 조화 (기본)\n"
-                 "💎 **고품질**: 더 깊이 있는 분석과 상세한 내용 (오래 걸림)\n"
-                 "⚡ **속도**: 빠른 응답과 핵심 요약 위주"
-        )
-        # 선택 변경 시 세션 업데이트
-        if preset_mode != st.session_state.generation_preset:
-            st.session_state.generation_preset = preset_mode
+    # ==========================================================================
+    # [NEW] 아이콘 기반 입력 컨트롤 (+ 버튼, 파일, 모드 선택)
+    # ==========================================================================
+
+    # 세션 상태 초기화
+    if "show_file_upload" not in st.session_state:
+        st.session_state.show_file_upload = False
+
+    # 모드 설정 (아이콘-모드 매핑)
+    MODE_CONFIG = {
+        "speed": {"icon": "⚡", "label": "속도", "desc": "빠른 응답"},
+        "balanced": {"icon": "⚖️", "label": "균형", "desc": "속도+품질"},
+        "quality": {"icon": "💎", "label": "고품질", "desc": "깊은 분석"},
+    }
+
+    # 아이콘 버튼 행
+    col_plus, col_file_status, col_spacer, col_mode1, col_mode2, col_mode3 = st.columns([0.5, 2, 4, 0.6, 0.6, 0.6])
+
+    with col_plus:
+        # + 버튼 (파일 업로드 토글)
+        if st.button("➕", key="btn_plus", help="파일 첨부"):
+            st.session_state.show_file_upload = not st.session_state.show_file_upload
+            st.rerun()
+
+    with col_file_status:
+        # 업로드된 파일 표시
+        if st.session_state.get("uploaded_content"):
+            st.markdown(
+                '<span class="uploaded-badge">📎 파일 첨부됨</span>',
+                unsafe_allow_html=True
+            )
+
+    # 모드 선택 아이콘 버튼들
+    current_mode = st.session_state.generation_preset
+    modes = ["speed", "balanced", "quality"]
+    mode_cols = [col_mode1, col_mode2, col_mode3]
+
+    for mode, col in zip(modes, mode_cols):
+        config = MODE_CONFIG[mode]
+        with col:
+            is_active = mode == current_mode
+            btn_type = "primary" if is_active else "secondary"
+            if st.button(
+                config["icon"],
+                key=f"mode_{mode}",
+                type=btn_type,
+                help=f"{config['label']}: {config['desc']}"
+            ):
+                st.session_state.generation_preset = mode
+                st.rerun()
+
+    # 파일 업로드 영역 (토글)
+    if st.session_state.show_file_upload:
+        with st.container():
+            render_file_upload()
 
     # 채팅 입력창
     placeholder_text = "💬 자유롭게 대화를 입력하세요..."

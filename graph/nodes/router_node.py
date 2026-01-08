@@ -26,7 +26,8 @@ class Intent(str, Enum):
     """사용자 입력 의도 분류"""
     GREETING = "greeting"        # 인사, 잡담, 안부
     INFO_QUERY = "info_query"    # 정보성 질문 (날씨, 뉴스, 시세 등) → 웹검색 우선
-    PLANNING = "planning"        # 기획서 작성 요청
+    PLANNING = "planning"        # 기획서 작성 요청 (새 기획)
+    MODIFICATION = "modification"  # [NEW] 기존 기획서 수정 요청
     CONFIRMATION = "confirmation"  # 이전 제안 승인 ("좋아", "진행해")
     UNCERTAIN = "uncertain"      # 규칙으로 판단 불가 → LLM 폴백
 
@@ -74,6 +75,22 @@ CONFIRMATION_STARTSWITH = {
     "진행", "확인", "알겠"
 }
 
+# [NEW] 기획서 수정 요청 패턴 (기존 기획서가 있을 때)
+MODIFICATION_KEYWORDS = {
+    # 수정 동사
+    "수정해", "바꿔", "고쳐", "변경해", "교체해",
+    # 보완 동사
+    "보완해", "추가해", "넣어", "보강해", "강화해",
+    # 삭제 동사
+    "삭제해", "빼", "제거해", "없애",
+    # 상세화 요청
+    "더 자세히", "자세하게", "구체적으로", "상세하게",
+    # 요약 요청
+    "요약해", "줄여", "간략하게", "핵심만",
+    # 섹션 지정
+    "섹션", "부분", "항목",
+}
+
 # 기획 키워드 (하나라도 포함 시 PLANNING)
 PLANNING_KEYWORDS = {
     # 서비스/제품 유형
@@ -82,7 +99,7 @@ PLANNING_KEYWORDS = {
     "기획", "사업", "창업", "스타트업", "비즈니스", "프로젝트",
     # 콘텐츠/기능
     "리뷰", "추천", "검색", "관리", "예약", "배달", "쇼핑", "커머스",
-    # 동사형 요청
+    # 동사형 요청 (새 기획용)
     "만들어", "개발", "구축", "설계", "기획해",
 }
 
@@ -120,7 +137,11 @@ def _classify_by_rules(user_input: str, has_previous_proposal: bool) -> Intent:
         if len(normalized) <= 5 and any(p in normalized for p in ["좋", "응", "ㅇ", "네", "예"]):
             return Intent.CONFIRMATION
 
-    # 3단계: 기획 키워드 포함 여부
+        # [NEW] 2.5단계: 수정 요청 패턴 (기존 기획서가 있을 때만)
+        if any(kw in original or kw in normalized for kw in MODIFICATION_KEYWORDS):
+            return Intent.MODIFICATION
+
+    # 3단계: 기획 키워드 포함 여부 (새 기획)
     if any(kw in original for kw in PLANNING_KEYWORDS):
         return Intent.PLANNING
 
@@ -154,9 +175,10 @@ def _classify_by_llm(user_input: str) -> Intent:
         from utils.llm import get_llm
 
         # 최소 프롬프트로 분류 (토큰 절약)
-        prompt = f"""사용자 입력을 분류하세요. 반드시 아래 3가지 중 하나만 출력:
+        prompt = f"""사용자 입력을 분류하세요. 반드시 아래 4가지 중 하나만 출력:
 - greeting: 인사, 잡담, 안부, 질문 (예: "안녕", "뭐 해?", "누구야")
 - planning: 앱/서비스/사업 기획 요청 (예: "배달 앱", "쇼핑몰 기획")
+- modification: 기존 기획서 수정 요청 (예: "수정해줘", "더 자세히", "요약해")
 - confirmation: 이전 제안 승인 (예: "좋아", "진행해")
 
 입력: "{user_input}"
@@ -171,6 +193,9 @@ def _classify_by_llm(user_input: str) -> Intent:
         if "greeting" in result:
             logger.info(f"[SmartRouter] LLM 분류: GREETING for '{user_input}'")
             return Intent.GREETING
+        elif "modification" in result:
+            logger.info(f"[SmartRouter] LLM 분류: MODIFICATION for '{user_input}'")
+            return Intent.MODIFICATION
         elif "planning" in result:
             logger.info(f"[SmartRouter] LLM 분류: PLANNING for '{user_input}'")
             return Intent.PLANNING
@@ -212,8 +237,10 @@ def smart_router_node(state: PlanCraftState) -> PlanCraftState:
 
     user_input = state.get("user_input", "")
     current_analysis = state.get("analysis")  # 이전 제안 존재 여부
+    final_output = state.get("final_output")  # 완성된 기획서 존재 여부
 
-    has_previous_proposal = bool(current_analysis)
+    # [UPDATE] 이전 기획서 또는 분석 결과가 있으면 수정 요청 가능
+    has_previous_proposal = bool(current_analysis) or bool(final_output)
 
     # 1단계: 규칙 기반 분류
     intent = _classify_by_rules(user_input, has_previous_proposal)

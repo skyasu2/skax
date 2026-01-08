@@ -93,7 +93,7 @@ from utils.settings import settings, QualityThresholds
 # =============================================================================
 
 # Smart Router 분기 후 가능한 목적지
-RouterRoutes = Literal["greeting", "planning", "confirmation"]
+RouterRoutes = Literal["greeting", "info_query", "planning", "modification", "confirmation"]
 
 # Analyzer 분기 후 가능한 목적지
 AnalyzerRoutes = Literal["option_pause", "general_response", "structure"]
@@ -129,6 +129,7 @@ class RouteKey(str, Enum):
     GREETING = "greeting"          # 인사/잡담 → greeting_response
     INFO_QUERY = "info_query"      # 정보성 질문 → greeting_response (웹검색 우선)
     PLANNING = "planning"          # 기획 요청 → context_gathering
+    MODIFICATION = "modification"  # [NEW] 기획서 수정 요청 → structure (기존 분석 활용)
     CONFIRMATION = "confirmation"  # 승인 → analyze (context 스킵)
 
     # Analyzer 분기
@@ -475,7 +476,7 @@ def route_by_intent(state: PlanCraftState) -> RouterRoutes:
     """
     Smart Router 결과에 따라 다음 노드 결정
 
-    Return Type: RouterRoutes = Literal["greeting", "planning", "confirmation"]
+    Return Type: RouterRoutes = Literal["greeting", "info_query", "planning", "modification", "confirmation"]
 
     ┌─────────────────────────────────────────────────────────────────────────┐
     │                     판정표 (Decision Table)                             │
@@ -484,6 +485,7 @@ def route_by_intent(state: PlanCraftState) -> RouterRoutes:
     ├────────────────────────┼───────────────────────┼────────────────────────┤
     │ greeting               │ RouteKey.GREETING     │ greeting_response      │
     │ info_query             │ RouteKey.INFO_QUERY   │ greeting_response (웹검색)│
+    │ modification           │ RouteKey.MODIFICATION │ structure (기존 분석 활용)│
     │ confirmation           │ RouteKey.CONFIRMATION │ analyze (context 스킵) │
     │ planning (기본)        │ RouteKey.PLANNING     │ context_gathering      │
     └────────────────────────┴───────────────────────┴────────────────────────┘
@@ -499,6 +501,10 @@ def route_by_intent(state: PlanCraftState) -> RouterRoutes:
     elif intent == Intent.INFO_QUERY.value:
         logger.info("[ROUTING] → greeting_response (info_query, 웹검색 우선)")
         return RouteKey.INFO_QUERY
+    elif intent == Intent.MODIFICATION.value:
+        # [NEW] 수정 요청: 기존 분석 유지, structure부터 재시작
+        logger.info("[ROUTING] → structure (modification, 기존 분석 활용)")
+        return RouteKey.MODIFICATION
     elif intent == Intent.CONFIRMATION.value:
         logger.info("[ROUTING] → analyze (confirmation, context 스킵)")
         return RouteKey.CONFIRMATION
@@ -595,6 +601,7 @@ def create_workflow() -> StateGraph:
             RouteKey.GREETING: "greeting_response",      # 인사 → 바로 응답
             RouteKey.INFO_QUERY: "greeting_response",    # 정보성 질문 → 응답 (웹검색 우선)
             RouteKey.PLANNING: "context_gathering",      # 기획 → RAG/Web 검색
+            RouteKey.MODIFICATION: "structure",          # [NEW] 수정 → 기존 분석 활용, 구조부터
             RouteKey.CONFIRMATION: "analyze"             # 승인 → 바로 분석
         }
     )

@@ -475,6 +475,33 @@ def _handle_plan_result(generated_plan: str, final_result: dict, status_data: di
         "type": "plan"
     })
 
+    # [NEW] 기획서 전문을 chat_history에 포함 (후속 대화 컨텍스트용)
+    plan_version = len(st.session_state.get("plan_history", [])) + 1
+    st.session_state.chat_history.append({
+        "role": "assistant",
+        "content": generated_plan,
+        "type": "plan_content",
+        "metadata": {
+            "version": plan_version,
+            "timestamp": datetime.now().isoformat(),
+            "preset": preset_key,
+            "tokens": token_usage.get("total_tokens") if token_usage else None
+        }
+    })
+
+    # [NEW] 후속 액션 안내 추가
+    st.session_state.chat_history.append({
+        "role": "assistant",
+        "content": (
+            "📌 **다음 작업을 선택하세요:**\n\n"
+            "• **\"수정해줘\"** - 특정 섹션 보완/수정\n"
+            "• **\"더 자세히\"** - 내용 보강 요청\n"
+            "• **\"요약해줘\"** - 핵심 내용만 정리\n"
+            "• **새로운 아이디어** 입력 - 다른 기획 시작"
+        ),
+        "type": "guide"
+    })
+
     st.session_state.trigger_notification = True
 
     # 히스토리 저장
