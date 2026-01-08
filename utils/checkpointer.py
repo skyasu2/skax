@@ -84,6 +84,11 @@ def get_checkpointer(
             print(f"[Checkpointer] Using SQLiteSaver: {db_path}")
             # [FIX] from_conn_string()은 context manager 반환 → 직접 connection 생성
             conn = sqlite3.connect(db_path, check_same_thread=False)
+
+            # [Best Practice] WAL 모드 활성화 - 동시 읽기/쓰기 성능 향상
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")  # 성능과 안정성 균형
+
             return SqliteSaver(conn)
 
         except ImportError:
@@ -119,6 +124,103 @@ def get_checkpointer(
     # ==========================================================================
     print("[Checkpointer] Using MemorySaver (In-Memory) - NOT recommended for production")
     return MemorySaver()
+
+
+def cleanup_old_checkpoints(
+    days: int = 7,
+    sqlite_path: Optional[str] = None
+) -> int:
+    """
+    오래된 체크포인트 정리 (SQLite 전용)
+
+    [Best Practice] 프로덕션 환경에서 주기적으로 실행 권장
+    - 일반적으로 7일 이상 된 체크포인트는 불필요
+    - Cron 또는 스케줄러로 매일 실행 권장
+
+    Args:
+        days: 보관 기간 (기본 7일)
+        sqlite_path: DB 경로 (기본값 사용 시 None)
+
+    Returns:
+        int: 삭제된 체크포인트 수
+    """
+    import sqlite3
+    from datetime import datetime, timedelta
+
+    db_path = sqlite_path or os.getenv("SQLITE_CHECKPOINT_PATH", DEFAULT_SQLITE_PATH)
+
+    if not os.path.exists(db_path):
+        print(f"[Checkpointer] DB not found: {db_path}")
+        return 0
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # 보관 기간 계산
+        cutoff_date = datetime.now() - timedelta(days=days)
+        cutoff_ts = cutoff_date.isoformat()
+
+        # 오래된 체크포인트 삭제
+        # LangGraph SQLite 스키마: checkpoints 테이블에 thread_ts 컬럼
+        cursor.execute("""
+            DELETE FROM checkpoints
+            WHERE thread_ts < ?
+        """, (cutoff_ts,))
+
+        deleted_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        print(f"[Checkpointer] Cleaned up {deleted_count} old checkpoints (older than {days} days)")
+        return deleted_count
+
+    except Exception as e:
+        print(f"[Checkpointer] Cleanup failed: {e}")
+        return 0
+
+
+def get_checkpoint_stats(sqlite_path: Optional[str] = None) -> dict:
+    """
+    체크포인트 통계 조회 (모니터링/디버깅용)
+
+    Returns:
+        dict: {total_count, oldest_date, newest_date, db_size_mb}
+    """
+    import sqlite3
+
+    db_path = sqlite_path or os.getenv("SQLITE_CHECKPOINT_PATH", DEFAULT_SQLITE_PATH)
+
+    if not os.path.exists(db_path):
+        return {"error": "DB not found", "path": db_path}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # 체크포인트 수
+        cursor.execute("SELECT COUNT(*) FROM checkpoints")
+        total_count = cursor.fetchone()[0]
+
+        # 날짜 범위
+        cursor.execute("SELECT MIN(thread_ts), MAX(thread_ts) FROM checkpoints")
+        oldest, newest = cursor.fetchone()
+
+        conn.close()
+
+        # 파일 크기
+        db_size_mb = os.path.getsize(db_path) / (1024 * 1024)
+
+        return {
+            "total_count": total_count,
+            "oldest_date": oldest,
+            "newest_date": newest,
+            "db_size_mb": round(db_size_mb, 2),
+            "path": db_path
+        }
+
+    except Exception as e:
+        return {"error": str(e), "path": db_path}
 
 
 # =============================================================================
