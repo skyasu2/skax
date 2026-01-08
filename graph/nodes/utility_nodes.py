@@ -15,7 +15,15 @@ from utils.file_logger import get_file_logger
 # Chat Response 시스템 프롬프트
 # =============================================================================
 
-CHAT_SYSTEM_PROMPT = """당신은 PlanCraft의 친근한 AI 어시스턴트입니다.
+CHAT_SYSTEM_PROMPT_TEMPLATE = """당신은 PlanCraft의 친근한 AI 어시스턴트입니다.
+
+[오늘 날짜]
+{today_date}
+
+[당신에 대해]
+- PlanCraft 기획 도우미 (GPT-4 기반)
+- 모르는 것은 모른다고 솔직히 말하세요
+- 자신의 모델이나 버전에 대해 추측하지 마세요
 
 [역할]
 - 사용자와 자연스럽게 대화하며 아이디어를 함께 발전시킵니다
@@ -133,9 +141,16 @@ def chat_response_node(state: PlanCraftState) -> PlanCraftState:
 
     try:
         from utils.llm import get_llm
+        from datetime import datetime
+
+        # 시스템 프롬프트에 현재 날짜 삽입
+        weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+        now = datetime.now()
+        today_str = f"{now.year}년 {now.month}월 {now.day}일 ({weekdays_kr[now.weekday()]})"
+        system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(today_date=today_str)
 
         # 대화 이력 구성 (최근 6개까지)
-        messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": system_prompt}]
 
         # 이전 대화 추가 (맥락 유지)
         recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
