@@ -8,8 +8,10 @@ Features:
 - 키보드 접근성 지원
 """
 import streamlit as st
+import streamlit.components.v1 as components
 from typing import Dict, Any
 import uuid
+import time
 
 
 # =============================================================================
@@ -730,35 +732,6 @@ def render_input_area():
         observer.observe(document.body, { childList: true, subtree: true });
     })();
 
-    // 채팅 입력창 자동 포커스
-    (function() {
-        function focusChatInput() {
-            const chatInput = document.querySelector('[data-testid="stChatInputTextArea"]');
-            if (chatInput && document.activeElement !== chatInput) {
-                // 약간의 지연 후 포커스 (Streamlit 렌더링 완료 대기)
-                setTimeout(() => {
-                    chatInput.focus();
-                }, 100);
-            }
-        }
-
-        // 페이지 로드 시 포커스
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', focusChatInput);
-        } else {
-            focusChatInput();
-        }
-
-        // Streamlit 리렌더링 후 포커스 복원
-        const focusObserver = new MutationObserver(() => {
-            // 모달이 열려있지 않을 때만 포커스
-            const modal = document.querySelector('[data-testid="stModal"]');
-            if (!modal) {
-                focusChatInput();
-            }
-        });
-        focusObserver.observe(document.body, { childList: true, subtree: true });
-    })();
     </script>
     """, unsafe_allow_html=True)
 
@@ -813,6 +786,28 @@ def render_input_area():
         placeholder_text = "답변을 입력하세요..."
 
     user_input = st.chat_input(placeholder_text, key=f"chat_input_{st.session_state.input_key}")
+
+    # 채팅 입력창 자동 포커스 (Streamlit 1.51 권장: components.html)
+    # 매 rerun마다 실행되도록 타임스탬프 사용
+    components.html(
+        f"""
+        <script>
+        // trigger: {time.time()}
+        (function() {{
+            const doc = window.parent.document;
+            // 모달/드롭다운이 열려있으면 포커스 안 함
+            if (doc.querySelector('[data-testid="stModal"]') ||
+                doc.querySelector('[data-baseweb="popover"]')) return;
+
+            const chatInput = doc.querySelector('[data-testid="stChatInputTextArea"]');
+            if (chatInput && doc.activeElement !== chatInput) {{
+                setTimeout(() => chatInput.focus(), 150);
+            }}
+        }})();
+        </script>
+        """,
+        height=0,
+    )
 
     # 입력 처리
     if user_input:
