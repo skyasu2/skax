@@ -6,41 +6,10 @@ import uuid
 import os
 import sys
 from utils.config import Config
+from utils.runtime import RuntimeContext
+
 # Top-level imports removed to prevent circular dependencies
 # from ui.dialogs import show_history_dialog, render_dev_tools 
-
-def init_session_state():
-    """세션 상태 초기화"""
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    if "plan_history" not in st.session_state:
-        st.session_state.plan_history = []
-    if "thread_id" not in st.session_state:
-        st.session_state.thread_id = str(uuid.uuid4())
-    if "current_state" not in st.session_state:
-        st.session_state.current_state = None
-    if "generated_plan" not in st.session_state:
-        st.session_state.generated_plan = None
-    if "processing" not in st.session_state:
-        st.session_state.processing = False
-    if "uploaded_content" not in st.session_state:
-        st.session_state.uploaded_content = None
-    if "pending_input" not in st.session_state:
-        st.session_state.pending_input = None
-    if "input_key" not in st.session_state:
-        st.session_state.input_key = 0
-    if "prefill_prompt" not in st.session_state:
-        st.session_state.prefill_prompt = None
-    if "trigger_notification" not in st.session_state:
-        st.session_state.trigger_notification = False
-    if "generation_preset" not in st.session_state:
-        st.session_state.generation_preset = "balanced"
-    # 파일 업로드 관련 상태 (ChatGPT 스타일 UI)
-    if "attached_files" not in st.session_state:
-        st.session_state.attached_files = []
-    if "show_upload_panel" not in st.session_state:
-        st.session_state.show_upload_panel = False
-
 
 @st.cache_resource
 def init_resources():
@@ -54,9 +23,11 @@ def init_resources():
         print("[INIT] Starting FastAPI Backend Server...")
         actual_port = start_api_server(start_port=8000)
         
-        # [Update Config] Update API URL based on actual port
-        Config.API_BASE_URL = f"http://127.0.0.1:{actual_port}/api/v1"
-        print(f"[INIT] FastAPI Backend Server Started on http://127.0.0.1:{actual_port}")
+        # [Update Config] RuntimeContext를 통해 안전하게 업데이트
+        runtime = RuntimeContext.get_instance()
+        runtime.set_api_port(actual_port)
+        
+        print(f"[INIT] FastAPI Backend Server Started at {runtime.api_base_url}")
 
         # 1. Config 검증
         Config.validate()
@@ -86,6 +57,7 @@ def render_header():
     # [Lazy Import] 순환 참조 방지
     from ui.components import trigger_browser_notification
     from ui.dialogs import show_history_dialog, render_dev_tools
+    from ui.session import init_session_state # 필요한 경우
 
     # 알림 트리거 확인
     if st.session_state.get("trigger_notification"):
@@ -102,14 +74,14 @@ def render_header():
             st.caption("PlanCraft v2.1")
 
             if st.button("🆕 새 대화 시작", use_container_width=True):
+                # 세션 초기화 동작
                 st.session_state.chat_history = []
                 st.session_state.current_state = None
                 st.session_state.generated_plan = None
                 st.session_state.input_key += 1
                 st.session_state.thread_id = str(uuid.uuid4())
                 st.session_state.idea_category = "random"
-                st.session_state.idea_llm_count = 0
-                st.session_state.random_examples = None
+                # 기타 상태 초기화가 필요할 수 있음
                 st.rerun()
 
             if st.button("📜 대화 히스토리", use_container_width=True):

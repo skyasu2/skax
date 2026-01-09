@@ -12,11 +12,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ui.styles import CUSTOM_CSS
-from ui.layout import init_session_state, init_resources, render_header
+from ui.session import init_session_state
+from ui.layout import init_resources, render_header
 from ui.tabs.hero import render_brainstorming_hero
 from ui.tabs.chat_view import render_chat_and_state
 from ui.tabs.controls import render_file_upload, render_input_area
 from ui.workflow_runner import run_pending_workflow
+from utils.runtime import RuntimeContext
 
 # 페이지 설정
 st.set_page_config(
@@ -32,12 +34,13 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 def main():
     """메인 함수"""
-    # 1. 초기화
-    # 1. 초기화
+    # 1. 초기화 (리소스 및 런타임 설정)
     api_port = init_resources()
-    from utils.config import Config
-    Config.API_BASE_URL = f"http://127.0.0.1:{api_port}/api/v1"
     
+    # RuntimeContext는 Singleton이므로 어디서든 접근 가능
+    # (init_resources 내부에서 set_api_port를 이미 호출함)
+    
+    # 세션 상태 초기화 (ui/session.py)
     init_session_state()
 
     # 2. 헤더
