@@ -118,8 +118,6 @@ def execute_specialist_agents(state: PlanCraftState, user_input: str,
                         web_search_list.append({"title": "", "content": line[:500]})
 
             supervisor = PlanSupervisor()
-            # TODO: 프리셋의 deep_analysis_mode를 Supervisor.run에 전달하도록 개선 필요
-            
             specialist_results = supervisor.run(
                 service_overview=user_input,
                 target_market=target_market,
