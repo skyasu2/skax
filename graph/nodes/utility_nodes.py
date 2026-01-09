@@ -168,24 +168,41 @@ def _should_web_search(user_input: str) -> bool:
     """웹 검색이 필요한지 간단히 판단"""
     input_lower = user_input.lower()
     # 명시적 검색 요청 또는 시사/정보 관련 키워드
-    explicit_triggers = ["검색해", "찾아봐", "알아봐", "조사해", "뉴스", "최신", "현재", "시세", "가격", "환율", "날씨", "주가"]
+    explicit_triggers = ["검색해", "찾아봐", "알아봐", "조사해", "뉴스", "최신", "현재", "시세", "가격", "환율", "날씨", "주가", "주식", "코인", "비트코인", "이더리움", "리플", "암호화폐"]
     return any(trigger in input_lower for trigger in explicit_triggers)
 
 
 def _do_quick_search(query: str) -> str:
     """빠른 웹 검색 수행 (1회)"""
+    logger = get_file_logger()
     try:
         from tools.mcp_client import search_sync
+        logger.info(f"[ChatResponse] 웹 검색 시작: '{query}'")
         result = search_sync(query, max_results=3, search_depth="basic")
-        if result.get("success") and result.get("results"):
+
+        # 상세 로깅 추가
+        success = result.get("success", False)
+        source = result.get("source", "unknown")
+        results_count = len(result.get("results", []))
+        logger.info(f"[ChatResponse] 웹 검색 결과: success={success}, source={source}, results={results_count}")
+
+        if not success:
+            error_msg = result.get("error", "Unknown error")
+            logger.warning(f"[ChatResponse] 웹 검색 실패: {error_msg}")
+            return ""
+
+        if result.get("results"):
             snippets = []
             for r in result["results"][:3]:
                 title = r.get("title", "")
                 snippet = r.get("snippet", "")[:200]
                 snippets.append(f"- {title}: {snippet}")
             return "\n".join(snippets)
+        else:
+            logger.warning("[ChatResponse] 웹 검색 결과가 비어있음")
+            return ""
     except Exception as e:
-        print(f"[ChatResponse] 웹 검색 실패: {e}")
+        logger.error(f"[ChatResponse] 웹 검색 예외: {e}")
     return ""
 
 
